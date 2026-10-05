@@ -6,13 +6,13 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Étape 3 — Monde macro (élévation, hydrologie, climat, biomes, régions, noms) + tests.
+Étape 4 — Chunks : TerrainSampler h(x,z), maillage chunk, eau, végétation, streaming, terrain lointain, joueur + collisions.
 
 ## Étapes
 - [x] 0. Setup : Vite 8 + TS 7 + Vitest 5, git (identité theol-trying noreply), PROGRESS/CLAUDE.md
 - [x] 1. Cœur : RNG seedé (cyrb128 + sfc32, flux dérivés), Noise (simplex 2D, fbm, ridged), math (mat4), Time, Events
 - [x] 2. Renderer : GL utils, atlas de glyphes, TextGrid (UI), passe scène MRT 2×2, passe cellule (rampes par matière, quadrants, arêtes, brouillard, ciel, pluie), passe présentation, caméra pointer-lock
-- [ ] 3. Monde macro : élévation, hydrologie (priority-flood, D8, rivières polylignes, lacs, vallées), climat, biomes, régions, noms + tests déterminisme
+- [x] 3. Monde macro : élévation, hydrologie (priority-flood, D8, rivières polylignes, lacs, vallées), climat, biomes, régions, noms + tests déterminisme
 - [ ] 4. Chunks : TerrainSampler (h(x,z) pur), maillage chunk, eau, végétation, streaming, terrain lointain ; joueur + collisions
 - [ ] 5. Civilisation : factions, histoire, implantations, routes A*, ponts, plans de village (bâtiments + intérieurs), POI, donjons
 - [ ] 6. Entités & IA : PNJ (identité, emploi du temps), monstres, utility AI, perception, pathfinding local
@@ -45,3 +45,4 @@
 - 2026-10-05 : étape 2 faite. Renderer validé dans le navigateur (scène de test dans src/main.ts,
   à remplacer à l'étape 8). Preview : entrée « ascii-fort » ajoutée dans ~/.claude/launch.json.
   Astuce test : le panneau navigateur masqué suspend requestAnimationFrame → `__dbg.step(n)`.
+- 2026-10-05 : étape 3 faite. Macro TEST-001 en ~200 ms, aperçu ASCII dans docs/map-TEST-001.txt (régénéré par les tests).
