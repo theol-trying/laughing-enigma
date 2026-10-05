@@ -24,7 +24,7 @@ interface MatDef { ramp: string; detail?: string; flags?: number }
 const DEFS: Record<number, MatDef> = {
   [M.GRASS]: { ramp: ' .,:;"', detail: ",'\";`" },
   [M.HEATH]: { ramp: ' .,:;%', detail: ",;%'" },
-  [M.DIRT]: { ramp: ' .,:;~=', detail: '.,:\'' },
+  [M.DIRT]: { ramp: ' .,:;"', detail: '.,:\'`' },
   [M.ROCK]: { ramp: ' .:░#▒▓█', detail: '#%▓▒' },
   [M.SNOW]: { ramp: ' .:-=░▒▓', detail: "*.'°" },
   [M.SAND]: { ramp: ' .,:∙░▒', detail: '.:,∙' },

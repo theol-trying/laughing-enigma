@@ -23,6 +23,8 @@ export class MeshBuilder {
   icount = 0;
   /** lumière du ciel par défaut (0 = intérieur fermé, 1 = plein air) */
   sky = 1;
+  /** drapeaux de sommet par défaut (1 = balancement au vent) */
+  vflags = 0;
 
   constructor(initialVerts = 1024) {
     this.buf = new ArrayBuffer(initialVerts * VERTEX_STRIDE);
@@ -45,7 +47,7 @@ export class MeshBuilder {
     const ni = new Uint32Array(cap); ni.set(this.idx); this.idx = ni;
   }
 
-  vertex(x: number, y: number, z: number, nx: number, ny: number, nz: number, color: number, mat: number, sky = this.sky, flags = 0): number {
+  vertex(x: number, y: number, z: number, nx: number, ny: number, nz: number, color: number, mat: number, sky = this.sky, flags = this.vflags): number {
     this.growV(1);
     const v = this.vcount++, f = v * 6, b = v * VERTEX_STRIDE;
     this.f32[f] = x; this.f32[f + 1] = y; this.f32[f + 2] = z;

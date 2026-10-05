@@ -180,7 +180,7 @@ export function computeHydrology(elev: Float32Array, rng: RNG): HydroResult {
     if (riverCell[c] < 0) continue;
     const w = riverWidth(flow[c]);
     const level = filled[c] - 0.6;
-    elev[c] = Math.min(elev[c], level - riverDepth(w));
+    elev[c] = Math.min(elev[c], level + 0.4); // fond de vallée ; le lit est creusé au niveau détail
     nearLevel[c] = level; dist[c] = 0; reach[c] = 2 + Math.min(5, Math.sqrt(flow[c]) / 7);
     dheap.push(0, c);
   }
