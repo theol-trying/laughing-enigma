@@ -1,0 +1,20 @@
+{
+  "name": "ascii-fort",
+  "version": "0.1.0",
+  "description": "ASCII FORT — RPG 3D procédural rendu en caractères",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "checkpoint": "node scripts/checkpoint.mjs"
+  },
+  "type": "module",
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  },
+  "private": true
+}
