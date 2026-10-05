@@ -262,6 +262,7 @@ vec3 octDecode(vec2 e) {
   if (n.y < 0.0) n.xz = (1.0 - abs(n.zx)) * vec2(n.x >= 0.0 ? 1.0 : -1.0, n.z >= 0.0 ? 1.0 : -1.0);
   return normalize(n);
 }
+vec3 tone(vec3 c) { return 1.0 - exp(-c * 1.9); }
 float linDepth(float z) { float ndc = z * 2.0 - 1.0; return 2.0 * uNear * uFar / (uFar + uNear - ndc * (uFar - uNear)); }
 
 vec3 viewDirAt(vec2 sub) {
@@ -367,8 +368,8 @@ void main() {
       }
       nearC /= max(nn, 1.0); farC /= max(nf, 1.0); nearD /= max(nn, 1.0);
       float fN = 1.0 - exp(-pow(nearD * uFogDensity, 2.0));
-      fg = mix(nearC * 1.15, fogCol, fN);
-      bg = nSky > 0 ? farC : mix(farC * 0.9, fogCol, 1.0 - exp(-pow((farD / max(nf, 1.0)) * uFogDensity, 2.0)));
+      fg = mix(tone(nearC) * 1.1, fogCol, fN);
+      bg = nSky > 0 ? farC : mix(tone(farC) * 0.9, fogCol, 1.0 - exp(-pow((farD / max(nf, 1.0)) * uFogDensity, 2.0)));
       glyph = tbl(mask, ROW_QUAD);
     } else {
       // cellule homogène : glyphe de la matière
@@ -382,7 +383,7 @@ void main() {
       int detN = int(tbl(13, mat));
       float d = ld[i0];
       float fogF = 1.0 - exp(-pow(d * uFogDensity, 2.0));
-      float lv = clamp(inten * (1.0 - fogF * 0.75), 0.0, 1.0);
+      float lv = clamp(pow(inten, 0.6) * (1.0 - fogF * 0.75), 0.0, 1.0);
       float dith = (ph - 0.5) * 0.35;
       int li = rampLen > 0 ? clamp(int(lv * float(rampLen) + dith + 0.15), 0, rampLen - 1) : 0;
       glyph = rampLen > 0 ? tbl(li, mat) : 0u;
@@ -401,8 +402,9 @@ void main() {
       vec4 ex = texelFetch(uExtra, s0 + offs[i0], 0);
       uint letter = uint(ex.r * 255.0 + 0.5);
       if (letter > 0u && d > uLetterDist) glyph = letter;
-      fg = mix(c * 1.25 + 0.03, fogCol, fogF);
-      bg = mix(c * uBgFactor, fogCol * 0.92, fogF);
+      vec3 tc = tone(c);
+      fg = mix(tc * 1.15 + 0.03, fogCol, fogF);
+      bg = mix(tc * uBgFactor, fogCol * 0.92, fogF);
       if (fogF > 0.985) glyph = tbl(9, ROW_SKY);
 
       if (uViewMode == 1) { // profondeur

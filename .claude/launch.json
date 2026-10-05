@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "ascii-fort", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 5199 }
+  ]
+}
