@@ -68,6 +68,8 @@ export class Game {
   readonly audio = new AudioEngine();
   wx: { mix: WeatherMix; state: WeatherState; flash: number } = { mix: CLEAR_WEATHER, state: 'clair', flash: 0 };
   private stepDist = 0;
+  private drownMsgT = -10;
+  private swimT = 0;
   private lastHp = 100;
   private lastFlash = 0;
   /** branché par l'interface : ouverture des écrans de dialogue et de commerce */
@@ -511,6 +513,15 @@ export class Game {
         player: p, character: this.character, events: this.events, combat: this.combat, entities: this.entities.entities,
         heightAt: (x, z) => (this.dungeon ? 0 : this.world.heightAt(x, z)), onHit: (e) => this.onHit(e),
       });
+      // nage : l'endurance s'épuise (plus vite en plongée) ; à bout de souffle, on se noie
+      if (p.swimming) {
+        p.stamina = Math.max(0, p.stamina - (p.diving ? 7 : 2.5) * dt);
+        if (p.stamina <= 0 && !this.god) {
+          p.hp -= 6 * dt;
+          if (this.elapsed - this.drownMsgT > 4) { this.drownMsgT = this.elapsed; this.events.emit('message', { text: 'À bout de souffle, vous buvez la tasse !', color: 0xe05040 }); }
+          if (p.hp <= 0) { p.hp = 0; p.dead = true; this.onPlayerDeath(); }
+        }
+      }
       if (input.key('h') && this.character.inv.count('potion de soin')) this.useItem('potion de soin');
       if (input.key('b')) this.swapBow();
       this.checkTraps();
@@ -551,6 +562,7 @@ export class Game {
 
   private sounds(dt: number) {
     const p = this.player, a = this.audio;
+    if (p.swimming && p.moving) { this.swimT -= dt; if (this.swimT <= 0) { this.swimT = 0.75; a.splash(0.6); } }
     if (p.onGround && p.moving) {
       this.stepDist += Math.hypot(p.vx, p.vz) * dt;
       if (this.stepDist > (p.sprinting ? 2.2 : 1.6)) { this.stepDist = 0; a.step(this.surfaceUnder()); }
@@ -716,6 +728,13 @@ export class Game {
       const x = (Math.floor(p.x / 64) + i) * 64, z = (Math.floor(p.z / 64) + j) * 64;
       this.instances.add(trsYawPitch(this.m4, x, this.world.heightAt(x, z) + 6, z, 0, 0, 0.3, 12, 0.3), 0xff40ff, M.GLOW, 0, 0, 1);
     }
-    this.renderer.render({ camera: c, atmo, time: this.elapsed, items, clipRadius: this.world.chunks.clipRadius, instances: this.instances, lights, viewMode, sceneOn: true, hurt: Math.max(0, p.hurt) * 2 });
+    // sous l'eau : image bleutée et ondulante, brouillard épais ; en nageant, légère teinte
+    const under = !dg && !Number.isNaN(p.water) && c.y < p.water - 0.05;
+    let tint: [number, number, number, number] | undefined, wobble = 0;
+    if (under) {
+      tint = [0.16, 0.42, 0.62, 0.62]; wobble = 1;
+      atmo.fogColor = [0.04, 0.16, 0.24]; atmo.fogDensity = 0.09; atmo.rain = 0; atmo.snow = 0;
+    } else if (p.swimming) tint = [0.2, 0.5, 0.7, 0.16];
+    this.renderer.render({ camera: c, atmo, time: this.elapsed, items, clipRadius: this.world.chunks.clipRadius, instances: this.instances, lights, viewMode, sceneOn: true, hurt: Math.max(0, p.hurt) * 2, tint, wobble });
   }
 }

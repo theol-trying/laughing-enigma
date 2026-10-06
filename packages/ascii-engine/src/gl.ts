@@ -26,6 +26,7 @@ export class Shader {
   f(name: string, v: number) { this.gl.uniform1f(this.u(name), v); return this; }
   v2(name: string, a: number, b: number) { this.gl.uniform2f(this.u(name), a, b); return this; }
   v3(name: string, v: ArrayLike<number>) { this.gl.uniform3f(this.u(name), v[0], v[1], v[2]); return this; }
+  v4(name: string, v: ArrayLike<number>) { this.gl.uniform4f(this.u(name), v[0], v[1], v[2], v[3]); return this; }
   iv2(name: string, a: number, b: number) { this.gl.uniform2i(this.u(name), a, b); return this; }
   m4(name: string, m: Float32Array) { this.gl.uniformMatrix4fv(this.u(name), false, m); return this; }
   m3(name: string, m: Float32Array) { this.gl.uniformMatrix3fv(this.u(name), false, m); return this; }

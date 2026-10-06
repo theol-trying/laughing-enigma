@@ -24,7 +24,7 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
   bar(g, 1, by, 'HP', p.hp, p.maxHp, p.poison > 0 ? C.green : C.hp);
   bar(g, 1, by + 1, 'END', p.stamina, p.maxStamina, C.sta);
   bar(g, 1, by + 2, 'MANA', p.mana, p.maxMana, C.mp);
-  const status = [p.poison > 0 ? 'empoisonné' : '', p.frost > 0 ? 'gelé' : '', p.burn > 0 ? 'brûlé' : '', p.crouch ? 'accroupi' : '', ch.inv.weight() > ch.carryMax() ? 'surchargé' : ''].filter(Boolean).join(' · ');
+  const status = [p.poison > 0 ? 'empoisonné' : '', p.frost > 0 ? 'gelé' : '', p.burn > 0 ? 'brûlé' : '', p.diving ? 'en plongée' : p.swimming ? 'à la nage' : p.depth > 0.3 ? 'dans l\'eau' : '', p.crouch && !p.swimming ? 'accroupi' : '', ch.inv.weight() > ch.carryMax() ? 'surchargé' : ''].filter(Boolean).join(' · ');
   g.text(1, by - 1, ` Niv ${ch.level} · ${ch.xp}/${ch.xpForNext()} XP · ${ch.inv.gold} or${ch.statPoints ? ' · +' + ch.statPoints + ' pt (C)' : ''} ${status ? '· ' + status : ''} `, C.gold, C.panel, 0.55);
   g.text(1, rows - 1, ` ${ch.weapon?.name ?? 'Poings'}${ch.weapon?.weapon?.kind === 'arc' ? ` (${ch.inv.count('flèche')} flèches)` : ''} · H potion (${ch.inv.count('potion de soin')}) · R feu · F soin `, C.dim, C.panel, 0.45);
 

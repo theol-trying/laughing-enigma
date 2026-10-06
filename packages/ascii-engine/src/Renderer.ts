@@ -65,6 +65,10 @@ export interface FrameInput {
   sceneOn: boolean;
   /** 0..1 : liseré rouge de douleur */
   hurt?: number;
+  /** teinte du monde [r, g, b, force] (eau, magie…) */
+  tint?: [number, number, number, number];
+  /** 0..1 : ondulation de l'image (sous l'eau) */
+  wobble?: number;
 }
 
 const SHADOW_SIZE = 2048, SHADOW_RANGE = 110;
@@ -352,6 +356,8 @@ export class Renderer {
       .iv2('uCellPx', this.wcellW, this.wcellH).iv2('uOrigin', this.worigX, bottom).iv2('uGrid', this.wcols, this.wrows)
       .tex('uUiGlyph', 3, this.uiGlyphTex).tex('uUiFg', 4, this.uiFgTex).tex('uUiBg', 5, this.uiBgTex).tex('uUiAtlas', 6, this.uiAtlasTex)
       .iv2('uUiCellPx', this.cellW, this.cellH).iv2('uUiOrigin', this.originX, uiBottom).iv2('uUiGrid', this.cols, this.rows)
+      .f('uHurt', f.sceneOn ? Math.min(1, f.hurt ?? 0) : 0).f('uWobble', f.sceneOn ? f.wobble ?? 0 : 0).f('uTime', f.time)
+      .v4('uTint', f.sceneOn && f.tint ? f.tint : [0, 0, 0, 0])
       .i('uAtlasCols', ATLAS_COLS).f('uVignette', f.sceneOn ? 0.35 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindVertexArray(null);

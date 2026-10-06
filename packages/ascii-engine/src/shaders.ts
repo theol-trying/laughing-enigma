@@ -463,6 +463,10 @@ uniform ivec2 uUiOrigin;
 uniform ivec2 uUiGrid;
 uniform int uAtlasCols;
 uniform float uVignette;
+uniform float uHurt;
+uniform float uWobble;
+uniform float uTime;
+uniform vec4 uTint;
 out vec4 o;
 // Deux grilles superposées : le monde (police fine) et l'interface (police de lecture).
 // Une case d'interface avec un glyphe remplace les glyphes du monde qu'elle recouvre ; son fond
@@ -473,6 +477,8 @@ void main() {
   ivec2 cell = p / uCellPx;
   vec3 fg = vec3(0.0), bg = vec3(0.0);
   float m = 0.0;
+  // sous l'eau : les lignes de caractères ondulent
+  if (uWobble > 0.0) { cell.x += int(round(sin(float(cell.y) * 0.45 + uTime * 2.6) * 1.6 * uWobble)); cell.x = clamp(cell.x, 0, uGrid.x - 1); }
   if (p.x >= 0 && p.y >= 0 && cell.x < uGrid.x && cell.y < uGrid.y) {
     ivec2 local = p - cell * uCellPx;
     vec4 f = texelFetch(uCellFg, cell, 0);
@@ -481,6 +487,16 @@ void main() {
     ivec2 ga = ivec2(g % uAtlasCols, g / uAtlasCols);
     m = texelFetch(uAtlas, ga * uCellPx + ivec2(local.x, uCellPx.y - 1 - local.y), 0).r;
     fg = f.rgb; bg = b.rgb;
+    // teinte (eau, magie) et liseré de douleur : sur le monde seulement, l'interface reste nette
+    vec2 e = vec2(p) / vec2(uGrid * uCellPx) - 0.5;
+    float edge = smoothstep(0.18, 0.62, length(e)) * uHurt;
+    if (uTint.a > 0.0) {
+      float lf = dot(fg, vec3(0.3, 0.5, 0.2)), lb = dot(bg, vec3(0.3, 0.5, 0.2));
+      fg = mix(fg, uTint.rgb * (0.35 + lf * 1.5), uTint.a);
+      bg = mix(bg, uTint.rgb * (0.25 + lb * 1.3), uTint.a);
+    }
+    fg = mix(fg, vec3(0.75, 0.06, 0.04), edge * 0.7);
+    bg = mix(bg, vec3(0.35, 0.02, 0.01), edge * 0.8);
   }
   ivec2 q = fc - uUiOrigin;
   ivec2 uc = q / uUiCellPx;

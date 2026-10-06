@@ -10,6 +10,10 @@ export class Player {
   vx = 0; vy = 0; vz = 0;
   heading = 0; pitch = 0;
   onGround = false; swimming = false; crouch = false; sprinting = false;
+  /** surface de l'eau sous le joueur (NaN : pas d'eau) et profondeur d'eau au sol */
+  water = NaN; depth = 0;
+  /** plongée : accroupi en nageant */
+  get diving(): boolean { return this.swimming && this.crouch; }
   radius = 0.35; eye = 1.65;
   noclip = false;
   /** borne le joueur au monde (désactivé dans les donjons, hors de la carte) */
@@ -89,23 +93,41 @@ export class Player {
       return;
     }
 
-    const speed = (this.swimming ? 2.4 : this.sprinting ? 7 : this.crouch ? 2 : 4.2) * speedMul * (this.frost > 0 ? 0.6 : 1) * (this.blocking ? 0.55 : 1);
+    // dans l'eau jusqu'aux genoux ou à la taille : on avance difficilement
+    const wade = !this.swimming && this.depth > 0.2 ? 1 - Math.min(1, this.depth) * 0.45 : 1;
+    const speed = (this.swimming ? 2.4 : this.sprinting ? 7 : this.crouch ? 2 : 4.2) * speedMul * wade * (this.frost > 0 ? 0.6 : 1) * (this.blocking ? 0.55 : 1);
     const acc = this.onGround || this.swimming ? 12 : 2.5;
     const k = Math.min(1, acc * dt);
     this.vx += (mx * speed - this.vx) * k;
     this.vz += (mz * speed - this.vz) * k;
     if (this.dashT > 0) { this.vx = this.dashX; this.vz = this.dashZ; this.dashT -= dt; }
-    if (input.pressed('Space') && (this.onGround || this.swimming)) { this.vy = this.swimming ? 3 : 5.3; this.onGround = false; }
+    if (input.pressed('Space') && (this.onGround || this.swimming)) { this.vy = this.swimming ? 3 : 6.8; this.onGround = false; if (this.swimming) this.crouch = false; }
 
     world.chunks.collidersNear(this.x, this.z, this.circles, this.segs, this.plats);
     const ox = this.x, oz = this.z;
     let nx = this.x + this.vx * dt, nz = this.z + this.vz * dt;
 
-    // pentes trop raides : on refuse la montée
-    if (this.onGround) {
-      const g0 = this.groundAt(world, ox, oz, this.y), g1 = this.groundAt(world, nx, nz, this.y);
-      const run = Math.hypot(nx - ox, nz - oz);
-      if (run > 1e-4 && (g1 - g0) / run > 1.05 && g1 - this.y > 0.25) { nx = ox; nz = oz; this.vx *= 0.2; this.vz *= 0.2; }
+    // pentes : la montée ralentit, au-delà d'environ 42° le terrain ne se gravit plus (on glisse le long),
+    // et sur une pente trop forte on dévale. Les planchers et escaliers ne sont pas concernés.
+    if (this.onGround && !this.swimming && !this.noclip) {
+      const t0 = world.heightAt(ox, oz);
+      if (this.y - t0 < 0.15) {
+        const gx = world.heightAt(ox + 0.5, oz) - world.heightAt(ox - 0.5, oz), gz = world.heightAt(ox, oz + 0.5) - world.heightAt(ox, oz - 0.5);
+        const grade = Math.hypot(gx, gz), ex = gx / (grade || 1), ez = gz / (grade || 1);
+        const run = Math.hypot(nx - ox, nz - oz);
+        if (run > 1e-4) {
+          const ux = (nx - ox) / run, uz = (nz - oz) / run;
+          const slope = (world.heightAt(ox + ux * 0.7, oz + uz * 0.7) - t0) / 0.7;
+          if (slope > 0.9) {
+            const up = (nx - ox) * ex + (nz - oz) * ez;
+            if (up > 0) { nx -= ex * up; nz -= ez * up; const vu = this.vx * ex + this.vz * ez; if (vu > 0) { this.vx -= ex * vu; this.vz -= ez * vu; } }
+          } else if (slope > 0.3) {
+            const k = 1 - (slope - 0.3) * 0.6;
+            nx = ox + (nx - ox) * k; nz = oz + (nz - oz) * k;
+          }
+        }
+        if (grade > 1.15) { this.vx -= ex * 9 * dt; this.vz -= ez * 9 * dt; nx -= ex * 1.5 * dt; nz -= ez * 1.5 * dt; }
+      }
     }
     // collisions horizontales (troncs, rochers, murs)
     for (let it = 0; it < 2; it++) {
@@ -130,9 +152,16 @@ export class Player {
     // vertical : gravité, nage, atterrissage
     const ground = this.groundAt(world, this.x, this.z, this.y);
     const water = world.waterAt(this.x, this.z);
+    this.water = water;
+    this.depth = Number.isNaN(water) ? 0 : Math.max(0, water - ground);
     this.swimming = !Number.isNaN(water) && water - ground > 1.3 && this.y < water - 1.1;
-    if (this.swimming) this.vy += ((water - 1.35) - this.y) * 4 * dt - this.vy * 2 * dt;
-    else this.vy -= 20 * dt;
+    if (this.swimming) {
+      // flotte en surface ; accroupi (C), on plonge vers le fond
+      const target = this.crouch ? Math.max(ground + 0.3, water - 3.4) : water - 1.35;
+      this.vy += (target - this.y) * 4 * dt - this.vy * 2 * dt;
+      if (this.burn > 0) this.burn = 0;
+    } else this.vy -= 18 * dt;
+    if (this.depth > 0.6 && this.burn > 0) this.burn = 0;
     this.y += this.vy * dt;
     this.lastFall = 0;
     if (this.y <= ground) {

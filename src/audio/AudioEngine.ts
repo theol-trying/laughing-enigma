@@ -83,6 +83,8 @@ export class AudioEngine {
     else if (s === 'neige') this.burst(900, 'lowpass', 0.1, 0.18);
     else this.burst(700, 'lowpass', 0.07, 0.16);
   }
+  /** clapotis (nage, entrée dans l'eau) */
+  splash(gain = 1): void { this.burst(500, 'lowpass', 0.35, 0.22 * gain); this.burst(1600, 'bandpass', 0.18, 0.06 * gain, 0.7); }
   hit(): void { this.tone(140, 0.12, 0.35, 'sine', 0.5); this.burst(1200, 'bandpass', 0.07, 0.25); }
   hurt(): void { this.tone(90, 0.25, 0.4, 'triangle', 0.6); }
   swing(): void { this.burst(1800, 'bandpass', 0.12, 0.08, 0.6); }
