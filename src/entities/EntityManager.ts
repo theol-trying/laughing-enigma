@@ -338,8 +338,12 @@ export class EntityManager {
   }
 
   // ---------------------------------------------------------------- boucle
+  /** IA figée (outil de développement) */
+  frozen = false;
+
   update(dt: number): void {
     const h = this.host, p = h.player;
+    if (this.frozen) return;
     this.mctx.env.night = h.night(); this.mctx.env.fog = h.fog();
     this.mctx.ents = this.entities;
     this.checkT -= dt;
@@ -402,6 +406,16 @@ export class EntityManager {
     if (gone.length) this.remove(gone);
     this.dynamic.length = 0;
     for (const e of this.entities) if (e.alive && Math.hypot(e.x - p.x, e.z - p.z) < 12) this.dynamic.push({ x: e.x, z: e.z, r: e.radius, bottom: e.y, top: e.y + e.model.height });
+  }
+
+  /** Met à jour les populations des repaires actifs (avant une sauvegarde). */
+  syncLairs(): void {
+    for (const l of this.lairs) {
+      const ents = this.activeLairs.get(l.key);
+      if (!ents) continue;
+      l.alive = ents.filter((e) => e.alive && !e.mon?.leader).length;
+      l.leaderAlive = ents.some((e) => e.alive && e.mon?.leader);
+    }
   }
 
   /** Lanternes des gardes la nuit (lumières mobiles). */

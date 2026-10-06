@@ -6,14 +6,10 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Étape 10 — core/SaveManager.ts (IndexedDB : seed + version du générateur + différences : joueur, fiche, inventaire,
-équipement, temps, WorldState (opened/dropped/flags/discovered/explored), PNJ modifiés (vivant/pv/mémoires/richesse),
-réputation, amendes, économie (supply), quêtes, rumeurs, repaires (alive/leaderAlive), killed/clearedCamps) ; autosave
-(toutes les 2 min + à l'entrée/sortie de donjon), F5 sauvegarde rapide / F9 chargement, menu pause, « Continuer » au titre
-(événements window ascii-fort-save / ascii-fort-load déjà émis par main.ts ; méta dans localStorage ascii-fort-save-meta).
-Console dev (F1) : tp, time, timescale, god, freeze, spawn, seed, view depth/normal/material/lit, chunks, npc, weather,
-give, xp, reveal. Tests de déterminisme TEST-001 (village de départ, rivière principale, noms, points de contrôle).
-Docs : README (état réel) + docs/architecture.md. Puis étape 11 (vérification du parcours en 18 étapes).
+Étape 11 — Vérification du parcours en 18 étapes dans le navigateur (seed → apparition → marche → regard → paysage →
+village → PNJ → parler → acheter → quête → sortir → ennemi → combat → butin → retour → terminer la quête → sauvegarder
+→ recharger), corrections éventuelles, récapitulatif final pour l'utilisateur (implémenté, fichiers, lancement,
+contrôles, systèmes, simplifications, prochaines améliorations).
 
 ## Étapes
 - [x] 0. Setup : Vite 8 + TS 7 + Vitest 5, git (identité theol-trying noreply), PROGRESS/CLAUDE.md
@@ -26,7 +22,7 @@ Docs : README (état réel) + docs/architecture.md. Puis étape 11 (vérificatio
 - [x] 7. Gameplay : objets, inventaire, combat, butin, XP, réputation/mémoire, économie, dialogues, rumeurs, quêtes systémiques
 - [x] 8. UI terminal : titre/nouvelle partie, HUD, inventaire, journal, stats, carte, dialogue, commerce, pause/options
 - [x] 9. Ambiance : jour/nuit, météo, torches/lanternes/fenêtres, ombres soleil, eau, audio Web Audio
-- [ ] 10. Sauvegarde IndexedDB (diff), outils debug (console F1, overlay F3), docs (README, docs/architecture.md)
+- [x] 10. Sauvegarde IndexedDB (diff), outils debug (console F1, overlay F3), docs (README, docs/architecture.md)
 - [ ] 11. Vérification du vertical slice (18 étapes) dans le navigateur
 
 ## Décisions clés (ne pas re-débattre)
@@ -74,3 +70,5 @@ Docs : README (état réel) + docs/architecture.md. Puis étape 11 (vérificatio
   personnage (points, compétences, réputation), pause/options (taille, sensibilité, FOV, volume, vitesse du temps).
 - 2026-10-06 : 9 fait. Météo par région (périodes de 8 h, transitions, neige en altitude, brouillard au marais, orages
   et éclairs), abri sous les toits, lanternes des gardes, audio Web Audio (vent, pluie, feu, pas, impacts, tonnerre).
+- 2026-10-06 : 10 fait (21 tests, build OK). Sauvegarde IndexedDB vérifiée (F5/F9 : or, objets, position, heure,
+  coffres ouverts restaurés), autosave 2 min, Continuer au titre, console F1, instantané TEST-001, README + architecture.

@@ -13,6 +13,8 @@ import { TitleScreen, NewGameScreen, drawTitleBackground } from './ui/TitleScree
 import { drawHud, type HudState } from './ui/HUD';
 import type { MacroWorld } from './world/MacroWorld';
 import type { Civilization } from './world/civilization/Civilization';
+import { SaveManager } from './core/SaveManager';
+import { DevConsole } from './ui/DevConsole';
 
 const canvas = document.getElementById('screen') as HTMLCanvasElement;
 const r = new Renderer(canvas);
@@ -40,7 +42,7 @@ function applyOptions() {
   if (game) { game.audio.setVolume(opts.volume); game.sensitivity = opts.sensitivity; game.camera.fovY = (opts.fov * Math.PI) / 180; game.time.scale = opts.timeScale; }
 }
 
-function hasSave(): boolean { try { return !!localStorage.getItem('ascii-fort-save-meta'); } catch { return false; } }
+function hasSave(): boolean { return !!SaveManager.latest(); }
 
 function showTitle() {
   screens.closeAll();
@@ -72,12 +74,36 @@ function startGame(seed: string, macro?: MacroWorld, civ?: Civilization): Game {
   return g;
 }
 
+// ---------------------------------------------------------------- sauvegardes
+let autosaveT = 120;
+async function saveTo(slot: string, label: string, quiet = false) {
+  if (!game) return;
+  try {
+    await SaveManager.save(slot, game.toSave(label));
+    if (!quiet) game.events.emit('message', { text: `Partie sauvegardée (${label}).`, color: C.green });
+  } catch (e) { game.events.emit('message', { text: 'Échec de la sauvegarde : ' + String(e), color: C.red }); }
+}
+async function loadFrom(slot?: string) {
+  const meta = SaveManager.latest();
+  const key = slot ?? meta?.slot;
+  if (!key) return;
+  const d = await SaveManager.load(key);
+  if (!d) { game?.events.emit('message', { text: 'Aucune sauvegarde.', color: C.red }); return; }
+  screens.closeAll();
+  const g = game && game.seed.text === d.seed ? game : startGame(d.seed);
+  g.applySave(d);
+  g.events.emit('message', { text: `Partie chargée (${d.label}, ${new Date(d.savedAt).toLocaleString('fr-FR')}).`, color: C.green });
+  if (d.generator !== g.toSave().generator) g.events.emit('message', { text: `Attention : sauvegarde créée avec le générateur ${d.generator}.`, color: C.orange });
+}
+window.addEventListener('ascii-fort-save', () => { void saveTo('manuel', 'manuelle'); });
+window.addEventListener('ascii-fort-load', () => { void loadFrom(); });
+
 function pause() {
   if (!game || screens.modal) return;
   screens.open(new PauseScreen(game, opts, {
     save: () => window.dispatchEvent(new CustomEvent('ascii-fort-save')),
     load: () => window.dispatchEvent(new CustomEvent('ascii-fort-load')),
-    quit: () => { game?.dispose(); game = null; showTitle(); },
+    quit: () => { void saveTo('auto', 'automatique', true).then(() => { game?.dispose(); game = null; showTitle(); }); },
     applyOptions,
   }));
 }
@@ -123,6 +149,11 @@ function tick(now: number) {
     else if (input.key('c') && !input.isDown('KeyC')) screens.open(new StatsScreen(g));
     else if (input.key('Escape')) pause();
     if (input.key('F3')) hud.debug = !hud.debug;
+    if (input.key('F1')) screens.open(new DevConsole(g, input, () => {}));
+    if (input.key('F5')) void saveTo('rapide', 'rapide');
+    if (input.key('F9')) void loadFrom('rapide');
+    autosaveT -= dt;
+    if (autosaveT <= 0) { autosaveT = 120; void saveTo('auto', 'automatique', true); }
     if (!screens.modal) g.update(dt, input);
   }
   hud.drawCalls = r.drawCalls;

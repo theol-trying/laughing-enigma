@@ -183,6 +183,18 @@ export class QuestSystem {
     this.h.events.emit('message', { text: `Quête — ${q.title} : ${q.stages[s]}`, color: 0xf0d060 });
   }
 
+  /** Restaure l'état d'une quête (chargement) sans message. */
+  restore(id: string, status: Quest['status'], stage: number, killed: number): void {
+    const q = this.quests.find((x) => x.id === id);
+    if (!q) return;
+    q.status = status; q.stage = stage; q.data.killed = killed;
+    if (q.kind === 'loups') q.stages[0] = `Abattre les loups de la tanière (${Math.min(killed, q.data.count!)}/${q.data.count})`;
+    if (stage >= q.stages.length - 1) {
+      const giver = this.h.entities.findNpc(q.giver);
+      if (giver) { const st = this.h.world.civ.settlements[giver.sid]; q.target = { x: st.x, z: st.z, label: `${giver.first} (${st.name})` }; }
+    }
+  }
+
   /** Vérifications de position (repérage du camp). */
   tick(): void {
     const p = this.h.player;

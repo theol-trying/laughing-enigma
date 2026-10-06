@@ -44,6 +44,13 @@ export class Weather {
     return 'clair';
   }
 
+  /** Météo imposée (console de développement). */
+  forced(s: WeatherState, minutes: number): { mix: WeatherMix; state: WeatherState; flash: number } {
+    const slot = Math.floor(minutes * 3);
+    const flash = s === 'orage' && hash2i(this.salt, slot, 7) / 4294967296 < 0.035 ? 1 - (minutes * 3 - slot) : 0;
+    return { mix: MIX[s], state: s, flash };
+  }
+
   /** Mélange météo au point et à l'instant donnés (transition douce entre périodes). */
   at(x: number, z: number, minutes: number): { mix: WeatherMix; state: WeatherState; flash: number } {
     const p = Math.floor(minutes / PERIOD), into = minutes - p * PERIOD;

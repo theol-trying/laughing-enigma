@@ -17,6 +17,9 @@ import { Character } from '../gameplay/Character';
 import { PlayerCombat } from '../gameplay/PlayerCombat';
 import { WorldState, type Dropped } from '../gameplay/WorldState';
 import { item } from '../gameplay/Items';
+import { packBits, unpackBits, type SaveData } from './SaveManager';
+import { GAME_VERSION, GENERATOR_VERSION } from '../version';
+import type { Good } from '../world/civilization/types';
 import { creatureLoot, containerLoot, type LootLine } from '../gameplay/Loot';
 import { perceives } from '../ai/Perception';
 import { Reputation } from '../gameplay/Reputation';
@@ -80,6 +83,11 @@ export class Game {
   private atmoNight = 0;
   private discoverT = 0;
   private m4 = mat4();
+  // outils de développement
+  god = false;
+  weatherOverride: WeatherState | null = null;
+  viewMode = 0;
+  showChunks = false;
   /** sensibilité de la souris (options) */
   sensitivity = 1;
   /** libère les ressources GPU (retour au titre) */
@@ -431,6 +439,7 @@ export class Game {
     // météo au point du joueur
     const prevState = this.wx.state;
     this.wx = this.weatherSys.at(this.player.x, this.player.z, this.time.minutes);
+    if (this.weatherOverride) this.wx = this.weatherSys.forced(this.weatherOverride, this.time.minutes);
     if (this.wx.state !== prevState && !this.dungeon) {
       const msg: Record<string, string> = { pluie: 'Il se met à pleuvoir.', orage: 'Le ciel gronde : un orage éclate.', neige: 'La neige commence à tomber.', brouillard: 'Un brouillard épais se lève.', couvert: 'Le ciel se couvre.', clair: 'Le temps se dégage.' };
       this.events.emit('weather:changed', { region: 0, state: this.wx.state });
@@ -449,6 +458,7 @@ export class Game {
       const over = this.character.inv.weight() > this.character.carryMax();
       p.update(dt, input, this.world, over ? 0.55 : 1);
       p.tickStatus(dt);
+      if (this.god) { p.hp = p.maxHp; p.dead = false; p.stamina = p.maxStamina; p.mana = p.maxMana; }
       if (p.dead) this.onPlayerDeath();
       if (p.lastFall > 13) {
         p.hp -= Math.round((p.lastFall - 13) * 6);
@@ -557,7 +567,69 @@ export class Game {
     this.events.emit('message', { text: `En main : ${ch.weapon?.name ?? 'poings'}` });
   }
 
+  // ------------------------------------------------------------------ sauvegarde
+  toSave(label = 'manuel'): SaveData {
+    const p = this.player, ch = this.character, st = this.state;
+    this.entities.syncLairs();
+    const npcs: SaveData['npcs'] = [];
+    for (const list of this.entities.allNpcData().values()) for (const n of list) {
+      const e = this.entities.entities.find((x) => x.id === n.id);
+      if (e) n.hp = e.alive ? e.hp : 0;
+      npcs.push({ id: n.id, alive: n.alive, hp: n.hp, wealth: n.wealth, memories: n.memories });
+    }
+    return {
+      format: 1, game: GAME_VERSION, generator: GENERATOR_VERSION, seed: this.seed.text, savedAt: Date.now(), label, time: this.time.minutes,
+      player: { x: p.x, y: p.y, z: p.z, heading: p.heading, pitch: p.pitch, hp: p.hp, stamina: p.stamina, mana: p.mana, dungeon: this.dungeon ? this.dungeon.layout.id : -1, ret: this.dungeon ? this.dungeon.ret : null },
+      character: { stats: { ...ch.stats }, skills: { ...ch.skills }, skillXp: { ...ch.skillXp }, level: ch.level, xp: ch.xp, statPoints: ch.statPoints, inv: [...ch.inv.items], gold: ch.inv.gold, equip: { ...ch.equip } },
+      state: { opened: [...st.opened], dropped: st.dropped, flags: [...st.flags], discovered: [...st.discovered], explored: packBits(st.explored) },
+      npcs,
+      rep: { global: this.rep.global, faction: [...this.rep.faction], local: [...this.rep.local], bounty: [...this.rep.bounty] },
+      economy: [...this.economy.supply].map(([k, v]) => [k, { ...v }]),
+      quests: this.quests.quests.filter((q) => q.status !== 'disponible').map((q) => ({ id: q.id, status: q.status, stage: q.stage, killed: q.data.killed ?? 0 })),
+      rumors: this.rumors.list.map((r) => ({ text: r.text, origin: r.origin, day: r.day, reach: [...r.reach], tag: r.tag })),
+      lairs: this.entities.lairs.map((l) => ({ key: l.key, alive: l.alive, leaderAlive: l.leaderAlive })),
+      killed: [...this.entities.killed], clearedCamps: [...this.entities.clearedCamps],
+    };
+  }
+
+  applySave(d: SaveData): void {
+    if (this.dungeon) this.exitDungeon();
+    this.entities.clear();
+    const ch = this.character, st = this.state, p = this.player;
+    this.time.minutes = d.time; this.lastDay = this.time.day;
+    Object.assign(ch.stats, d.character.stats); Object.assign(ch.skills, d.character.skills); Object.assign(ch.skillXp, d.character.skillXp);
+    ch.level = d.character.level; ch.xp = d.character.xp; ch.statPoints = d.character.statPoints;
+    ch.inv.items.clear(); for (const [id, n] of d.character.inv) ch.inv.items.set(id, n);
+    ch.inv.gold = d.character.gold; Object.assign(ch.equip, d.character.equip);
+    st.opened.clear(); for (const k of d.state.opened) st.opened.add(k);
+    st.dropped = d.state.dropped; st.flags.clear(); for (const [k, v] of d.state.flags) st.flags.set(k, v);
+    st.discovered.clear(); for (const k of d.state.discovered) st.discovered.add(k);
+    unpackBits(d.state.explored, st.explored);
+    for (const s of d.npcs) { const n = this.entities.findNpc(s.id); if (n) { n.alive = s.alive; n.hp = s.hp; n.wealth = s.wealth; n.memories = s.memories; } }
+    this.rep.global = d.rep.global; this.rep.faction = [...d.rep.faction];
+    this.rep.local.clear(); for (const [k, v] of d.rep.local) this.rep.local.set(k, v);
+    this.rep.bounty.clear(); for (const [k, v] of d.rep.bounty) this.rep.bounty.set(k, v);
+    for (const [sid, rec] of d.economy) this.economy.supply.set(sid, rec as Record<Good, number>);
+    for (const l of d.lairs) { const x = this.entities.lairs.find((y) => y.key === l.key); if (x) { x.alive = l.alive; x.leaderAlive = l.leaderAlive; } }
+    this.entities.killed.clear(); for (const k of d.killed) this.entities.killed.add(k);
+    this.entities.clearedCamps.clear(); for (const k of d.clearedCamps) this.entities.clearedCamps.add(k);
+    this.economy.refreshBlocked();
+    for (const q of d.quests) this.quests.restore(q.id, q.status as 'active', q.stage, q.killed);
+    this.rumors.list.length = 0;
+    for (const r of d.rumors) this.rumors.list.push({ id: this.rumors.list.length, text: r.text, origin: r.origin, day: r.day, reach: new Set(r.reach), tag: r.tag });
+    if (d.player.dungeon >= 0) {
+      this.enterDungeon(d.player.dungeon);
+      if (this.dungeon && d.player.ret) this.dungeon.ret = d.player.ret;
+    } else this.world.chunks.update(d.player.x, d.player.z, -1);
+    p.x = d.player.x; p.y = d.player.y; p.z = d.player.z; p.heading = d.player.heading; p.pitch = d.player.pitch;
+    p.vx = p.vy = p.vz = 0; p.dead = false;
+    this.syncStats();
+    p.hp = d.player.hp; p.stamina = d.player.stamina; p.mana = d.player.mana;
+    this.lastHp = p.hp;
+  }
+
   render(viewMode = 0): void {
+    viewMode = viewMode || this.viewMode;
     const p = this.player, c = this.camera, dg = this.dungeon;
     c.x = p.x; c.y = p.eyeY; c.z = p.z; c.heading = p.heading; c.pitch = p.pitch;
     const atmo = computeAtmosphere(dg ? 0 : this.time.hour, dg ? CLEAR_WEATHER : this.wx.mix, dg ? 1 : 0, dg ? 0 : this.wx.flash);
@@ -596,6 +668,10 @@ export class Game {
       this.instances.add(trsYawPitch(this.m4, dr.x, y + 0.15, dr.z, 0, 0, 0.35, 0.25, 0.35), 0xffd860, M.ITEM, '*'.charCodeAt(0) - 31, 0, 1);
     }
     if (!p.dead) this.fight.render(this.instances, c, this.character, p.blocking);
+    if (this.showChunks && !dg) for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) {
+      const x = (Math.floor(p.x / 64) + i) * 64, z = (Math.floor(p.z / 64) + j) * 64;
+      this.instances.add(trsYawPitch(this.m4, x, this.world.heightAt(x, z) + 6, z, 0, 0, 0.3, 12, 0.3), 0xff40ff, M.GLOW, 0, 0, 1);
+    }
     this.renderer.render({ camera: c, atmo, time: this.elapsed, items, clipRadius: this.world.chunks.clipRadius, instances: this.instances, lights, viewMode, sceneOn: true, hurt: Math.max(0, p.hurt) * 2 });
   }
 }

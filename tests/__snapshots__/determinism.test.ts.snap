@@ -1,0 +1,51 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`déterminisme > TEST-001 produit toujours le même monde (instantané) 1`] = `
+{
+  "factions": [
+    "Royaume de Belmorne",
+    "Royaume de Lanaux",
+    "Royaume de Combe-Loup",
+    "Ordre du Gué",
+    "Guilde des Marchands de Guéac",
+    "Les Écorcheurs d'Olouille",
+    "La Confrérie de l'Œil Clos",
+  ],
+  "firstSettlements": [
+    "Belmorne:capitale",
+    "Lanaux:capitale",
+    "Combe-Loup:capitale",
+    "Garaux:château",
+    "Croixrive:château",
+    "Croixroc:château",
+  ],
+  "generator": "0.1.0",
+  "heights": [
+    -40.9,
+    54,
+    60.8,
+    59.1,
+  ],
+  "mainRiver": {
+    "cells": 28,
+    "mouth": "mer",
+    "name": "la Crése",
+  },
+  "npcsAtStart": [
+    "Simon Hardy (aubergiste)",
+    "Fulbert Rousseau (forgeron)",
+    "Liesse Fournier (marchand)",
+    "Gautier Laforge (prêtre)",
+    "Thibault Pelletier (garde)",
+  ],
+  "quests": 13,
+  "startVillage": {
+    "inn": "Auberge du Pot d'Étain",
+    "name": "Gué-Marain",
+    "type": "village",
+    "x": 3505.1,
+    "z": 3698.5,
+  },
+  "world": "Terres de Maromières",
+}
+`;

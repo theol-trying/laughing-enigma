@@ -3,149 +3,100 @@
 **Un RPG 3D procédural en vue subjective, jouable dans le navigateur, dont tout ce qui s'affiche
 est fait de caractères ASCII / ANSI / Unicode colorés.**
 
-Collines, rivières, forêts, villages, châteaux : on arrive au sommet d'une colline, on voit au loin
-un village fumer au bord d'une rivière, et on peut réellement s'y rendre. Le monde entier est une
+On arrive au sommet d'une colline, on voit au loin un village au bord d'une rivière, un château
+sur sa hauteur, des montagnes enneigées — et on peut réellement s'y rendre. Le monde entier est une
 fonction de sa *seed* : la même seed redonne toujours les mêmes continents, rivières, routes,
-villes, personnages et l'histoire du monde.
+villes, personnages, histoire et donjons.
 
-> 🚧 **En développement.** Le premier jalon vise un *vertical slice* complet et jouable : générer un
-> monde, explorer, rejoindre un village, parler aux PNJ, commercer, recevoir une quête, combattre,
-> ramasser du butin, terminer la quête, sauvegarder et recharger.
-> Avancement détaillé, étape par étape : [`PROGRESS.md`](PROGRESS.md).
+> **État : premier jalon (vertical slice) jouable.** Avancement détaillé : [`PROGRESS.md`](PROGRESS.md).
+> Architecture : [`docs/architecture.md`](docs/architecture.md).
 
----
-
-## Principes
-
-1. **Tout est glyphe.** La vue 3D est rastérisée sur le GPU puis convertie en une grille de
-   caractères colorés. Aucune texture bitmap ne représente un arbre, un personnage, un bâtiment
-   ou le terrain : chaque matière a son propre vocabulaire de glyphes, choisi selon la lumière,
-   la distance, la normale, le brouillard, l'heure et la météo.
-2. **Le monde est une fonction de la seed.** Génération entièrement déterministe, avec des flux
-   pseudo-aléatoires dérivés par système (`terrain`, `climate`, `hydrology`, `settlements`,
-   `history`, `npc`, `dungeon`…). Modifier la génération des monstres ne déplace pas les villes.
-3. **Le macro avant le micro.** Une carte globale du monde (altitude, climat, bassins versants,
-   rivières, biomes, régions) est générée d'abord ; les chunks détaillés en dérivent ensuite.
-   Les rivières naissent en altitude, suivent la pente, se rejoignent et rejoignent la mer.
-4. **Chaque chose existe pour une raison.** Un village est là parce qu'il y a de l'eau, des terres
-   cultivables et une route ; un fort tient un col ; des bandits attaquent la route commerciale,
-   ce qui crée une pénurie, une hausse des prix, des rumeurs et une quête.
-5. **Des systèmes qui interagissent vraiment** plutôt que des dizaines de systèmes de façade :
-   météo → PNJ qui s'abritent → visibilité ; bandits → commerce perturbé → prix → rumeur → quête
-   → résolution → retour progressif à la normale.
-6. **100 % local.** Aucun LLM ni API externe : dialogues, rumeurs et quêtes sont produits par des
-   règles et des modèles de phrases à partir de l'état du monde.
-
-## Rendu : de la 3D aux caractères
-
-Le moteur de rendu est écrit à la main en WebGL2, en trois passes :
-
-| Passe | Résolution | Rôle |
-|---|---|---|
-| **Scène** | 2 × 2 sous-échantillons par caractère | Rastérise le monde 3D dans un G-buffer : couleur éclairée + intensité lumineuse, matière, normale, hachage stable lié au monde, lettre d'entité, profondeur. Soleil/lune, torches et lanternes (lumières ponctuelles), ombres, eau animée avec reflets. |
-| **Cellule** | 1 pixel par caractère | Pour chaque case de la grille : choisit le glyphe et les couleurs de texte et de fond. Silhouettes en quadrants `▘▝▀▄▌▐▚▞▙▛▜▟` quand la case chevauche deux profondeurs, rampes de glyphes propres à chaque matière, toits orientés `/` `\`, eau et feu animés, brouillard, ciel (dégradé, soleil, lune, étoiles, nuages), pluie et neige. L'interface (elle aussi en caractères) est fusionnée ici. |
-| **Présentation** | écran | Lit l'atlas de glyphes (rendu au démarrage dans la taille exacte de la cellule) et dessine chaque caractère net au pixel près. |
-
-Vocabulaire de glyphes par matière (extraits) :
-
-| Matière | Glyphes |
-|---|---|
-| Pierre | `░ # ▒ ▓ █` |
-| Bois | `│ ║ ▒ ▓` |
-| Herbe | `. , : ; " '` |
-| Eau | `- ~ ≈` (animés) |
-| Feu | `' ^ * ! ▲` (animés, émissifs) |
-| Feuillage | `+ * ♣ ♠` |
-| Toits | `/ \` selon l'orientation |
-
-Le choix des glyphes fait aussi office de **niveau de détail** : de loin, une créature n'est
-qu'une lettre façon *roguelike* (`w` un loup, `g` un gobelin, `B` un bandit…) ; de près, sa
-silhouette en blocs apparaît.
-
-## Génération du monde
-
-- **Macro** (grille 256 × 256, cellules de 32 m → monde d'environ 8 × 8 km) : continentalité,
-  montagnes, hydrologie (*priority-flood*, écoulement D8, accumulation, rivières en polylignes,
-  lacs, creusement des vallées), température, humidité, biomes (plaine, forêt, montagne, neige,
-  marais, côte…), régions et factions.
-- **Civilisation** : histoire procédurale (guerres, chutes de royaumes, pestes, schismes, mines,
-  expéditions disparues) qui laisse des traces physiques (ruines, forts abandonnés, tombes,
-  champs de bataille) et sociales (rancunes entre factions, rumeurs, quêtes) ; implantations
-  placées selon l'eau, les terres, les routes et la sécurité ; routes tracées par A* sur le
-  terrain (vallées, cols, ponts) ; plans de villages avec bâtiments visitables.
-- **Chunks** (64 m) générés à la demande autour du joueur, détruits et régénérés à l'identique.
-  Au-delà, un terrain lointain basse résolution permet de voir montagnes, forêts et châteaux à
-  des kilomètres.
-
-## Simulation et gameplay (cibles du premier jalon)
-
-- **PNJ** avec identité, métier, domicile, lieu de travail, faction, traits, relations, inventaire,
-  besoins, mémoire, opinion du joueur et emploi du temps ; IA par fonctions d'utilité (s'abriter
-  sous la pluie, fuir ou combattre, prévenir un garde, rentrer la nuit…) ; simulation à plusieurs
-  niveaux de détail selon la distance.
-- **Réputation** globale, par faction et locale ; **mémoire** des PNJ (aide, vol, agression…).
-- **Dialogues** procéduraux cohérents avec le métier, le lieu, l'heure et les événements ;
-  **rumeurs** qui circulent entre communautés.
-- **Quêtes systémiques** issues de l'état du monde (route bloquée par des bandits, loups qui
-  attaquent un troupeau, relique perdue dans une crypte…).
-- **Combat** temps réel : attaques légère et lourde, blocage, esquive, arc et projectiles,
-  endurance, armure, effets élémentaires.
-- **Progression** : expérience, caractéristiques, compétences, équipement, inventaire, butin
-  contextuel, marchands et économie régionale.
-- **Monde vivant** : cycle jour/nuit complet, météo par région à transitions douces, torches,
-  lanternes et fenêtres éclairées la nuit.
-- **Sauvegarde** dans IndexedDB : la seed + uniquement les différences avec le monde généré.
-
-## Lancer le projet
+## Lancer le jeu
 
 Prérequis : Node.js 20 ou plus.
 
 ```bash
 npm install
 npm run dev        # http://localhost:5199
-npm run build      # site statique dans dist/
-npm test           # tests (déterminisme, RNG, génération…)
+npm run build      # site statique dans dist/ (servir le dossier tel quel)
+npm test           # 21 tests : déterminisme, RNG, monde, chunks, civilisation, PNJ, donjons
 ```
 
-## Contrôles (prévus)
+## Ce qui est implémenté
+
+**Rendu (WebGL2, écrit à la main)** — la scène 3D est rastérisée dans un G-buffer à 2 × 2
+sous-échantillons par caractère, puis convertie en grille de glyphes colorés (texte + fond) :
+silhouettes en quadrants `▘▝▀▄▌▐`, vocabulaire de glyphes par matière (pierre `░#▒▓█`, bois `│║`,
+herbe `.,;:"`, eau `~≈` animée, feu `'^*!` animé, feuillage `+*♣♠`, toits `/ \` selon l'orientation),
+ombres du soleil, lumières ponctuelles (torches, âtres, lanternes), brouillard, ciel procédural
+(soleil, lune, étoiles, nuages), pluie, neige, éclairs, palette dynamique selon l'heure et la météo,
+terrain lointain visible à des kilomètres. Au loin, les créatures deviennent une lettre roguelike.
+
+**Monde déterministe** — continent de ~8 × 8 km : relief, hydrologie complète (bassins versants,
+rivières de la source à la mer, lacs, vallées creusées), climat, 10 biomes, 14 régions nommées ;
+factions (royaumes, ordre, guilde, bandits, culte) ; histoire procédurale (chute d'un royaume ancien,
+guerre, peste, schisme, mines, révolte, expédition perdue…) qui laisse des ruines, forts, champs de
+bataille, cimetières et rancunes ; ~45 implantations placées pour de bonnes raisons (eau, terres,
+routes, cols) ; routes A* et ponts ; villages visitables (auberge, forge, échoppe, chapelle, corps
+de garde, maisons, fermes et champs, moulin, enceintes, châteaux, forts, monastère) avec intérieurs
+meublés et éclairés ; points d'intérêt ; donjons (crypte, forteresse, mine, grotte) avec boucles,
+porte verrouillée, clé, pièges, butin et boss. Chunks générés à la demande et régénérés à
+l'identique.
+
+**Vie et simulation** — PNJ avec identité, métier, domicile, lieu de travail, traits, relations,
+connaissances, objectifs et emplois du temps (le forgeron forge, l'aubergiste sert, la garde de nuit
+dort le jour, la ronde passe) ; navigation locale réelle (portes comprises) ; ils s'abritent sous la
+pluie, fuient ou combattent les créatures. Créatures (loups, bandits et leur chef, gobelins,
+squelettes, spectre, araignées, troll…) avec perception, territoire, nocturnes, meutes qui
+s'appellent ; écologie agrégée hors champ ; simulation par niveaux de détail.
+
+**Gameplay** — combat temps réel (attaque légère, lourde en maintenant, blocage, esquive, arc et
+flèches, sorts, feu/givre/poison), caractéristiques et compétences qui progressent à l'usage,
+niveaux, inventaire et équipement, butin contextuel, coffres (le vol devant témoins est un délit),
+auberge, prière, cuisson, forge de flèches, potions ; réputation globale/faction/locale et mémoire
+des PNJ ; amendes et gardes hostiles ; économie régionale (une route tenue par des bandits crée une
+pénurie et fait monter les prix, qui reviennent une fois la route libérée) ; rumeurs qui circulent
+de village en village ; dialogues procéduraux ancrés dans le monde ; quêtes systémiques (convois
+attaqués, loups, relique de la crypte, expédition perdue, mine envahie) ; météo régionale ; cycle
+jour/nuit ; sons synthétiques (vent, pluie, feu, pas, impacts, tonnerre).
+
+**Interface en caractères** — écran titre, nouvelle partie (seed, RANDOMIZE, aperçu du monde avec
+mini-carte), HUD (barres, boussole et repère de quête, heure, météo, lieu, cible, messages),
+inventaire, journal, carte ASCII avec brouillard de guerre, personnage, commerce, dialogues, pause et
+options. Sauvegarde IndexedDB (seed + différences), sauvegarde auto, rapide (F5/F9). Console de
+développement (F1).
+
+## Contrôles
 
 | Touche | Action |
 |---|---|
-| `W A S D` (ou `Z Q S D`) | se déplacer |
-| Souris | regarder (Pointer Lock) |
-| `Shift` | sprinter |
-| `Espace` | sauter |
-| `E` | interagir |
-| Clic gauche | attaque (maintenir : attaque lourde) |
+| `Z Q S D` / `W A S D` | se déplacer (selon le clavier) |
+| Souris | regarder (clic pour capturer) |
+| `Maj` | sprinter · `Espace` sauter · `C` s'accroupir (discrétion) |
+| `E` | interagir / parler / fouiller |
+| Clic gauche | attaquer (maintenir : attaque lourde ; arc : bander) |
 | Clic droit | bloquer |
-| `V` | esquiver |
-| `Tab` | inventaire |
-| `M` | carte |
-| `J` | journal |
-| `Échap` | menu |
+| `V` ou double appui | esquiver |
+| `B` | arc ↔ arme de mêlée · `R` trait de feu · `F` soin · `H` potion |
+| `Tab` inventaire · `M` carte · `J` journal · `C` personnage | |
+| `Échap` | pause (sauvegarder, charger, options) · `F5`/`F9` sauvegarde/chargement rapides |
+| `F3` | informations de débogage · `F1` console (`help`) |
 
-## Architecture
+## Volontairement simplifié dans ce jalon
 
-```
-src/
-  core/        RNG seedé, seed et flux dérivés, bruit, maths, temps, événements, sauvegarde
-  rendering/   WebGL2 : shaders, atlas de glyphes, matières, grille d'interface, caméra
-  world/       monde macro, terrain, climat, hydrologie, chunks, civilisation, donjons
-  entities/    joueur, PNJ, monstres, modèles en volumes animés
-  ai/          perception, IA par utilité, emplois du temps, pathfinding, mémoire
-  gameplay/    combat, objets, inventaire, butin, compétences, réputation, économie, quêtes, dialogues
-  ui/          écrans en caractères : titre, HUD, inventaire, carte, journal, dialogue, commerce
-  audio/       sons synthétisés avec Web Audio (vent, pluie, feu, pas, impacts)
-tests/         tests Vitest
-```
+- Les créatures et PNJ sont des modèles en boîtes (lisibles une fois convertis en glyphes).
+- Les PNJ non actifs ne sont pas simulés pas à pas : leur position découle de leur emploi du temps.
+- Un seul niveau par donjon ; portes de bâtiments toujours ouvertes (seule la porte du boss se verrouille).
+- Magie limitée à deux sorts ; artisanat limité à quelques recettes (flèches, potions, cuisson).
+- La création du monde bloque quelques centaines de millisecondes (écran de chargement).
 
-Stack : **TypeScript**, **Vite**, **WebGL2**, **Vitest**. Aucun moteur de jeu ni bibliothèque 3D :
-le rendu, la génération et les systèmes sont implémentés dans le projet.
+## Pistes suivantes
 
-## Déterminisme
+Monde plus vaste et génération dans un Web Worker ; villes plus denses (quartiers, marchés vivants) ;
+voyageurs et caravanes réellement simulés sur les routes ; donjons multi-niveaux ; plus de types de
+quêtes et de dialogues ; montures ; réflexions d'eau en espace écran ; ombres des torches.
 
-Chaque monde est identifié par sa seed **et** la version du générateur (`src/version.ts`),
-affichées en jeu (`World: THE-ASHEN-KINGDOM-94721 · Generator: 0.1.0`). Toute modification qui
-change le monde généré incrémente cette version. Des tests vérifient qu'une seed de référence
-(`TEST-001`) produit toujours le même village de départ, la même rivière principale, les mêmes
-noms de lieux et les mêmes points de contrôle.
+## Stack
+
+TypeScript, Vite, WebGL2, Vitest. Aucun moteur de jeu ni bibliothèque 3D : rendu, génération et
+systèmes sont implémentés dans le projet. Aucun appel à un LLM ni à une API externe.
