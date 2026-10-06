@@ -19,6 +19,9 @@ import { WorldState, type Dropped } from '@ascii-fort/sim/gameplay/WorldState';
 import { item } from '@ascii-fort/sim/gameplay/Items';
 import { packBits, unpackBits, type SaveData } from './SaveManager';
 import type { Coop } from '../net/Coop';
+import type { Mood } from '../audio/AudioEngine';
+import { B } from '@ascii-fort/worldgen/terrain/Biomes';
+import { W_SEA, W_LAKE } from '@ascii-fort/worldgen/terrain/Hydrology';
 import { GAME_VERSION, GENERATOR_VERSION } from '../version';
 import type { Good } from '@ascii-fort/worldgen/civilization/types';
 import { creatureLoot, containerLoot, type LootLine } from '@ascii-fort/sim/gameplay/Loot';
@@ -72,6 +75,13 @@ export class Game {
   wx: { mix: WeatherMix; state: WeatherState; flash: number } = { mix: CLEAR_WEATHER, state: 'clair', flash: 0 };
   private stepDist = 0;
   private drownMsgT = -10;
+  /** sons : état précédent des créatures proches (alerte, attaque, mort), combat récent, hurlements */
+  private heard = new Map<string, { target: boolean; swing: number; alive: boolean }>();
+  private combatT = 0;
+  private howlT = 20;
+  private waterT = 0;
+  private waterNear: { p: { x: number; y: number; z: number } | null; kind: 'rivière' | 'lac' | 'mer' | null } = { p: null, kind: null };
+  private clanged = new WeakSet<Entity>();
   /** bonus temporaires actifs */
   buffs: Buff[] = [];
   /** objets récupérés récemment (affichés à droite de l'écran) */
@@ -628,8 +638,82 @@ export class Game {
     return s.road ? 'pierre' : s.mat === M.SNOW ? 'neige' : s.mat === M.ROCK ? 'pierre' : 'herbe';
   }
 
+  /** Thème musical selon la situation : combat, donjon, village, nuit, exploration. */
+  private musicMood(dt: number): Mood {
+    const p = this.player;
+    if (p.dead) return 'silence';
+    const near = this.watchers().hunters.some((e) => Math.hypot(e.x - p.x, e.z - p.z) < 45);
+    if (near || p.hp < this.lastHp - 0.5) this.combatT = 7;
+    this.combatT -= dt;
+    if (this.combatT > 0) return 'combat';
+    if (this.dungeon) return 'donjon';
+    const here = this.world.civ.settlements.some((s) => !s.abandoned && s.type !== 'camp' && Math.hypot(s.x - p.x, s.z - p.z) < s.radius + 25);
+    if (here && this.atmoNight < 0.5) return 'village';
+    if (this.atmoNight > 0.55) return 'nuit';
+    return 'exploration';
+  }
+
+  /** Sons du monde autour du joueur : cris des créatures, forge, hurlements, eau, oiseaux, grillons, village. */
+  private worldSounds(dt: number) {
+    const p = this.player, a = this.audio, c = this.camera;
+    a.listener(c.x, c.y, c.z, p.heading);
+    a.setUnderwater(!this.dungeon && !Number.isNaN(p.water) && c.y < p.water - 0.05);
+    a.mood(this.musicMood(dt));
+    // créatures et PNJ proches : alerte, attaque, mort (à leur position)
+    const seen = new Set<string>();
+    for (const e of this.entities.entities) {
+      const d = Math.hypot(e.x - p.x, e.z - p.z);
+      if (d > 55) continue;
+      seen.add(e.id);
+      const pos = { x: e.x, y: e.y + 1, z: e.z };
+      const prev = this.heard.get(e.id) ?? { target: false, swing: 0, alive: e.alive };
+      if (e.mon) {
+        const target = !!e.mon.targetId;
+        if (target && !prev.target && e.alive) a.creature(e.type, 'alerte', pos);
+        if (e.alive && e.pose.swing > 0.55 && prev.swing <= 0.55) a.creature(e.type, 'attaque', pos);
+        if (!e.alive && prev.alive) a.creature(e.type, 'mort', pos);
+        prev.target = target;
+      } else if (e.npc?.profession === 'forgeron' && e.action === 'travailler' && e.alive && d < 45) {
+        // marteau sur l'enclume, au sommet du geste
+        if (e.pose.swing > 0.85 && !this.clanged.has(e)) { this.clanged.add(e); a.clang(pos); }
+        if (e.pose.swing < 0.3) this.clanged.delete(e);
+      } else if (e.npc && e.alive && e.pose.swing > 0.55 && prev.swing <= 0.55 && e.action === 'combattre') a.swing(pos);
+      prev.swing = e.pose.swing; prev.alive = e.alive;
+      this.heard.set(e.id, prev);
+    }
+    for (const k of this.heard.keys()) if (!seen.has(k)) this.heard.delete(k);
+    // la nuit, un loup hurle quelque part
+    if ((this.howlT -= dt) <= 0) {
+      this.howlT = 25 + Math.random() * 45;
+      if (!this.dungeon && this.atmoNight > 0.5) {
+        const l = this.entities.lairs.find((x) => x.type === 'loup' && x.alive > 0 && Math.hypot(x.x - p.x, x.z - p.z) < 600);
+        if (l) a.howl({ x: l.x, y: this.world.heightAt(l.x, l.z) + 2, z: l.z });
+      }
+    }
+    // eau la plus proche (rivière, lac, mer), cherchée deux fois par seconde
+    if ((this.waterT -= dt) <= 0 && !this.dungeon) {
+      this.waterT = 0.5;
+      let best: { x: number; z: number; d: number; w: number } | null = null;
+      for (const r of [0, 6, 14, 26]) for (let i = 0; i < (r ? 12 : 1); i++) {
+        const an = (i / 12) * Math.PI * 2, x = p.x + Math.cos(an) * r, z = p.z + Math.sin(an) * r;
+        const w = this.world.waterAt(x, z);
+        if (!Number.isNaN(w) && w > this.world.heightAt(x, z) + 0.1 && (!best || r < best.d)) best = { x, z, d: r, w };
+        if (best && r > 0) break;
+      }
+      const cell = best ? this.world.macro.cellOf(best.x, best.z) : -1;
+      const wk = cell >= 0 ? this.world.macro.hydro.water[cell] : 0;
+      this.waterNear = best ? { p: { x: best.x, y: best.w, z: best.z }, kind: wk === W_SEA ? 'mer' : wk === W_LAKE ? 'lac' : 'rivière' } : { p: null, kind: null };
+    }
+    const biome = this.world.sampler.biomeAt(p.x, p.z);
+    const forest = biome === B.FOREST || biome === B.TAIGA ? 1 : biome === B.SWAMP ? 0.6 : biome === B.PLAINS || biome === B.HEATH ? 0.3 : 0.1;
+    let crowd = 0;
+    for (const e of this.entities.entities) if (e.npc && e.alive && e.action !== 'dormir' && Math.hypot(e.x - p.x, e.z - p.z) < 35) crowd++;
+    return { x: p.x, y: p.y + 1.5, z: p.z, day: 1 - this.atmoNight, rain: this.rain(), outdoor: !this.dungeon && !p.underRoof, forest, crowd: Math.min(1, crowd / 8), water: this.dungeon ? null : this.waterNear.p, waterKind: this.dungeon ? null : this.waterNear.kind };
+  }
+
   private sounds(dt: number) {
     const p = this.player, a = this.audio;
+    const amb = this.worldSounds(dt);
     if (p.swimming && p.moving) { this.swimT -= dt; if (this.swimT <= 0) { this.swimT = 0.75; a.splash(0.6); } }
     if (p.onGround && p.moving) {
       this.stepDist += Math.hypot(p.vx, p.vz) * dt;
@@ -642,7 +726,7 @@ export class Game {
     let fire = 0;
     for (const l of this.world.chunks.lightsNear(p.x, p.z, 8)) if (l.kind === 'fire') fire = Math.max(fire, 1 - Math.hypot(l.x - p.x, l.z - p.z) / 8);
     const cover = p.underRoof || this.dungeon ? 0.25 : 1;
-    a.ambient((Math.hypot(this.wx.mix.windX, this.wx.mix.windZ) * 0.5 + Math.max(0, p.y - 120) / 300) * cover, this.rain() * cover, fire, this.elapsed);
+    a.ambient((Math.hypot(this.wx.mix.windX, this.wx.mix.windZ) * 0.5 + Math.max(0, p.y - 120) / 300) * cover, this.rain() * cover, fire, this.elapsed, amb);
   }
 
   private checkTraps() {

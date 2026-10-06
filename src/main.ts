@@ -27,7 +27,7 @@ const screens = new UIManager(r, input);
 screens.onResume = () => { if (game) input.requestLock(); };
 
 // options (préférences locales du navigateur)
-const DEFAULT_OPTS: Options = { cellSize: Math.max(10, Math.min(20, Math.round(window.innerHeight / 58))), detail: 0.75, sensitivity: 1, fov: 68, volume: 0.6, timeScale: 1 };
+const DEFAULT_OPTS: Options = { cellSize: Math.max(10, Math.min(20, Math.round(window.innerHeight / 58))), detail: 0.75, sensitivity: 1, fov: 68, volume: 0.6, music: 0.6, timeScale: 1 };
 let opts: Options = { ...DEFAULT_OPTS };
 try { opts = { ...DEFAULT_OPTS, ...JSON.parse(localStorage.getItem('ascii-fort-options') ?? '{}') }; } catch { /* stockage indisponible */ }
 const saveOpts = () => { try { localStorage.setItem('ascii-fort-options', JSON.stringify(opts)); } catch { /* ignore */ } };
@@ -46,7 +46,7 @@ const idleInst = new InstanceBuffer();
 function applyOptions() {
   saveOpts();
   if (r.cssCellH !== opts.cellSize || r.detail !== opts.detail) r.resize(opts.cellSize, opts.detail);
-  if (game) { game.audio.setVolume(opts.volume); game.sensitivity = opts.sensitivity; game.camera.fovY = (opts.fov * Math.PI) / 180; game.time.scale = opts.timeScale; }
+  if (game) { game.audio.setVolume(opts.volume); game.audio.setMusicVolume(opts.music); game.sensitivity = opts.sensitivity; game.camera.fovY = (opts.fov * Math.PI) / 180; game.time.scale = opts.timeScale; }
 }
 
 function hasSave(): boolean { return !!SaveManager.latest(); }

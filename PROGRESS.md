@@ -47,8 +47,8 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 26. Vérification (local + en ligne), docs, propositions d'améliorations
 
 ### Jalon 4 — musique, ambiances, son spatial, multi (2026-10-06)
-- [ ] 27. Musique procédurale adaptative (luth Karplus-Strong, flûte, bourdon, tambour) : exploration, village, nuit, donjon, combat ; option volume musique
-- [ ] 28. Ambiances (oiseaux, grillons, rumeur du village, marteau du forgeron, rivière) + son spatialisé (créatures, coups) + son assourdi sous l'eau
+- [x] 27. Musique procédurale adaptative (luth Karplus-Strong, flûte, bourdon, tambour) : exploration, village, nuit, donjon, combat ; option volume musique
+- [x] 28. Ambiances (oiseaux, grillons, rumeur du village, marteau du forgeron, rivière) + son spatialisé (créatures, coups) + son assourdi sous l'eau
 - [ ] 29. Multi : flèches et sorts des autres joueurs visibles (et audibles)
 - [ ] 30. Multi : échanges d'objets entre joueurs
 - [ ] 31. Vérification (local + en ligne), docs, déploiement
