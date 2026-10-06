@@ -1,0 +1,11 @@
+{
+  "name": "@ascii-fort/core",
+  "version": "0.2.0",
+  "description": "Déterminisme et utilitaires : RNG à flux dérivés, seeds, bruit, maths, tas, événements, temps de jeu. Pur TypeScript, sans navigateur.",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {}
+}

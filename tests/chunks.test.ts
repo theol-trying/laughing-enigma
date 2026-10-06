@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { WorldSeed } from '../src/core/Seed';
-import { World } from '../src/world/World';
-import { buildChunk } from '../src/world/Chunk';
+import { WorldSeed } from '@ascii-fort/core/Seed';
+import { World } from '@ascii-fort/worldgen/World';
+import { buildChunk } from '@ascii-fort/worldgen/Chunk';
 
 describe('chunks', () => {
   const world = new World(new WorldSeed('TEST-001'), null);

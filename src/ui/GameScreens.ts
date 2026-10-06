@@ -1,12 +1,12 @@
-import { C, TextGrid } from '../rendering/TextGrid';
+import { C, TextGrid } from '@ascii-fort/ascii-engine/TextGrid';
 import type { Screen, UICtx } from './UI';
 import { optionList } from './UI';
-import type { Game } from '../core/Game';
-import { item } from '../gameplay/Items';
-import { STATS, STAT_NAMES, SKILLS, SKILL_NAMES } from '../gameplay/Character';
-import { MACRO } from '../world/constants';
-import { B } from '../world/terrain/Biomes';
-import { W_LAKE, W_RIVER, W_SEA } from '../world/terrain/Hydrology';
+import type { Game } from '../game/Game';
+import { item } from '@ascii-fort/sim/gameplay/Items';
+import { STATS, STAT_NAMES, SKILLS, SKILL_NAMES } from '@ascii-fort/sim/gameplay/Character';
+import { MACRO } from '@ascii-fort/worldgen/constants';
+import { B } from '@ascii-fort/worldgen/terrain/Biomes';
+import { W_LAKE, W_RIVER, W_SEA } from '@ascii-fort/worldgen/terrain/Hydrology';
 import { GENERATOR_VERSION } from '../version';
 
 function frame(g: TextGrid, title: string, wMax = 110, hMax = 34) {

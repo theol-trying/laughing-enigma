@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { WorldSeed } from '../src/core/Seed';
-import { World } from '../src/world/World';
-import { generateNPCs } from '../src/entities/NPC';
+import { WorldSeed } from '@ascii-fort/core/Seed';
+import { World } from '@ascii-fort/worldgen/World';
+import { generateNPCs } from '@ascii-fort/sim/entities/NPC';
 import { GENERATOR_VERSION } from '../src/version';
-import { packBits, unpackBits } from '../src/core/SaveManager';
+import { packBits, unpackBits } from '../src/game/SaveManager';
 
 // Points de contrôle de la seed de référence. Si la génération change volontairement,
 // incrémenter GENERATOR_VERSION puis mettre à jour l'instantané : npx vitest run -u

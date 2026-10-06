@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { WorldSeed } from '../src/core/Seed';
-import { World } from '../src/world/World';
-import { generateNPCs } from '../src/entities/NPC';
-import { NavGrid } from '../src/ai/Pathfinding';
-import { blockAt, resolveSpot } from '../src/ai/Schedule';
-import { doorPassages } from '../src/entities/EntityManager';
+import { WorldSeed } from '@ascii-fort/core/Seed';
+import { World } from '@ascii-fort/worldgen/World';
+import { generateNPCs } from '@ascii-fort/sim/entities/NPC';
+import { NavGrid } from '@ascii-fort/sim/ai/Pathfinding';
+import { blockAt, resolveSpot } from '@ascii-fort/sim/ai/Schedule';
+import { doorPassages } from '@ascii-fort/sim/entities/EntityManager';
 
 describe('PNJ', () => {
   const world = new World(new WorldSeed('TEST-001'), null);

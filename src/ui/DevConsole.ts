@@ -1,13 +1,13 @@
-import { C } from '../rendering/TextGrid';
+import { C } from '@ascii-fort/ascii-engine/TextGrid';
 import type { Screen, UICtx } from './UI';
-import type { Game } from '../core/Game';
-import type { Input } from '../core/Input';
-import { ITEMS, item } from '../gameplay/Items';
-import { makeMonster, MONSTERS } from '../entities/Monster';
+import type { Game } from '../game/Game';
+import type { Input } from '@ascii-fort/ascii-engine/Input';
+import { ITEMS, item } from '@ascii-fort/sim/gameplay/Items';
+import { makeMonster, MONSTERS } from '@ascii-fort/sim/entities/Monster';
 import { GENERATOR_VERSION } from '../version';
-import { blockAt } from '../ai/Schedule';
-import { MACRO } from '../world/constants';
-import type { WeatherState } from '../gameplay/Weather';
+import { blockAt } from '@ascii-fort/sim/ai/Schedule';
+import { MACRO } from '@ascii-fort/worldgen/constants';
+import type { WeatherState } from '@ascii-fort/sim/gameplay/Weather';
 
 // Console de développement (F1) : téléportation, temps, god mode, IA figée, apparitions,
 // vues de débogage, informations sur les PNJ, météo, objets…

@@ -1,12 +1,12 @@
-import { C, type TextGrid } from '../rendering/TextGrid';
+import { C, type TextGrid } from '@ascii-fort/ascii-engine/TextGrid';
 import type { Screen, UICtx } from './UI';
 import { optionList } from './UI';
-import { WorldSeed, normalizeSeed, randomSeedString } from '../core/Seed';
-import { MacroWorld } from '../world/MacroWorld';
-import { Civilization } from '../world/civilization/Civilization';
-import { BIOMES, B } from '../world/terrain/Biomes';
-import { W_LAKE, W_RIVER, W_SEA } from '../world/terrain/Hydrology';
-import { MACRO } from '../world/constants';
+import { WorldSeed, normalizeSeed, randomSeedString } from '@ascii-fort/core/Seed';
+import { MacroWorld } from '@ascii-fort/worldgen/MacroWorld';
+import { Civilization } from '@ascii-fort/worldgen/civilization/Civilization';
+import { BIOMES, B } from '@ascii-fort/worldgen/terrain/Biomes';
+import { W_LAKE, W_RIVER, W_SEA } from '@ascii-fort/worldgen/terrain/Hydrology';
+import { MACRO } from '@ascii-fort/worldgen/constants';
 import { GENERATOR_VERSION, GAME_VERSION } from '../version';
 
 const FONT: Record<string, string[]> = {

@@ -1,0 +1,14 @@
+{
+  "name": "@ascii-fort/worldgen",
+  "version": "0.2.0",
+  "description": "Monde procédural déterministe : relief, hydrologie, climat, biomes, civilisation, histoire, routes, POI, donjons, chunks et terrain lointain.",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@ascii-fort/core": "*",
+    "@ascii-fort/ascii-engine": "*"
+  }
+}

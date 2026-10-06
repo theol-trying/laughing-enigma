@@ -1,13 +1,13 @@
-import { C, TextGrid } from '../rendering/TextGrid';
+import { C, TextGrid } from '@ascii-fort/ascii-engine/TextGrid';
 import type { Screen, UICtx } from './UI';
 import { optionList } from './UI';
-import type { DialogueNode } from '../gameplay/Dialogue';
-import type { Entity } from '../entities/Entity';
-import type { Character } from '../gameplay/Character';
-import type { Economy } from '../gameplay/Economy';
-import type { Reputation } from '../gameplay/Reputation';
-import type { EventBus } from '../core/Events';
-import { item } from '../gameplay/Items';
+import type { DialogueNode } from '@ascii-fort/sim/gameplay/Dialogue';
+import type { Entity } from '@ascii-fort/sim/entities/Entity';
+import type { Character } from '@ascii-fort/sim/gameplay/Character';
+import type { Economy } from '@ascii-fort/sim/gameplay/Economy';
+import type { Reputation } from '@ascii-fort/sim/gameplay/Reputation';
+import type { EventBus } from '@ascii-fort/core/Events';
+import { item } from '@ascii-fort/sim/gameplay/Items';
 
 const MOOD_COLOR: Record<string, number> = { amical: C.green, neutre: C.text, méfiant: C.orange, hostile: C.red };
 

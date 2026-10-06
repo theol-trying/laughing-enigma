@@ -1,0 +1,15 @@
+{
+  "name": "@ascii-fort/sim",
+  "version": "0.2.0",
+  "description": "Simulation : PNJ, créatures et modèles animés, IA, navigation, combat, objets, économie, réputation, rumeurs, quêtes, dialogues, météo, état du monde.",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@ascii-fort/core": "*",
+    "@ascii-fort/ascii-engine": "*",
+    "@ascii-fort/worldgen": "*"
+  }
+}

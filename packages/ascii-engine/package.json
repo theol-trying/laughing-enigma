@@ -1,0 +1,13 @@
+{
+  "name": "@ascii-fort/ascii-engine",
+  "version": "0.2.0",
+  "description": "Moteur d'affichage 3D → caractères (WebGL2) : G-buffer, glyphes par matière, atlas, interface texte, caméra, atmosphère, formes instanciées, clavier/souris.",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@ascii-fort/core": "*"
+  }
+}

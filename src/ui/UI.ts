@@ -1,6 +1,6 @@
-import type { Input } from '../core/Input';
-import type { TextGrid } from '../rendering/TextGrid';
-import type { Renderer } from '../rendering/Renderer';
+import type { Input } from '@ascii-fort/ascii-engine/Input';
+import type { TextGrid } from '@ascii-fort/ascii-engine/TextGrid';
+import type { Renderer } from '@ascii-fort/ascii-engine/Renderer';
 
 // Écrans d'interface en caractères, empilés. Un écran « modal » met le jeu en pause et libère
 // la souris (le pointeur redevient visible pour cliquer dans les menus).

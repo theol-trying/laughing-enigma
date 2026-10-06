@@ -100,3 +100,16 @@ quêtes et de dialogues ; montures ; réflexions d'eau en espace écran ; ombres
 
 TypeScript, Vite, WebGL2, Vitest. Aucun moteur de jeu ni bibliothèque 3D : rendu, génération et
 systèmes sont implémentés dans le projet. Aucun appel à un LLM ni à une API externe.
+
+## Bibliothèques réutilisables
+
+Le code est découpé en workspaces npm, réutilisables dans d'autres projets (chacun a son README) :
+
+| Paquet | Rôle |
+|---|---|
+| [`@ascii-fort/core`](packages/core) | déterminisme (RNG à flux dérivés, seeds), bruit, maths, événements, temps — pur TS |
+| [`@ascii-fort/ascii-engine`](packages/ascii-engine) | rendu 3D → caractères en WebGL2, interface texte, entrées |
+| [`@ascii-fort/worldgen`](packages/worldgen) | monde procédural : relief, rivières, biomes, civilisation, histoire, routes, donjons, chunks |
+| [`@ascii-fort/sim`](packages/sim) | PNJ, créatures et modèles animés, IA, combat, économie, réputation, rumeurs, quêtes |
+
+Le jeu lui-même (`src/`) assemble ces bibliothèques : boucle de jeu, écrans, audio, sauvegarde.

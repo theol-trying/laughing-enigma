@@ -1,19 +1,19 @@
 // ASCII FORT — application : écran titre → nouvelle partie → monde → jeu.
-import { Renderer } from './rendering/Renderer';
-import { Input } from './core/Input';
-import { Game } from './core/Game';
-import { C } from './rendering/TextGrid';
-import { CLEAR_WEATHER, computeAtmosphere } from './rendering/Atmosphere';
-import { Camera } from './rendering/Camera';
-import { InstanceBuffer } from './rendering/Renderer';
+import { Renderer } from '@ascii-fort/ascii-engine/Renderer';
+import { Input } from '@ascii-fort/ascii-engine/Input';
+import { Game } from './game/Game';
+import { C } from '@ascii-fort/ascii-engine/TextGrid';
+import { CLEAR_WEATHER, computeAtmosphere } from '@ascii-fort/ascii-engine/Atmosphere';
+import { Camera } from '@ascii-fort/ascii-engine/Camera';
+import { InstanceBuffer } from '@ascii-fort/ascii-engine/Renderer';
 import { UIManager } from './ui/UI';
 import { DialogueScreen, TradeScreen } from './ui/DialogueScreen';
 import { InventoryScreen, JournalScreen, MapScreen, StatsScreen, PauseScreen, type Options } from './ui/GameScreens';
 import { TitleScreen, NewGameScreen, drawTitleBackground } from './ui/TitleScreen';
 import { drawHud, type HudState } from './ui/HUD';
-import type { MacroWorld } from './world/MacroWorld';
-import type { Civilization } from './world/civilization/Civilization';
-import { SaveManager } from './core/SaveManager';
+import type { MacroWorld } from '@ascii-fort/worldgen/MacroWorld';
+import type { Civilization } from '@ascii-fort/worldgen/civilization/Civilization';
+import { SaveManager } from './game/SaveManager';
 import { DevConsole } from './ui/DevConsole';
 
 const canvas = document.getElementById('screen') as HTMLCanvasElement;

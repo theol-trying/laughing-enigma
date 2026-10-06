@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { writeFileSync } from 'node:fs';
-import { WorldSeed } from '../src/core/Seed';
-import { MacroWorld } from '../src/world/MacroWorld';
-import { Civilization } from '../src/world/civilization/Civilization';
+import { WorldSeed } from '@ascii-fort/core/Seed';
+import { MacroWorld } from '@ascii-fort/worldgen/MacroWorld';
+import { Civilization } from '@ascii-fort/worldgen/civilization/Civilization';
 
 describe('civilisation', () => {
   const t0 = performance.now();

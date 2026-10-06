@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { WorldSeed } from '../src/core/Seed';
-import { MacroWorld } from '../src/world/MacroWorld';
-import { Civilization } from '../src/world/civilization/Civilization';
-import { generateDungeon, buildDungeon } from '../src/world/dungeons/DungeonGenerator';
+import { WorldSeed } from '@ascii-fort/core/Seed';
+import { MacroWorld } from '@ascii-fort/worldgen/MacroWorld';
+import { Civilization } from '@ascii-fort/worldgen/civilization/Civilization';
+import { generateDungeon, buildDungeon } from '@ascii-fort/worldgen/dungeons/DungeonGenerator';
 
 describe('donjons', () => {
   const seed = new WorldSeed('TEST-001');

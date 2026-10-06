@@ -1,6 +1,6 @@
 {
   "name": "ascii-fort",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "ASCII FORT — RPG 3D procédural rendu en caractères",
   "scripts": {
     "dev": "vite",
@@ -18,5 +18,14 @@
     "vite": "^8.3.2",
     "vitest": "^5.0.3"
   },
-  "private": true
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "dependencies": {
+    "@ascii-fort/core": "*",
+    "@ascii-fort/ascii-engine": "*",
+    "@ascii-fort/worldgen": "*",
+    "@ascii-fort/sim": "*"
+  }
 }

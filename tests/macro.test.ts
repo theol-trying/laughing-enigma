@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { writeFileSync } from 'node:fs';
-import { WorldSeed } from '../src/core/Seed';
-import { MacroWorld } from '../src/world/MacroWorld';
-import { W_SEA } from '../src/world/terrain/Hydrology';
-import { BIOMES } from '../src/world/terrain/Biomes';
+import { WorldSeed } from '@ascii-fort/core/Seed';
+import { MacroWorld } from '@ascii-fort/worldgen/MacroWorld';
+import { W_SEA } from '@ascii-fort/worldgen/terrain/Hydrology';
+import { BIOMES } from '@ascii-fort/worldgen/terrain/Biomes';
 
 const hashArr = (a: ArrayLike<number>) => { let h = 2166136261; for (let i = 0; i < a.length; i++) { h ^= Math.round(a[i] * 100); h = Math.imul(h, 16777619); } return h >>> 0; };
 

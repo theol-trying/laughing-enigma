@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { RNG, hash2i } from '../src/core/RNG';
-import { WorldSeed, normalizeSeed } from '../src/core/Seed';
-import { Noise2D } from '../src/core/Noise';
+import { RNG, hash2i } from '@ascii-fort/core/RNG';
+import { WorldSeed, normalizeSeed } from '@ascii-fort/core/Seed';
+import { Noise2D } from '@ascii-fort/core/Noise';
 
 describe('RNG', () => {
   it('même clé → même suite', () => {

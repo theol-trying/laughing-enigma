@@ -1,8 +1,8 @@
-import { C, type TextGrid } from '../rendering/TextGrid';
-import type { Game } from '../core/Game';
+import { C, type TextGrid } from '@ascii-fort/ascii-engine/TextGrid';
+import type { Game } from '../game/Game';
 import { GENERATOR_VERSION } from '../version';
-import { CHUNK } from '../world/constants';
-import { BIOMES } from '../world/terrain/Biomes';
+import { CHUNK } from '@ascii-fort/worldgen/constants';
+import { BIOMES } from '@ascii-fort/worldgen/terrain/Biomes';
 
 // Interface de jeu en caractères : barres, boussole, heure, cible, invites, messages.
 
