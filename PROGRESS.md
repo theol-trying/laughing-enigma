@@ -6,6 +6,7 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
+Jalon 3 en cours : corrections des retours de jeu (liste « Jalon 3 » ci-dessous, reprendre à la première case vide).
 Jalon 2 terminé (étapes 12 à 19) : modèles articulés, police fine (deux grilles), bibliothèques (packages/*),
 multijoueur coop Cloudflare (un Worker : assets + Durable Object Room ; autorité par zone ; faits partagés).
 Déployé le 2026-10-06 par l'utilisateur : Worker Cloudflare « ascii-fort » relié au dépôt (build réussi, redéploiement à chaque push sur main).
@@ -35,6 +36,15 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 17. Autorité par zone : créatures/PNJ simulés par un propriétaire, combats partagés (dégâts, morts, butin)
 - [x] 18. Monde partagé persistant (coffres, camps, morts uniques), quêtes perso, sauvegarde du perso dans le salon
 - [x] 19. Vérification à 2 clients en local (wrangler dev), docs (README, architecture, guide de déploiement)
+
+### Jalon 3 — corrections après les retours de jeu en ligne (2026-10-06)
+- [ ] 20. Murs : pas d'interaction ni de détection à travers les murs ; indicateurs discrétion (accroupi) et vol ; C = accroupi (bascule), fiche sur P ; fin de dialogue qui se ferme
+- [ ] 21. PNJ : garde qui court allongé (pose de sommeil), villageois qui fuient vite ou se défendent quand on les attaque
+- [ ] 22. Déplacements : pentes trop raides infranchissables, saut plus haut, eau (ralentit, nage, teinte sous l'eau, éclaboussures)
+- [ ] 23. Génération : sol de maison qui clignote, coffre et tonneau superposés (GENERATOR_VERSION 0.2.0)
+- [ ] 24. Pluie : visible dans le décor (gouttes en profondeur, éclaboussures, sol mouillé), son plus doux
+- [ ] 25. Progression : montée de niveau claire, points à dépenser, monstres plus forts au loin, bonus temporaires (prière…), affichage du butin ramassé
+- [ ] 26. Vérification (local + en ligne), docs, propositions d'améliorations
 
 ## Décisions clés (ne pas re-débattre)
 - Dev : `npm run dev` (port 5199). Dépôt : github.com/theol-trying/laughing-enigma (push à chaque checkpoint).
