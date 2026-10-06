@@ -6,7 +6,8 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Jalon 3 en cours : corrections des retours de jeu (liste « Jalon 3 » ci-dessous, reprendre à la première case vide).
+Jalon 3 terminé (corrections des retours de jeu, étapes 20-26). Prochaine étape : choisir parmi les améliorations
+proposées à l'utilisateur (voir la fin du journal) ou ses nouveaux retours.
 Jalon 2 terminé (étapes 12 à 19) : modèles articulés, police fine (deux grilles), bibliothèques (packages/*),
 multijoueur coop Cloudflare (un Worker : assets + Durable Object Room ; autorité par zone ; faits partagés).
 Déployé le 2026-10-06 par l'utilisateur : Worker Cloudflare « ascii-fort » relié au dépôt (build réussi, redéploiement à chaque push sur main).
@@ -44,7 +45,7 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 23. Génération : sol de maison qui clignote, coffre et tonneau superposés (version du générateur inchangée : correction visuelle)
 - [x] 24. Pluie : visible dans le décor (gouttes en profondeur, éclaboussures, sol mouillé), son plus doux
 - [x] 25. Progression : montée de niveau claire, points à dépenser, monstres plus forts au loin, bonus temporaires (prière…), affichage du butin ramassé
-- [ ] 26. Vérification (local + en ligne), docs, propositions d'améliorations
+- [x] 26. Vérification (local + en ligne), docs, propositions d'améliorations
 
 ## Décisions clés (ne pas re-débattre)
 - Dev : `npm run dev` (port 5199). Dépôt : github.com/theol-trying/laughing-enigma (push à chaque checkpoint).
@@ -120,3 +121,13 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - 2026-10-06 : 19 fait. Camp de bandits démantelé en ligne → fait camp:<sid> persistant, retrouvé après reconnexion.
   Docs : README (jouer en ligne, déploiement Cloudflare pas à pas, limites gratuites), architecture (multijoueur),
   packages/net/README, CLAUDE.md. test:room 17/17, 21 tests, build OK.
+- 2026-10-06 : jalon 3 (20-26) fait. Perception : ouïe selon le bruit (course/marche/accroupi), murs = vue bloquée et
+  sons étouffés ; interactions avec ligne de vue ; indicateurs caché/repéré et témoins d'un vol ; C bascule
+  accroupi, P fiche ; souris recapturée à la fermeture d'un écran (UIManager.onResume) + invite « Cliquez… ».
+  PNJ : pose couchée remise à zéro hors sommeil (garde qui courait allongé), villageois agressés : fuite (×2,7) ou riposte
+  (métiers robustes et braves), cri d'alerte. Joueur : pente > ~42° infranchissable + glissade, saut 1,23 m (g = 18),
+  eau (ralentit, nage = endurance, plongée avec C, noyade, brûlure éteinte), teinte + ondulation (present pass).
+  Génération : fondation sous le plancher (scintillement), meubles écartés (version du générateur inchangée).
+  Pluie : 3 couches de gouttes avec profondeur, éclaboussures, sol mouillé/flaques (uWet), son en bruit brun.
+  Progression : niveau des créatures = danger (distance au départ /650 m, +profondeur en donjon), gains par niveau,
+  bandeau, bonus temporaires (béni, désaltéré, rassasié, reposé), fil du butin. Glyphes hors atlas corrigés.
