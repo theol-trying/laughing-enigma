@@ -43,7 +43,10 @@ export class Input {
     document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === canvas; });
   }
 
-  requestLock(): void { if (!this.locked) this.canvas.requestPointerLock?.(); }
+  requestLock(): void {
+    if (this.locked) return;
+    try { const r = this.canvas.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}); } catch { /* refus du navigateur : on réessaiera au prochain clic */ }
+  }
   exitLock(): void { if (this.locked) document.exitPointerLock?.(); }
 
   isDown(code: string): boolean { return this.down.has(code); }

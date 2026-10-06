@@ -6,10 +6,9 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Étape 11 — Vérification du parcours en 18 étapes dans le navigateur (seed → apparition → marche → regard → paysage →
-village → PNJ → parler → acheter → quête → sortir → ennemi → combat → butin → retour → terminer la quête → sauvegarder
-→ recharger), corrections éventuelles, récapitulatif final pour l'utilisateur (implémenté, fichiers, lancement,
-contrôles, systèmes, simplifications, prochaines améliorations).
+Premier jalon terminé (étapes 0 à 11). Prochaines pistes possibles (voir README « Pistes suivantes ») : génération dans un
+Web Worker, villes plus denses, caravanes simulées, donjons multi-niveaux, plus de quêtes/dialogues, montures,
+réflexions d'eau, ombres des torches. Toujours : lire ce fichier, travailler par étapes, checkpoint + push.
 
 ## Étapes
 - [x] 0. Setup : Vite 8 + TS 7 + Vitest 5, git (identité theol-trying noreply), PROGRESS/CLAUDE.md
@@ -23,7 +22,7 @@ contrôles, systèmes, simplifications, prochaines améliorations).
 - [x] 8. UI terminal : titre/nouvelle partie, HUD, inventaire, journal, stats, carte, dialogue, commerce, pause/options
 - [x] 9. Ambiance : jour/nuit, météo, torches/lanternes/fenêtres, ombres soleil, eau, audio Web Audio
 - [x] 10. Sauvegarde IndexedDB (diff), outils debug (console F1, overlay F3), docs (README, docs/architecture.md)
-- [ ] 11. Vérification du vertical slice (18 étapes) dans le navigateur
+- [x] 11. Vérification du vertical slice (18 étapes) dans le navigateur
 
 ## Décisions clés (ne pas re-débattre)
 - Dev : `npm run dev` (port 5199). Dépôt : github.com/theol-trying/laughing-enigma (push à chaque checkpoint).
@@ -72,3 +71,5 @@ contrôles, systèmes, simplifications, prochaines améliorations).
   et éclairs), abri sous les toits, lanternes des gardes, audio Web Audio (vent, pluie, feu, pas, impacts, tonnerre).
 - 2026-10-06 : 10 fait (21 tests, build OK). Sauvegarde IndexedDB vérifiée (F5/F9 : or, objets, position, heure,
   coffres ouverts restaurés), autosave 2 min, Continuer au titre, console F1, instantané TEST-001, README + architecture.
+- 2026-10-06 : 11 fait. Parcours 18 étapes vérifié de bout en bout dans le navigateur (seed TEST-001 : apparition,
+  village, 14 PNJ, dialogue, achat, quête des convois, camp démantelé, butin, retour, quête rendue, sauvegarde, rechargement).
