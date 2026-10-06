@@ -56,7 +56,8 @@ void main() {
   mat4 m = mat4(aM0, aM1, aM2, aM3);
   vec4 w = m * vec4(aPos, 1.0);
   vWorld = w.xyz;
-  vNormal = normalize(mat3(m) * aNormal.xyz);
+  vec3 s2 = vec3(dot(aM0.xyz, aM0.xyz), dot(aM1.xyz, aM1.xyz), dot(aM2.xyz, aM2.xyz));
+  vNormal = normalize(mat3(m) * (aNormal.xyz / max(s2, vec3(1e-6))));
   vColor = aIColor;
   vMat = aIMat.x;
   vLetter = aIMat.y;

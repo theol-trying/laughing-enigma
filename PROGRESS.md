@@ -27,7 +27,7 @@ Prochaine étape non cochée ci-dessous = où reprendre. Si du travail non commi
 - [x] 10. Sauvegarde IndexedDB (diff), outils debug (console F1, overlay F3), docs (README, docs/architecture.md)
 - [x] 11. Vérification du vertical slice (18 étapes) dans le navigateur
 ### Jalon 2
-- [ ] 12. Modèles procéduraux plus fins (formes effilées/arrondies, membres articulés, équipements visibles)
+- [x] 12. Modèles procéduraux plus fins (formes effilées/arrondies, membres articulés, équipements visibles)
 - [ ] 13. Finesse d'affichage : police plus petite pour le monde (option), interface lisible
 - [ ] 14. Découpage en bibliothèques (workspaces npm : core, worldgen, render-ascii, sim, net ; apps client/serveur)
 - [ ] 15. Serveur Cloudflare : Worker (assets + /ws) + Durable Object « Room » (salon, relais, état persistant SQLite), wrangler
@@ -85,3 +85,6 @@ Prochaine étape non cochée ci-dessous = où reprendre. Si du travail non commi
   coffres ouverts restaurés), autosave 2 min, Continuer au titre, console F1, instantané TEST-001, README + architecture.
 - 2026-10-06 : 11 fait. Parcours 18 étapes vérifié de bout en bout dans le navigateur (seed TEST-001 : apparition,
   village, 14 PNJ, dialogue, achat, quête des convois, camp démantelé, butin, retour, quête rendue, sauvegarde, rechargement).
+- 2026-10-06 : 12 fait. Formes instanciées (boîte, cylindre, sphère, tronc de cône, cône ; tri par forme, normales
+  correctes sous échelle), modèles à squelette (genoux, coudes, cou, mâchoire, queue), barbes, capes, tabliers, capuches,
+  armes détaillées, yeux lumineux (squelettes, spectre, araignée, gobelins), araignée à pattes articulées.

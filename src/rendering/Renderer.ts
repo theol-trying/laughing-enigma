@@ -3,7 +3,8 @@ import { STATIC_VS, INSTANCED_VS, SCENE_FS, SHADOW_VS, SHADOW_INST_VS, SHADOW_FS
 import { buildAtlas, measureCell, ATLAS_COLS } from './GlyphAtlas';
 import { buildMaterialTable, TABLE_W, TABLE_H } from './Materials';
 import { TextGrid } from './TextGrid';
-import { MeshBuilder, VERTEX_STRIDE, type MeshData } from './Mesh';
+import { VERTEX_STRIDE, type MeshData } from './Mesh';
+import { buildShapes, SHAPE_COUNT } from './Shapes';
 import type { Camera } from './Camera';
 import type { AtmosphereState } from './Atmosphere';
 import { mat4, ortho, lookAt, multiply, type Mat4 } from '../core/math';
@@ -14,13 +15,30 @@ export interface GpuMesh { vao: WebGLVertexArrayObject; vbo: WebGLBuffer; ibo: W
 
 export interface DrawItem { mesh: GpuMesh; clip?: 0 | 1 | 2; shadow?: boolean }
 
-/** Tampon d'instances d'entités (pièces en boîtes). */
+/** Tampon d'instances d'entités (pièces animées : boîtes, cylindres, sphères, cônes…). */
 export class InstanceBuffer {
   floats = new Float32Array(20 * 512);
   ints = new Uint8Array(4 * 512);
   count = 0;
+  /** regroupement par forme, calculé à l'envoi au GPU : [début, nombre] par forme */
+  groups: [number, number][] = [];
+  private sortedF = new Float32Array(0); private sortedI = new Uint8Array(0);
   reset() { this.count = 0; }
-  add(m: Mat4, color: number, mat: number, letter = 0, flags = 0, sky = 1) {
+  /** Trie les instances par forme (tri par comptage, stable) ; renvoie les tableaux triés. */
+  sorted(): [Float32Array, Uint8Array] {
+    const n = this.count, cnt = new Array(SHAPE_COUNT).fill(0);
+    for (let i = 0; i < n; i++) cnt[Math.min(SHAPE_COUNT - 1, this.ints[i * 4 + 3])]++;
+    this.groups = []; let o = 0;
+    for (let k = 0; k < SHAPE_COUNT; k++) { this.groups.push([o, cnt[k]]); cnt[k] = o; o += this.groups[k][1]; }
+    if (this.sortedF.length < n * 20) { this.sortedF = new Float32Array(this.floats.length); this.sortedI = new Uint8Array(this.ints.length); }
+    for (let i = 0; i < n; i++) {
+      const j = cnt[Math.min(SHAPE_COUNT - 1, this.ints[i * 4 + 3])]++;
+      this.sortedF.set(this.floats.subarray(i * 20, i * 20 + 20), j * 20);
+      this.sortedI.set(this.ints.subarray(i * 4, i * 4 + 4), j * 4);
+    }
+    return [this.sortedF.subarray(0, n * 20), this.sortedI.subarray(0, n * 4)];
+  }
+  add(m: Mat4, color: number, mat: number, letter = 0, flags = 0, sky = 1, shape = 0) {
     if (this.count * 20 >= this.floats.length) {
       const f = new Float32Array(this.floats.length * 2); f.set(this.floats); this.floats = f;
       const i = new Uint8Array(this.ints.length * 2); i.set(this.ints); this.ints = i;
@@ -30,7 +48,7 @@ export class InstanceBuffer {
     this.floats[o + 16] = ((color >> 16) & 255) / 255; this.floats[o + 17] = ((color >> 8) & 255) / 255;
     this.floats[o + 18] = (color & 255) / 255; this.floats[o + 19] = sky;
     const k = this.count * 4;
-    this.ints[k] = mat; this.ints[k + 1] = letter; this.ints[k + 2] = flags; this.ints[k + 3] = 0;
+    this.ints[k] = mat; this.ints[k + 1] = letter; this.ints[k + 2] = flags; this.ints[k + 3] = shape;
     this.count++;
   }
 }
@@ -66,7 +84,7 @@ export class Renderer {
   private cellTex: WebGLTexture[] = []; private cellFbo: WebGLFramebuffer | null = null;
   private uiGlyphTex: WebGLTexture | null = null; private uiFgTex: WebGLTexture | null = null; private uiBgTex: WebGLTexture | null = null;
   private shadowTex: WebGLTexture; private shadowFbo: WebGLFramebuffer;
-  private cube: GpuMesh;
+  private shapes: GpuMesh[];
   private instF: WebGLBuffer; private instI: WebGLBuffer;
   private emptyVao: WebGLVertexArrayObject;
   private shadowMat: Mat4 = mat4();
@@ -90,22 +108,31 @@ export class Renderer {
     const dummy = makeTexture(gl, SHADOW_SIZE, SHADOW_SIZE, gl.R8, gl.RED, gl.UNSIGNED_BYTE);
     this.shadowFbo = makeFramebuffer(gl, [dummy], this.shadowTex);
 
-    const cb = new MeshBuilder(32);
-    cb.box(0, -0.5, 0, 1, 1, 1, 0, 0xffffff, 0);
-    this.cube = this.createMesh(cb.finish());
     this.instF = gl.createBuffer()!; this.instI = gl.createBuffer()!;
-    gl.bindVertexArray(this.cube.vao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.instF);
-    for (let i = 0; i < 5; i++) {
-      gl.enableVertexAttribArray(4 + i);
-      gl.vertexAttribPointer(4 + i, 4, gl.FLOAT, false, 80, i * 16);
-      gl.vertexAttribDivisor(4 + i, 1);
-    }
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.instI);
-    gl.enableVertexAttribArray(9);
-    gl.vertexAttribIPointer(9, 4, gl.UNSIGNED_BYTE, 4, 0);
-    gl.vertexAttribDivisor(9, 1);
-    gl.bindVertexArray(null);
+    this.shapes = buildShapes().map((d) => {
+      const m = this.createMesh(d);
+      gl.bindVertexArray(m.vao);
+      for (let i = 0; i < 5; i++) { gl.enableVertexAttribArray(4 + i); gl.vertexAttribDivisor(4 + i, 1); }
+      gl.enableVertexAttribArray(9); gl.vertexAttribDivisor(9, 1);
+      gl.bindVertexArray(null);
+      return m;
+    });
+  }
+
+  /** Dessine les instances, forme par forme (les pointeurs d'instance sont décalés au début du groupe). */
+  private drawInstances(ib: InstanceBuffer) {
+    const gl = this.gl;
+    ib.groups.forEach(([start, n], k) => {
+      if (!n) return;
+      const m = this.shapes[k];
+      gl.bindVertexArray(m.vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.instF);
+      for (let i = 0; i < 5; i++) gl.vertexAttribPointer(4 + i, 4, gl.FLOAT, false, 80, start * 80 + i * 16);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.instI);
+      gl.vertexAttribIPointer(9, 4, gl.UNSIGNED_BYTE, 4, start * 4);
+      gl.drawElementsInstanced(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0, n);
+      this.drawCalls++;
+    });
   }
 
   createMesh(data: MeshData): GpuMesh {
@@ -188,10 +215,11 @@ export class Renderer {
 
   private uploadInstances(ib: InstanceBuffer) {
     const gl = this.gl;
+    const [fl, it] = ib.sorted();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instF);
-    gl.bufferData(gl.ARRAY_BUFFER, ib.floats.subarray(0, ib.count * 20), gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, fl, gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instI);
-    gl.bufferData(gl.ARRAY_BUFFER, ib.ints.subarray(0, ib.count * 4), gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, it, gl.DYNAMIC_DRAW);
   }
 
   private shadowPass(f: FrameInput) {
@@ -222,9 +250,7 @@ export class Renderer {
     }
     if (f.instances.count) {
       this.shadowInstSh.use().m4('uShadowMat', this.shadowMat).v3('uCamPos', [c.x, c.y, c.z]);
-      gl.bindVertexArray(this.cube.vao);
-      gl.drawElementsInstanced(gl.TRIANGLES, this.cube.count, gl.UNSIGNED_INT, 0, f.instances.count);
-      this.drawCalls++;
+      this.drawInstances(f.instances);
     }
     gl.disable(gl.POLYGON_OFFSET_FILL);
   }
@@ -269,9 +295,7 @@ export class Renderer {
         this.instSh.use();
         this.setSceneUniforms(this.instSh, f);
         this.instSh.i('uClipMode', 0);
-        gl.bindVertexArray(this.cube.vao);
-        gl.drawElementsInstanced(gl.TRIANGLES, this.cube.count, gl.UNSIGNED_INT, 0, f.instances.count);
-        this.drawCalls++;
+        this.drawInstances(f.instances);
       }
       gl.bindVertexArray(null);
       gl.disable(gl.DEPTH_TEST);

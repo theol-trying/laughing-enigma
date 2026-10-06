@@ -83,11 +83,15 @@ export class EntityManager {
   private modelFor(n: NPCData): ModelDef {
     let m = this.models.get(n.id);
     if (!m) {
-      const c = n.colors;
+      const c = n.colors, garde = n.look === 'garde', moine = n.look === 'moine', noble = n.look === 'noble';
+      const h = (n.age * 31 + n.first.length * 7 + n.last.length) % 10; // variété visuelle stable
       m = humanoid({
-        skin: c.skin, shirt: n.look === 'garde' ? 0x8a8a94 : n.look === 'noble' ? 0x6a2a6a : c.shirt, pants: c.pants, hair: c.hair,
-        helmet: n.look === 'garde', robe: n.look === 'moine', weapon: n.look === 'garde' ? 'lance' : n.profession === 'forgeron' ? 'massue' : null,
-        shield: n.look === 'garde', scale: 0.92 + ((n.age * 13) % 17) / 100, letter: '@',
+        skin: c.skin, shirt: garde ? 0x8a8a94 : noble ? 0x6a2a6a : c.shirt, pants: c.pants, hair: n.age > 58 ? 0xb8b4ac : c.hair,
+        helmet: garde, robe: moine, hood: moine && h < 4, cape: noble ? 0x3a2a5a : garde && h < 3 ? 0x6a2a2a : undefined,
+        weapon: garde ? 'lance' : n.profession === 'forgeron' ? 'marteau' : null, shield: garde,
+        beard: n.sex === 'm' && n.age > 22 && h < 5 && !garde, hairLong: n.sex === 'f',
+        apron: n.profession === 'forgeron' ? 0x4a3020 : n.profession === 'aubergiste' ? 0xd8d0c0 : undefined,
+        scale: (n.sex === 'f' ? 0.9 : 0.95) + ((n.age * 13) % 17) / 100, letter: '@',
       });
       this.models.set(n.id, m);
     }
