@@ -6,8 +6,7 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Jalon 3 terminé (corrections des retours de jeu, étapes 20-26). Prochaine étape : choisir parmi les améliorations
-proposées à l'utilisateur (voir la fin du journal) ou ses nouveaux retours.
+Jalon 4 en cours : musique, ambiances, son spatial, projectiles et échanges en multi (liste « Jalon 4 », première case vide).
 Jalon 2 terminé (étapes 12 à 19) : modèles articulés, police fine (deux grilles), bibliothèques (packages/*),
 multijoueur coop Cloudflare (un Worker : assets + Durable Object Room ; autorité par zone ; faits partagés).
 Déployé le 2026-10-06 par l'utilisateur : Worker Cloudflare « ascii-fort » relié au dépôt (build réussi, redéploiement à chaque push sur main).
@@ -46,6 +45,13 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 24. Pluie : visible dans le décor (gouttes en profondeur, éclaboussures, sol mouillé), son plus doux
 - [x] 25. Progression : montée de niveau claire, points à dépenser, monstres plus forts au loin, bonus temporaires (prière…), affichage du butin ramassé
 - [x] 26. Vérification (local + en ligne), docs, propositions d'améliorations
+
+### Jalon 4 — musique, ambiances, son spatial, multi (2026-10-06)
+- [ ] 27. Musique procédurale adaptative (luth Karplus-Strong, flûte, bourdon, tambour) : exploration, village, nuit, donjon, combat ; option volume musique
+- [ ] 28. Ambiances (oiseaux, grillons, rumeur du village, marteau du forgeron, rivière) + son spatialisé (créatures, coups) + son assourdi sous l'eau
+- [ ] 29. Multi : flèches et sorts des autres joueurs visibles (et audibles)
+- [ ] 30. Multi : échanges d'objets entre joueurs
+- [ ] 31. Vérification (local + en ligne), docs, déploiement
 
 ## Décisions clés (ne pas re-débattre)
 - Dev : `npm run dev` (port 5199). Dépôt : github.com/theol-trying/laughing-enigma (push à chaque checkpoint).
