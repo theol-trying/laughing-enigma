@@ -37,7 +37,7 @@ const idleInst = new InstanceBuffer();
 function applyOptions() {
   saveOpts();
   if (r.cssCellH !== opts.cellSize) r.resize(opts.cellSize);
-  if (game) { game.sensitivity = opts.sensitivity; game.camera.fovY = (opts.fov * Math.PI) / 180; game.time.scale = opts.timeScale; }
+  if (game) { game.audio.setVolume(opts.volume); game.sensitivity = opts.sensitivity; game.camera.fovY = (opts.fov * Math.PI) / 180; game.time.scale = opts.timeScale; }
 }
 
 function hasSave(): boolean { try { return !!localStorage.getItem('ascii-fort-save-meta'); } catch { return false; } }
@@ -82,7 +82,7 @@ function pause() {
   }));
 }
 
-canvas.addEventListener('click', () => { if (game && !screens.modal) input.requestLock(); });
+canvas.addEventListener('click', () => { if (game) game.audio.start(); if (game && !screens.modal) input.requestLock(); });
 document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement && game && !screens.modal) pause(); });
 
 const idle = (now: number) => r.render({ camera: idleCam, atmo: computeAtmosphere(12, CLEAR_WEATHER), time: now / 1000, items: [], clipRadius: 0, instances: idleInst, lights: [], viewMode: 0, sceneOn: false });

@@ -6,11 +6,14 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Étape 9 — Ambiance. À faire : gameplay/Weather.ts (états clair/couvert/pluie/brouillard/orage/neige selon biome,
-par région, transitions douces, déterministe seed+jour) → computeAtmosphere(…, WeatherMix) dans Game.render, Game.rain()
-/fog()/weather() (PNJ s'abritent déjà si rain()>0.35 ; perception utilise fog), éclairs (flash) ; lanternes des gardes la
-nuit (lumière ponctuelle sur l'entité) ; audio/AudioEngine.ts (Web Audio synthétique : vent, pluie, feu, pas selon le sol,
-impacts, interface), volume = options.volume. Puis étape 10 (sauvegarde IndexedDB + console dev F1 + docs) et 11.
+Étape 10 — core/SaveManager.ts (IndexedDB : seed + version du générateur + différences : joueur, fiche, inventaire,
+équipement, temps, WorldState (opened/dropped/flags/discovered/explored), PNJ modifiés (vivant/pv/mémoires/richesse),
+réputation, amendes, économie (supply), quêtes, rumeurs, repaires (alive/leaderAlive), killed/clearedCamps) ; autosave
+(toutes les 2 min + à l'entrée/sortie de donjon), F5 sauvegarde rapide / F9 chargement, menu pause, « Continuer » au titre
+(événements window ascii-fort-save / ascii-fort-load déjà émis par main.ts ; méta dans localStorage ascii-fort-save-meta).
+Console dev (F1) : tp, time, timescale, god, freeze, spawn, seed, view depth/normal/material/lit, chunks, npc, weather,
+give, xp, reveal. Tests de déterminisme TEST-001 (village de départ, rivière principale, noms, points de contrôle).
+Docs : README (état réel) + docs/architecture.md. Puis étape 11 (vérification du parcours en 18 étapes).
 
 ## Étapes
 - [x] 0. Setup : Vite 8 + TS 7 + Vitest 5, git (identité theol-trying noreply), PROGRESS/CLAUDE.md
@@ -22,7 +25,7 @@ impacts, interface), volume = options.volume. Puis étape 10 (sauvegarde Indexed
 - [x] 6. Entités & IA : PNJ (identité, emplois du temps, nav locale), monstres (repaires, écologie, perception, utility AI, meutes), simulation par niveaux
 - [x] 7. Gameplay : objets, inventaire, combat, butin, XP, réputation/mémoire, économie, dialogues, rumeurs, quêtes systémiques
 - [x] 8. UI terminal : titre/nouvelle partie, HUD, inventaire, journal, stats, carte, dialogue, commerce, pause/options
-- [ ] 9. Ambiance : jour/nuit, météo, torches/lanternes/fenêtres, ombres soleil, eau, audio Web Audio
+- [x] 9. Ambiance : jour/nuit, météo, torches/lanternes/fenêtres, ombres soleil, eau, audio Web Audio
 - [ ] 10. Sauvegarde IndexedDB (diff), outils debug (console F1, overlay F3), docs (README, docs/architecture.md)
 - [ ] 11. Vérification du vertical slice (18 étapes) dans le navigateur
 
@@ -69,3 +72,5 @@ impacts, interface), volume = options.volume. Puis étape 10 (sauvegarde Indexed
 - 2026-10-06 : 8 fait. Écran titre animé, nouvelle partie (seed, RANDOMIZE, aperçu + mini-carte), chargement, HUD
   (barres, boussole + repère de quête, heure, lieu, cible, messages, F3), inventaire, journal, carte (brouillard, zoom),
   personnage (points, compétences, réputation), pause/options (taille, sensibilité, FOV, volume, vitesse du temps).
+- 2026-10-06 : 9 fait. Météo par région (périodes de 8 h, transitions, neige en altitude, brouillard au marais, orages
+  et éclairs), abri sous les toits, lanternes des gardes, audio Web Audio (vent, pluie, feu, pas, impacts, tonnerre).

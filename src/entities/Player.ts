@@ -28,6 +28,8 @@ export class Player {
   poison = 0; frost = 0; burn = 0;
   /** esquive : vitesse imposée pendant dashT secondes */
   dashT = 0; dashX = 0; dashZ = 0;
+  /** sous un toit (plancher de bâtiment) : pas de pluie à l'écran */
+  underRoof = false;
 
   /** Effets dans le temps : poison, brûlure, givre (ralentit), régénération d'endurance. */
   tickStatus(dt: number): number {
@@ -57,10 +59,11 @@ export class Player {
   /** Sol sous (x, z) : terrain ou plateforme (plancher, pont) accessible. */
   groundAt(world: World<any>, x: number, z: number, fromY: number): number {
     let g = world.heightAt(x, z);
+    this.underRoof = false;
     for (const p of this.plats) {
       const c = Math.cos(p.yaw), s = Math.sin(p.yaw), dx = x - p.cx, dz = z - p.cz;
       const lx = dx * c - dz * s, lz = dx * s + dz * c;
-      if (Math.abs(lx) <= p.hw && Math.abs(lz) <= p.hd && p.top <= fromY + 0.65 && p.top > g) g = p.top;
+      if (Math.abs(lx) <= p.hw && Math.abs(lz) <= p.hd && p.top <= fromY + 0.65 && p.top > g) { g = p.top; this.underRoof = p.hw > 2 && p.hd > 2 && p.top > 0.5 + world.heightAt(x, z) - 3; }
     }
     return g;
   }

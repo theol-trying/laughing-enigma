@@ -404,6 +404,13 @@ export class EntityManager {
     for (const e of this.entities) if (e.alive && Math.hypot(e.x - p.x, e.z - p.z) < 12) this.dynamic.push({ x: e.x, z: e.z, r: e.radius, bottom: e.y, top: e.y + e.model.height });
   }
 
+  /** Lanternes des gardes la nuit (lumières mobiles). */
+  lanterns(night: number): { x: number; y: number; z: number; radius: number; r: number; g: number; b: number }[] {
+    if (night < 0.4) return [];
+    return this.entities.filter((e) => e.alive && e.npc && (e.npc.profession === 'garde' || e.npc.profession === 'soldat') && (e.action === 'patrouiller' || e.action === 'garder'))
+      .map((e) => ({ x: e.x + Math.cos(e.heading) * 0.4, y: e.y + 1.2, z: e.z + Math.sin(e.heading) * 0.4, radius: 10, r: 1.5, g: 0.95, b: 0.5 }));
+  }
+
   render(ib: InstanceBuffer, cx: number, cz: number, targetId: string | null): void {
     for (const e of this.entities) {
       if (Math.hypot(e.x - cx, e.z - cz) > DRAW) continue;

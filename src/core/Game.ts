@@ -25,6 +25,9 @@ import { Rumors } from '../gameplay/Rumors';
 import { QuestSystem } from '../gameplay/QuestSystem';
 import { DialogueSystem, type DialogueNode } from '../gameplay/Dialogue';
 import { Camera } from '../rendering/Camera';
+import { Weather, type WeatherState } from '../gameplay/Weather';
+import { AudioEngine, type Surface } from '../audio/AudioEngine';
+import type { WeatherMix } from '../rendering/Atmosphere';
 import { computeAtmosphere, CLEAR_WEATHER } from '../rendering/Atmosphere';
 import { M } from '../rendering/Materials';
 import { trsYawPitch, mat4 } from './math';
@@ -57,6 +60,12 @@ export class Game {
   readonly rumors: Rumors;
   readonly quests: QuestSystem;
   readonly dialogue: DialogueSystem;
+  readonly weatherSys: Weather;
+  readonly audio = new AudioEngine();
+  wx: { mix: WeatherMix; state: WeatherState; flash: number } = { mix: CLEAR_WEATHER, state: 'clair', flash: 0 };
+  private stepDist = 0;
+  private lastHp = 100;
+  private lastFlash = 0;
   /** branché par l'interface : ouverture des écrans de dialogue et de commerce */
   ui: { openDialogue(node: DialogueNode, onClose: () => void): void; openTrade(e: Entity): void } | null = null;
   private stocks = new Map<string, { id: string; qty: number }[]>();
@@ -94,6 +103,10 @@ export class Game {
     this.rumors = new Rumors(this.world.civ, this.events, () => this.time.day);
     this.quests = new QuestSystem(this);
     this.dialogue = new DialogueSystem(this);
+    this.weatherSys = new Weather(this.world.macro);
+    this.events.on('entity:damaged', (d) => { if (d.sourceId === 'player') this.audio.hit(); });
+    this.events.on('quest:completed', () => this.audio.chime());
+    this.events.on('quest:started', () => this.audio.chime());
     this.events.on('camp:cleared', () => this.economy.refreshBlocked());
     this.events.on('entity:killed', (k) => {
       if (k.killerId !== 'player' || k.kind !== 'npc') return;
@@ -118,7 +131,7 @@ export class Game {
   }
 
   inDungeon(): boolean { return this.dungeon !== null; }
-  weather(): string { return 'clair'; }
+  weather(): string { return this.dungeon ? 'souterrain' : this.wx.state; }
 
   /** Stock du jour d'un marchand (les achats le vident). */
   stockOf(e: Entity): { id: string; qty: number }[] {
@@ -148,9 +161,9 @@ export class Game {
     this.events.emit('player:crime', { type: 'agression', victimId: e.id, settlementId: e.npc.sid, factionId: e.npc.factionId, witnesses: [...new Set([...w.map((x) => x.id), e.id])] });
     this.alertGuards(e.npc.sid);
   }
-  rain(): number { return 0; }
+  rain(): number { return this.dungeon ? 0 : this.wx.mix.rain + this.wx.mix.storm * 0.5; }
   night(): number { return this.atmoNight; }
-  fog(): number { return 0; }
+  fog(): number { return this.dungeon ? 0 : this.wx.mix.fog; }
 
   /** Valeurs dérivées de la fiche → joueur. */
   syncStats(refill = false): void {
@@ -415,6 +428,14 @@ export class Game {
     this.elapsed += dt;
     this.time.advance(dt);
     if (this.time.day !== this.lastDay) { this.lastDay = this.time.day; this.entities.dailyTick(); this.economy.dailyTick(); this.rumors.dailyTick(); this.stocks.clear(); }
+    // météo au point du joueur
+    const prevState = this.wx.state;
+    this.wx = this.weatherSys.at(this.player.x, this.player.z, this.time.minutes);
+    if (this.wx.state !== prevState && !this.dungeon) {
+      const msg: Record<string, string> = { pluie: 'Il se met à pleuvoir.', orage: 'Le ciel gronde : un orage éclate.', neige: 'La neige commence à tomber.', brouillard: 'Un brouillard épais se lève.', couvert: 'Le ciel se couvre.', clair: 'Le temps se dégage.' };
+      this.events.emit('weather:changed', { region: 0, state: this.wx.state });
+      this.events.emit('message', { text: msg[this.wx.state], color: 0x9ab0c8 });
+    }
     this.questT -= dt;
     if (this.questT <= 0) { this.questT = 1; this.quests.tick(); }
     const p = this.player;
@@ -441,6 +462,7 @@ export class Game {
       if (input.key('h') && this.character.inv.count('potion de soin')) this.useItem('potion de soin');
       if (input.key('b')) this.swapBow();
       this.checkTraps();
+      this.sounds(dt);
     }
     if (!this.dungeon) this.world.chunks.update(p.x, p.z, 5);
     this.entities.update(dt);
@@ -463,6 +485,31 @@ export class Game {
     this.events.emit('place:discovered', { placeId: key });
     this.events.emit('message', { text: `Lieu découvert : ${name}`, color: 0x60d0e0 });
     this.character.gainXp(5);
+  }
+
+  private surfaceUnder(): Surface {
+    const p = this.player;
+    if (p.swimming) return 'eau';
+    if (this.dungeon) return 'pierre';
+    if (p.y > this.world.heightAt(p.x, p.z) + 0.15) return 'bois';
+    const s = this.world.sampler.sample(p.x, p.z);
+    return s.road ? 'pierre' : s.mat === M.SNOW ? 'neige' : s.mat === M.ROCK ? 'pierre' : 'herbe';
+  }
+
+  private sounds(dt: number) {
+    const p = this.player, a = this.audio;
+    if (p.onGround && p.moving) {
+      this.stepDist += Math.hypot(p.vx, p.vz) * dt;
+      if (this.stepDist > (p.sprinting ? 2.2 : 1.6)) { this.stepDist = 0; a.step(this.surfaceUnder()); }
+    }
+    if (p.hp < this.lastHp - 0.5) a.hurt();
+    this.lastHp = p.hp;
+    if (this.wx.flash > 0.5 && this.lastFlash <= 0.5) setTimeout(() => a.thunder(), 600);
+    this.lastFlash = this.wx.flash;
+    let fire = 0;
+    for (const l of this.world.chunks.lightsNear(p.x, p.z, 8)) if (l.kind === 'fire') fire = Math.max(fire, 1 - Math.hypot(l.x - p.x, l.z - p.z) / 8);
+    const cover = p.underRoof || this.dungeon ? 0.25 : 1;
+    a.ambient((Math.hypot(this.wx.mix.windX, this.wx.mix.windZ) * 0.5 + Math.max(0, p.y - 120) / 300) * cover, this.rain() * cover, fire, this.elapsed);
   }
 
   private checkTraps() {
@@ -513,7 +560,8 @@ export class Game {
   render(viewMode = 0): void {
     const p = this.player, c = this.camera, dg = this.dungeon;
     c.x = p.x; c.y = p.eyeY; c.z = p.z; c.heading = p.heading; c.pitch = p.pitch;
-    const atmo = computeAtmosphere(dg ? 0 : this.time.hour, CLEAR_WEATHER, dg ? 1 : 0, 0);
+    const atmo = computeAtmosphere(dg ? 0 : this.time.hour, dg ? CLEAR_WEATHER : this.wx.mix, dg ? 1 : 0, dg ? 0 : this.wx.flash);
+    if (p.underRoof) { atmo.rain = 0; atmo.snow = 0; }
     this.atmoNight = dg ? 0.5 : atmo.night;
     if (dg) {
       atmo.sunColor = [0, 0, 0]; atmo.ambSky = [0.13, 0.115, 0.1]; atmo.ambGround = [0.08, 0.07, 0.06];
@@ -528,6 +576,7 @@ export class Game {
     const lights: PointLight[] = [];
     const torchOn = dg ? 1 : Math.min(1, Math.max(0, (atmo.night - 0.12) / 0.35));
     const near = this.world.chunks.lightsNear(c.x, c.z, 90).map((l) => ({ l, d: Math.hypot(l.x - c.x, l.z - c.z) })).sort((a, b) => a.d - b.d);
+    if (!dg) for (const l of this.entities.lanterns(atmo.night)) lights.push(l);
     for (const pr of this.fight.projectiles) if (pr.kind === 'feu') lights.push({ x: pr.x, y: pr.y, z: pr.z, radius: 8, r: 2, g: 0.9, b: 0.3 });
     for (const { l } of near) {
       const k = (l.kind === 'torch' ? torchOn : 1) * (0.85 + 0.15 * Math.sin(this.elapsed * 11 + l.x * 3) * Math.sin(this.elapsed * 7 + l.z * 5));
