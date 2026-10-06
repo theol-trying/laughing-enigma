@@ -25,7 +25,7 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
   bar(g, 1, by + 1, 'END', p.stamina, p.maxStamina, C.sta);
   bar(g, 1, by + 2, 'MANA', p.mana, p.maxMana, C.mp);
   const status = [p.poison > 0 ? 'empoisonné' : '', p.frost > 0 ? 'gelé' : '', p.burn > 0 ? 'brûlé' : '', p.diving ? 'en plongée' : p.swimming ? 'à la nage' : p.depth > 0.3 ? 'dans l\'eau' : '', p.crouch && !p.swimming ? 'accroupi' : '', ch.inv.weight() > ch.carryMax() ? 'surchargé' : ''].filter(Boolean).join(' · ');
-  g.text(1, by - 1, ` Niv ${ch.level} · ${ch.xp}/${ch.xpForNext()} XP · ${ch.inv.gold} or${ch.statPoints ? ' · +' + ch.statPoints + ' pt (C)' : ''} ${status ? '· ' + status : ''} `, C.gold, C.panel, 0.55);
+  g.text(1, by - 1, ` Niv ${ch.level} · ${ch.xp}/${ch.xpForNext()} XP · ${ch.inv.gold} or${ch.statPoints ? ' · +' + ch.statPoints + ' pt (P)' : ''} ${status ? '· ' + status : ''} `, C.gold, C.panel, 0.55);
   g.text(1, rows - 1, ` ${ch.weapon?.name ?? 'Poings'}${ch.weapon?.weapon?.kind === 'arc' ? ` (${ch.inv.count('flèche')} flèches)` : ''} · H potion (${ch.inv.count('potion de soin')}) · R feu · F soin `, C.dim, C.panel, 0.45);
 
   // boussole
@@ -78,7 +78,8 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
   // cible et réticule
   const t = game.target;
   if (t && t.alive && Math.hypot(t.x - p.x, t.z - p.z) < 35) {
-    g.center(3, ` ${t.label} `, t.mon ? C.red : C.orange, C.panel);
+    const danger = t.mon && t.mon.level >= ch.level + 3;
+    g.center(3, ` ${t.label}${danger ? ' — dangereux !' : ''} `, t.mon ? (danger ? C.magenta : C.red) : C.orange, C.panel);
     g.bar(Math.floor(cols / 2) - 8, 4, 16, t.hp / t.maxHp, C.hp, C.faint, C.panel);
   }
   const mid = Math.floor(rows / 2);
@@ -88,14 +89,29 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
     const f = game.focus;
     if (f.t === 'prop' && f.hint) g.center(mid + 3, ` ${f.hint} `, f.danger ? C.red : C.green, C.panel);
   }
-  if (p.crouch && !p.dead) {
+  if (p.crouch && !p.dead && !p.swimming) {
     const w = game.watchers();
     const by = w.hunters[0]?.name ?? w.npcs[0]?.label;
-    const txt = by ? ` ◉ Repéré par ${by} ` : ' ○ Caché ';
+    const txt = by ? ` ● Repéré par ${by} ` : ' ○ Caché ';
     g.center(mid + 5, txt, by ? C.red : C.green, C.panel);
   }
-  if (!st.locked && !p.dead) g.center(rows - 6, ' Cliquez dans le jeu pour reprendre la souris ', C.white, C.panel);
+  if (!st.locked && !p.dead) g.center(mid + 7, ' Cliquez dans le jeu pour reprendre la souris ', C.white, C.panel);
   if (ch.weapon?.weapon?.kind === 'arc' && game.fight.charge > 0) g.bar(Math.floor(cols / 2) - 5, mid + 1, 10, Math.min(1, game.fight.charge / 0.8), C.gold, C.faint);
+
+  // bonus temporaires
+  if (game.buffs.length) {
+    const txt = game.buffs.map((b) => `${b.name} ${Math.floor(b.t / 60)}:${String(Math.floor(b.t % 60)).padStart(2, '0')}`).join(' · ');
+    g.text(1, by - 2, ` ♥ ${txt} `, C.green, C.panel, 0.55);
+  }
+  // butin récupéré
+  const feed = game.lootFeed.filter((l) => now - l.t < 6000);
+  feed.forEach((l, i) => g.text(cols - l.text.length - 3, Math.floor(rows * 0.3) + i, ` ${l.text} `, l.color, C.panel, Math.max(0.2, 0.7 - (now - l.t) / 9000)));
+  // montée de niveau
+  if (game.banner) {
+    const yb = Math.floor(rows * 0.2);
+    g.center(yb, `  ◆ ${game.banner.text} ◆  `, C.gold, C.panel);
+    g.center(yb + 1, ` ${game.banner.sub} `.slice(0, cols - 2), C.text, C.panel);
+  }
 
   // messages
   const msgs = st.log.filter((l) => now - l.t < 7000).slice(-5);

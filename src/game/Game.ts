@@ -40,6 +40,9 @@ import { InstanceBuffer, type Renderer, type GpuMesh, type DrawItem, type PointL
 interface ActiveDungeon { layout: DungeonLayout; mesh: GpuMesh; data: ChunkData; ret: { x: number; z: number; heading: number } }
 
 /** Ce que le joueur vise : objet, personnage ou créature (vivante ou morte), objet au sol. */
+/** Bonus temporaire : dégâts (fraction), armure, soins par seconde, récupération d'endurance (fraction). */
+export interface Buff { id: string; name: string; t: number; dmg?: number; armor?: number; regen?: number; stam?: number }
+
 export type Focus =
   | { t: 'prop'; prop: Prop; label: string; hint?: string; danger?: boolean }
   | { t: 'entity'; e: Entity; label: string }
@@ -69,6 +72,14 @@ export class Game {
   wx: { mix: WeatherMix; state: WeatherState; flash: number } = { mix: CLEAR_WEATHER, state: 'clair', flash: 0 };
   private stepDist = 0;
   private drownMsgT = -10;
+  /** bonus temporaires actifs */
+  buffs: Buff[] = [];
+  /** objets récupérés récemment (affichés à droite de l'écran) */
+  lootFeed: { text: string; color: number; t: number }[] = [];
+  /** bandeau central (montée de niveau…) */
+  banner: { text: string; sub: string; t: number } | null = null;
+  private lastLevel = 1;
+  private tintFlash: { c: [number, number, number]; t: number } | null = null;
   /** humidité des surfaces (0..1) : monte sous la pluie, sèche lentement */
   wetness = 0;
   private swimT = 0;
@@ -138,10 +149,11 @@ export class Game {
     this.syncStats(true);
     this.events.on('entity:killed', (ev) => {
       if (ev.killerId !== 'player') return;
-      const xp = ev.kind === 'monster' ? MONSTERS[ev.type]?.xp ?? 15 : 10;
+      const victim = this.entities.entities.find((x) => x.id === ev.victimId);
+      const xp = ev.kind === 'monster' ? victim?.mon?.xp ?? MONSTERS[ev.type]?.xp ?? 15 : 10;
       const ups = ch.gainXp(xp);
       this.events.emit('message', { text: `+${xp} XP`, color: 0xe8c050 });
-      if (ups) { this.syncStats(true); this.events.emit('message', { text: `Niveau ${ch.level} ! Un point de caractéristique à répartir (écran C).`, color: 0xf0d060 }); }
+      void ups;
     });
     this.state.explore(sp.x, sp.z);
   }
@@ -206,7 +218,7 @@ export class Game {
     this.character.inv.gold -= lost;
     if (!this.coop) this.time.minutes += 8 * 60;
     this.respawnT = 0;
-    this.events.emit('message', { text: `Vous vous réveillez à l'auberge${this.coop ? '' : ', huit heures plus tard'}. Votre bourse est plus légère (−${lost} or).` });
+    this.events.emit('message', { text: `Vous vous réveillez à l'auberge${this.coop ? '' : ', huit heures plus tard'}. Votre bourse est plus légère (-${lost} or).` });
   }
 
   // ------------------------------------------------------------------ objets interactifs
@@ -281,6 +293,14 @@ export class Game {
       else { inv.add(l.id, l.qty); parts.push(`${item(l.id).name}${l.qty > 1 ? ' ×' + l.qty : ''}`); this.events.emit('item:picked', { itemId: l.id, qty: l.qty }); }
     }
     this.events.emit('message', { text: parts.length ? `${from} : ${parts.join(', ')}` : `${from} : rien.`, color: 0xc8c8bc });
+    const now = performance.now();
+    if (!lines.length) this.lootFeed.push({ text: `${from} : vide`, color: 0x7a7a70, t: now });
+    for (const l of lines) {
+      const d = l.id === 'or' ? null : item(l.id);
+      const color = !d ? 0xe8c050 : d.rarity === 'épique' ? 0xd070d0 : d.rarity === 'rare' ? 0x5a9ae8 : d.cat === 'quête' || d.cat === 'clé' ? 0xf0d060 : 0xe8e8e0;
+      this.lootFeed.push({ text: `+ ${l.qty > 1 || !d ? l.qty + ' ' : ''}${d ? d.name : 'pièces d’or'}`, color, t: now });
+    }
+    if (this.lootFeed.length > 8) this.lootFeed.splice(0, this.lootFeed.length - 8);
   }
 
   /** PNJ qui voient le joueur (témoins d'un délit). */
@@ -319,6 +339,7 @@ export class Game {
     }
     if (f.t === 'drop') {
       ch.inv.add(f.d.id, f.d.qty);
+      this.lootFeed.push({ text: `+ ${f.d.qty > 1 ? f.d.qty + ' ' : ''}${item(f.d.id).name}`, color: 0xe8e8e0, t: performance.now() });
       this.state.dropped = this.state.dropped.filter((x) => x !== f.d);
       this.events.emit('message', { text: `Ramassé : ${item(f.d.id).name}` });
       return;
@@ -354,12 +375,24 @@ export class Game {
         this.sleep();
         break;
       }
-      case 'autel': case 'sanctuaire':
+      case 'autel': case 'sanctuaire': {
         p.poison = 0; p.stamina = p.maxStamina;
-        this.events.emit('message', { text: 'Vous priez un moment. Une paix étrange vous envahit.', color: 0xe8e0c0 });
+        const key = `prière:${pr.key}`, now = this.time.minutes;
+        const last = this.state.flags.get(key) as unknown as number | undefined;
+        if (typeof last === 'number' && now - last < 6 * 60) { this.events.emit('message', { text: 'Vous priez encore, mais la grâce vous a déjà été accordée ici. Revenez dans quelques heures.', color: 0xe8e0c0 }); break; }
+        this.state.flags.set(key, now as unknown as boolean);
+        this.addBuff({ id: 'béni', name: 'Béni', t: 240, dmg: 0.15, armor: 3, regen: 1 });
+        this.tintFlash = { c: [1, 0.85, 0.45], t: 1.2 };
+        this.audio.chime();
+        this.events.emit('message', { text: 'Vous priez. Une chaleur vous envahit : vous êtes béni (dégâts +15 %, armure +3, soins lents, 4 min).', color: 0xf0d060 });
         this.events.emit('player:helped', { npcId: 'ordre', magnitude: 0.01, reason: 'prière' });
         break;
-      case 'puits': p.stamina = Math.min(p.maxStamina, p.stamina + 40); this.events.emit('message', { text: "L'eau est fraîche." }); break;
+      }
+      case 'puits':
+        p.stamina = p.maxStamina;
+        this.addBuff({ id: 'désaltéré', name: 'Désaltéré', t: 120, stam: 0.5 });
+        this.events.emit('message', { text: "L'eau est fraîche : vous êtes désaltéré (endurance +50 %, 2 min)." });
+        break;
       case 'âtre': case 'feu': case 'foyer': {
         const n = ch.inv.count('viande crue');
         if (n) { ch.inv.remove('viande crue', n); ch.inv.add('viande grillée', n); ch.practice('artisanat', n); this.events.emit('message', { text: `Vous faites griller ${n} morceau(x) de viande.` }); }
@@ -407,6 +440,22 @@ export class Game {
     }
   }
 
+  /** Ajoute (ou renouvelle) un bonus temporaire. */
+  addBuff(b: Buff): void {
+    const i = this.buffs.findIndex((x) => x.id === b.id);
+    if (i >= 0) this.buffs[i] = b; else this.buffs.push(b);
+  }
+
+  private updateBuffs(dt: number) {
+    const p = this.player, ch = this.character;
+    let dmg = 0, armor = 0, regen = 0, stam = 0;
+    for (const b of this.buffs) { b.t -= dt; dmg += b.dmg ?? 0; armor += b.armor ?? 0; regen += b.regen ?? 0; stam += b.stam ?? 0; }
+    this.buffs = this.buffs.filter((b) => b.t > 0);
+    ch.bonusDmg = dmg; ch.bonusArmor = armor; p.staminaRegen = 1 + stam;
+    if (regen > 0 && !p.dead) p.hp = Math.min(p.maxHp, p.hp + regen * dt);
+    if (this.tintFlash && (this.tintFlash.t -= dt) <= 0) this.tintFlash = null;
+  }
+
   /** Drapeau du monde ; en ligne, partagé avec le salon (porte de donjon, piège désamorcé). */
   setFlag(key: string, v: boolean): void {
     this.state.flags.set(key, v);
@@ -425,10 +474,12 @@ export class Game {
     const wake = h >= 18 || h < 6 ? ((24 + 7 - h) % 24) * 60 : 3 * 60;
     if (this.coop) {
       p.hp = p.maxHp; p.stamina = p.maxStamina; p.mana = p.maxMana;
+      this.addBuff({ id: 'reposé', name: 'Reposé', t: 600, stam: 0.3, dmg: 0.05 });
       this.events.emit('message', { text: 'Vous vous reposez un moment. (En ligne, le temps ne s’arrête pour personne.)', color: 0x9ad0ff });
       return;
     }
     t.minutes += wake;
+    this.addBuff({ id: 'reposé', name: 'Reposé', t: 600, stam: 0.3, dmg: 0.05 });
     p.hp = p.maxHp; p.stamina = p.maxStamina; p.mana = p.maxMana;
     this.events.emit('message', { text: `Vous dormez. ${t.label()}.`, color: 0x9ad0ff });
   }
@@ -493,6 +544,19 @@ export class Game {
     }
     const wetTarget = this.dungeon ? 0 : Math.min(1, this.rain() * 1.4);
     this.wetness += (wetTarget - this.wetness) * Math.min(1, dt * (wetTarget > this.wetness ? 0.08 : 0.015));
+    this.updateBuffs(dt);
+    if (this.character.level !== this.lastLevel) {
+      const gained = this.character.level - this.lastLevel;
+      this.lastLevel = this.character.level;
+      if (gained > 0) {
+        this.syncStats(true);
+        this.banner = { text: `NIVEAU ${this.character.level}`, sub: `PV, endurance, mana et dégâts augmentent · +${gained} point${gained > 1 ? 's' : ''} à dépenser (touche P)`, t: 5 };
+        this.tintFlash = { c: [1, 0.9, 0.5], t: 0.8 };
+        this.audio.chime();
+        this.events.emit('message', { text: `Niveau ${this.character.level} ! Appuyez sur P pour dépenser vos points de caractéristique.`, color: 0xf0d060 });
+      }
+    }
+    if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
     this.questT -= dt;
     if (this.questT <= 0) { this.questT = 1; this.quests.tick(); }
     const p = this.player;
@@ -604,6 +668,7 @@ export class Game {
     if (d.use.stamina) p.stamina = Math.min(p.maxStamina, p.stamina + d.use.stamina);
     if (d.use.mana) p.mana = Math.min(p.maxMana, p.mana + d.use.mana);
     if (d.use.cure) p.poison = 0;
+    if (d.cat === 'nourriture') this.addBuff(id === 'viande grillée' || id === 'ragoût' ? { id: 'rassasié', name: 'Rassasié', t: 300, regen: 0.6, stam: 0.2 } : { id: 'rassasié', name: 'Rassasié', t: 150, regen: 0.3 });
     this.events.emit('message', { text: `${d.cat === 'potion' ? 'Vous buvez' : 'Vous mangez'} : ${d.name}` });
     return true;
   }
@@ -740,6 +805,7 @@ export class Game {
       tint = [0.16, 0.42, 0.62, 0.62]; wobble = 1;
       atmo.fogColor = [0.04, 0.16, 0.24]; atmo.fogDensity = 0.09; atmo.rain = 0; atmo.snow = 0;
     } else if (p.swimming) tint = [0.2, 0.5, 0.7, 0.16];
+    else if (this.tintFlash) tint = [...this.tintFlash.c, Math.min(0.35, this.tintFlash.t * 0.35)] as [number, number, number, number];
     this.renderer.render({ camera: c, atmo, time: this.elapsed, items, clipRadius: this.world.chunks.clipRadius, instances: this.instances, lights, viewMode, sceneOn: true, hurt: Math.max(0, p.hurt) * 2, tint, wobble });
   }
 }

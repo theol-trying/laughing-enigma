@@ -3,7 +3,7 @@ import type { Screen, UICtx } from './UI';
 import { optionList } from './UI';
 import type { Game } from '../game/Game';
 import { item } from '@ascii-fort/sim/gameplay/Items';
-import { STATS, STAT_NAMES, SKILLS, SKILL_NAMES } from '@ascii-fort/sim/gameplay/Character';
+import { STATS, STAT_NAMES, SKILLS, SKILL_NAMES , STAT_DESC } from '@ascii-fort/sim/gameplay/Character';
 import { MACRO } from '@ascii-fort/worldgen/constants';
 import { B } from '@ascii-fort/worldgen/terrain/Biomes';
 import { W_LAKE, W_RIVER, W_SEA } from '@ascii-fort/worldgen/terrain/Hydrology';
@@ -86,7 +86,7 @@ export class JournalScreen implements Screen {
       if (yy > y + h - 6) break;
       g.text(x + 3, yy++, `◆ ${q.title}`, C.yellow);
       for (const l of TextGrid.wrap(q.summary, w - 10).slice(0, 2)) g.text(x + 6, yy++, l, C.dim);
-      q.stages.forEach((s, i) => { if (yy < y + h - 5) g.text(x + 6, yy++, `${i < q.stage ? '✓' === '✓' ? '√' : 'x' : i === q.stage ? '►' : '·'} ${s}`, i < q.stage ? C.green : i === q.stage ? C.white : C.faint); });
+      q.stages.forEach((s, i) => { if (yy < y + h - 5) g.text(x + 6, yy++, `${i < q.stage ? '√' === '√' ? '√' : 'x' : i === q.stage ? '►' : '·'} ${s}`, i < q.stage ? C.green : i === q.stage ? C.white : C.faint); });
       yy++;
     }
     if (done.length && yy < y + h - 4) {
@@ -170,10 +170,12 @@ export class StatsScreen implements Screen {
   draw(ctx: UICtx): void {
     const g = ctx.grid, ch = this.game.character, p = this.game.player, rep = this.game.rep, civ = this.game.world.civ;
     const { x, y, w, h } = frame(g, 'Personnage', 100, 32);
-    g.text(x + 2, y + 2, `Niveau ${ch.level} · ${ch.xp}/${ch.xpForNext()} XP · ${ch.statPoints} point(s) à répartir`, C.title);
+    g.text(x + 2, y + 2, `Niveau ${ch.level} · ${ch.xp}/${ch.xpForNext()} XP · ${ch.statPoints} point(s) à répartir`, ch.statPoints ? C.gold : C.title);
+    g.text(x + 2, y + 13, 'Chaque niveau : +8 PV, +4 endurance, +3 mana, +3 % de dégâts et 1 point à répartir.', C.dim);
     STATS.forEach((s, i) => {
       const yy = y + 4 + i;
       g.text(x + 3, yy, `${i + 1}. ${STAT_NAMES[s].padEnd(14)} ${String(ch.stats[s]).padStart(2)}`, C.text);
+      g.text(x + 30, yy, STAT_DESC[s].slice(0, Math.floor(w / 2) - 30), C.dim);
       if (ch.statPoints > 0) {
         const over = ctx.mouseCell.y === yy && ctx.mouseCell.x >= x + 26 && ctx.mouseCell.x <= x + 28;
         g.text(x + 26, yy, '[+]', over ? 0xffffff : C.green, over ? C.sel : -1);

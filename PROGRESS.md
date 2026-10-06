@@ -43,7 +43,7 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 22. Déplacements : pentes trop raides infranchissables, saut plus haut, eau (ralentit, nage, teinte sous l'eau, éclaboussures)
 - [x] 23. Génération : sol de maison qui clignote, coffre et tonneau superposés (version du générateur inchangée : correction visuelle)
 - [x] 24. Pluie : visible dans le décor (gouttes en profondeur, éclaboussures, sol mouillé), son plus doux
-- [ ] 25. Progression : montée de niveau claire, points à dépenser, monstres plus forts au loin, bonus temporaires (prière…), affichage du butin ramassé
+- [x] 25. Progression : montée de niveau claire, points à dépenser, monstres plus forts au loin, bonus temporaires (prière…), affichage du butin ramassé
 - [ ] 26. Vérification (local + en ligne), docs, propositions d'améliorations
 
 ## Décisions clés (ne pas re-débattre)

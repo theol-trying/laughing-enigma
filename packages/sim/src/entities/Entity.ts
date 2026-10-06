@@ -22,6 +22,7 @@ export interface MonsterState {
   element?: 'poison' | 'feu' | 'givre';
   xp: number;
   windup: number;           // élan de l'attaque en cours (s)
+  level: number;            // niveau (danger du lieu)
   lair: string;             // repaire d'origine
 }
 
@@ -77,6 +78,6 @@ export class Entity {
 
   get label(): string {
     if (this.npc) return `${this.npc.first} ${this.npc.last} (${this.npc.profession})`;
-    return this.name;
+    return this.mon && this.mon.level > 1 ? `${this.name} · niv. ${this.mon.level}` : this.name;
   }
 }

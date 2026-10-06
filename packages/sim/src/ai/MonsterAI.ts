@@ -132,9 +132,9 @@ export function moveMonster(e: Entity, dt: number, ctx: MonsterCtx): void {
           if (m.windup <= 0) {
             m.cooldown = d.attackCd;
             if (dist < d.reach + 0.6) {
-              if (t.ent) hitEntity(ctx.combat, t.ent, d.damage * 0.8, e.id, d.element);
-              else if (m.targetId!.startsWith('p:')) ctx.hurtRemote(m.targetId!, d.damage, e, d.element);
-              else hitPlayer(ctx.combat, d.damage, e, d.element);
+              if (t.ent) hitEntity(ctx.combat, t.ent, m.damage * 0.8, e.id, d.element);
+              else if (m.targetId!.startsWith('p:')) ctx.hurtRemote(m.targetId!, m.damage, e, d.element);
+              else hitPlayer(ctx.combat, m.damage, e, d.element);
             }
           }
         } else if (m.cooldown <= 0) m.windup = 0.4;

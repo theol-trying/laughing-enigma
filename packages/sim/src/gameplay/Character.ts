@@ -6,6 +6,10 @@ import { Inventory, item, type ItemDef } from './Items';
 export const STATS = ['FOR', 'AGI', 'CON', 'PER', 'INT', 'VOL'] as const;
 export type Stat = typeof STATS[number];
 export const STAT_NAMES: Record<Stat, string> = { FOR: 'Force', AGI: 'Agilité', CON: 'Constitution', PER: 'Perception', INT: 'Intelligence', VOL: 'Volonté' };
+export const STAT_DESC: Record<Stat, string> = {
+  FOR: 'dégâts au corps à corps, charge portée', AGI: 'endurance, discrétion', CON: 'points de vie',
+  PER: 'dégâts à l\'arc, prix', INT: 'mana, puissance des sorts', VOL: 'endurance',
+};
 export const SKILLS = ['armes', 'tir', 'magie', 'furtivité', 'commerce', 'artisanat'] as const;
 export type Skill = typeof SKILLS[number];
 export const SKILL_NAMES: Record<Skill, string> = { armes: 'Armes', tir: "Tir à l'arc", magie: 'Magie', furtivité: 'Furtivité', commerce: 'Commerce', artisanat: 'Artisanat' };
@@ -21,22 +25,27 @@ export class Character {
   statPoints = 0;
   readonly inv = new Inventory();
   equip: Record<Slot, string | null> = { arme: null, bouclier: null, corps: null, tête: null, mains: null, pieds: null };
+  /** bonus temporaires (bénédiction, repas…), mis à jour par le jeu */
+  bonusDmg = 0; bonusArmor = 0;
   /** sorts connus */
   spells: string[] = ['trait de feu', 'soin'];
 
-  get maxHp(): number { return 70 + this.stats.CON * 6 + (this.level - 1) * 5; }
-  get maxStamina(): number { return 60 + this.stats.AGI * 4 + this.stats.VOL * 4; }
-  get maxMana(): number { return 20 + this.stats.INT * 6; }
+  // chaque niveau rend plus robuste, endurant et puissant, en plus du point de caractéristique
+  get maxHp(): number { return 70 + this.stats.CON * 6 + (this.level - 1) * 8; }
+  get maxStamina(): number { return 60 + this.stats.AGI * 4 + this.stats.VOL * 4 + (this.level - 1) * 4; }
+  get maxMana(): number { return 20 + this.stats.INT * 6 + (this.level - 1) * 3; }
+  /** multiplicateur commun : niveau et bonus temporaires */
+  private power(): number { return (1 + (this.level - 1) * 0.03) * (1 + this.bonusDmg); }
   get armor(): number {
     let a = 0;
     for (const s of ['corps', 'tête', 'mains', 'pieds'] as Slot[]) { const id = this.equip[s]; if (id) a += item(id).armor?.value ?? 0; }
-    return a;
+    return a + this.bonusArmor;
   }
   get weapon(): ItemDef | null { return this.equip.arme ? item(this.equip.arme) : null; }
   get shield(): ItemDef | null { return this.equip.bouclier ? item(this.equip.bouclier) : null; }
-  meleeMult(): number { return 1 + (this.stats.FOR - 5) * 0.06 + this.skills.armes * 0.007; }
-  bowMult(): number { return 1 + (this.stats.PER - 5) * 0.06 + this.skills.tir * 0.007; }
-  spellMult(): number { return 1 + (this.stats.INT - 5) * 0.07 + this.skills.magie * 0.008 + (this.weapon?.weapon?.kind === 'bâton' ? 0.3 : 0); }
+  meleeMult(): number { return (1 + (this.stats.FOR - 5) * 0.06 + this.skills.armes * 0.007) * this.power(); }
+  bowMult(): number { return (1 + (this.stats.PER - 5) * 0.06 + this.skills.tir * 0.007) * this.power(); }
+  spellMult(): number { return (1 + (this.stats.INT - 5) * 0.07 + this.skills.magie * 0.008 + (this.weapon?.weapon?.kind === 'bâton' ? 0.3 : 0)) * this.power(); }
   /** 0 (bruyant) → 1 (invisible) quand accroupi */
   stealth(): number { return Math.min(0.95, 0.45 + this.skills.furtivité * 0.005 + (this.stats.AGI - 5) * 0.02); }
   /** prix d'achat ×, prix de vente × */

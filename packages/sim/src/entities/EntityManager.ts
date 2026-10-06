@@ -2,7 +2,7 @@ import { Entity, type RemoteTarget } from './Entity';
 export type { RemoteTarget } from './Entity';
 import { generateNPCs, type NPCData } from './NPC';
 import { humanoid, drawModel, type ModelDef } from './Models';
-import { buildLairs, makeMonster, type Lair } from './Monster';
+import { buildLairs, makeMonster, dangerAt, dungeonLevel, type Lair } from './Monster';
 import { NavGrid } from '../ai/Pathfinding';
 import { blockAt, resolveSpot, patrolRoute, type Spot } from '../ai/Schedule';
 import { thinkMonster, moveMonster, turn, type MonsterCtx } from '../ai/MonsterAI';
@@ -170,6 +170,7 @@ export class EntityManager {
       const a = (i / Math.max(1, n)) * Math.PI * 2, r = 3 + (i % 3) * 2;
       const e = makeMonster(`${l.key}:${i}`, type, l.x + Math.cos(a) * r, l.z + Math.sin(a) * r, l.x, l.z, l.territory, {
         lair: l.key, poiId: l.poiId, campId: l.sid, leader: isLeader, unique: isLeader ? `${l.key}:chef` : '',
+        level: dangerAt(this.host.world.civ, l.x, l.z) + (isLeader ? 1 : 0),
       });
       if (isLeader) e.name = `${e.name} (${this.host.world.civ.settlements[l.sid]?.name.replace('Camp ', '') ?? ''})`;
       e.y = this.ground(e.x, e.z, 1000);
@@ -200,7 +201,9 @@ export class EntityManager {
     L.spawns.forEach((s, i) => {
       const key = `dj${L.id}:m${i}`;
       if (this.killed.has(key)) return;
-      const e = makeMonster(key, s.type, s.x, s.z, s.x, s.z, s.boss ? 10 : 14, { unique: key, leader: s.boss, perception: s.boss ? 20 : 16 });
+      const dg = this.host.world.civ.dungeons[L.id];
+      const level = (dg ? dungeonLevel(this.host.world.civ, dg) : 1) + (s.boss ? 1 : 0);
+      const e = makeMonster(key, s.type, s.x, s.z, s.x, s.z, s.boss ? 10 : 14, { unique: key, leader: s.boss, perception: s.boss ? 20 : 16, level });
       e.y = 0; e.zoneKey = 'd' + L.id;
       this.entities.push(e); this.dungeonEnts.push(e);
     });
@@ -375,7 +378,7 @@ export class EntityManager {
       }
       const p = this.host.player;
       const blocked = Math.hypot(p.x - e.x, p.z - e.z) < 0.9 && moving && e.action !== 'fuir';
-      const speed = e.speed * (e.action === 'fuir' ? 3.2 : 1);
+      const speed = e.speed * (e.action === 'fuir' ? 2.7 : 1);
       if (moving && !blocked) {
         const dx = tx - e.x, dz = tz - e.z, d = Math.hypot(dx, dz) || 1;
         const step = Math.min(d, speed * dt);
@@ -540,7 +543,9 @@ export class EntityManager {
       return e;
     }
     const l = this.lairs.find((q) => q.key === z);
-    const e = makeMonster(id, type, x, zz, l?.x ?? x, l?.z ?? zz, l?.territory ?? 14, l ? { lair: l.key, poiId: l.poiId, campId: l.sid, leader: type === l.leader, unique: type === l.leader ? `${l.key}:chef` : '' } : { unique: id });
+    const civ = this.host.world.civ, dg = z.startsWith('d') ? civ.dungeons[Number(z.slice(1))] : null;
+    const lvl = l ? dangerAt(civ, l.x, l.z) + (type === l.leader ? 1 : 0) : dg ? dungeonLevel(civ, dg) : 1;
+    const e = makeMonster(id, type, x, zz, l?.x ?? x, l?.z ?? zz, l?.territory ?? 14, l ? { lair: l.key, poiId: l.poiId, campId: l.sid, leader: type === l.leader, unique: type === l.leader ? `${l.key}:chef` : '', level: lvl } : { unique: id, level: lvl });
     e.zoneKey = z;
     return e;
   }

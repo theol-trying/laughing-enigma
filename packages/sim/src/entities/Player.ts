@@ -36,6 +36,8 @@ export class Player {
   underRoof = false;
 
   /** Effets dans le temps : poison, brûlure, givre (ralentit), régénération d'endurance. */
+  /** multiplicateur de récupération d'endurance (bonus temporaires) */
+  staminaRegen = 1;
   tickStatus(dt: number): number {
     let dmg = 0;
     if (this.poison > 0) { this.poison -= dt; dmg += 2.2 * dt; }
@@ -43,7 +45,7 @@ export class Player {
     if (this.frost > 0) this.frost -= dt;
     if (this.invuln > 0) this.invuln -= dt;
     if (this.hurt > 0) this.hurt -= dt;
-    const regen = this.blocking ? 4 : this.sprinting ? -14 : 16;
+    const regen = this.blocking ? 4 : this.sprinting ? -14 : 16 * this.staminaRegen;
     this.stamina = Math.max(0, Math.min(this.maxStamina, this.stamina + regen * dt));
     if (dmg > 0) { this.hp -= dmg; if (this.hp <= 0) { this.hp = 0; this.dead = true; } }
     return dmg;

@@ -65,10 +65,29 @@ export function makeMonster(id: string, type: string, x: number, z: number, home
   const e = new Entity(id, 'monster', type, d.name, creatureModel(type), d.hp);
   e.x = x; e.z = z; e.speed = d.walk;
   e.pose.hover = d.hover ?? 0;
+  const lv = Math.max(1, Math.min(20, extra.level ?? 1));
+  e.hp = e.maxHp = Math.round(d.hp * (1 + 0.22 * (lv - 1)));
   e.mon = {
     def: type, homeX, homeZ, territory, aggro: d.aggro, perception: d.perception, nocturnal: d.nocturnal,
     damage: d.damage, armor: d.armor, attackCd: d.attackCd, reach: d.reach, state: 'repos', targetId: null, cooldown: 0,
     alerted: false, campId: -1, poiId: -1, unique: '', leader: false, loot: d.loot, element: d.element, xp: d.xp, windup: 0, lair: '', ...extra,
+    level: lv,
   };
+  // plus loin, plus fort : dégâts, armure et expérience suivent le niveau
+  e.mon.damage = Math.round(d.damage * (1 + 0.14 * (lv - 1)) * 10) / 10;
+  e.mon.armor = d.armor + Math.floor((lv - 1) / 2);
+  e.mon.xp = Math.round(d.xp * (1 + 0.3 * (lv - 1)));
   return e;
+}
+
+/** Niveau de danger d'un lieu : 1 autour du village de départ, puis +1 tous les 650 m environ (max 12). */
+export function dangerAt(civ: Civilization, x: number, z: number): number {
+  const s = civ.settlements[civ.startId];
+  return s ? Math.max(1, Math.min(12, 1 + Math.floor(Math.hypot(x - s.x, z - s.z) / 650))) : 1;
+}
+
+/** Niveau des créatures d'un donjon : danger du lieu de son entrée + profondeur. */
+export function dungeonLevel(civ: Civilization, d: { poiId: number; depth: number }): number {
+  const p = civ.pois[d.poiId]?.id === d.poiId ? civ.pois[d.poiId] : civ.pois.find((x) => x.id === d.poiId);
+  return (p ? dangerAt(civ, p.x, p.z) : 1) + Math.max(0, (d.depth ?? 1) - 1);
 }
