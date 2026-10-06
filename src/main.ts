@@ -1,84 +1,143 @@
-// Point d'entrée. (Étape 4 : exploration d'un monde généré ; les écrans titre/nouvelle partie
-// arrivent à l'étape 8.)
+// ASCII FORT — application : écran titre → nouvelle partie → monde → jeu.
 import { Renderer } from './rendering/Renderer';
 import { Input } from './core/Input';
 import { Game } from './core/Game';
 import { C } from './rendering/TextGrid';
-import { clamp } from './core/math';
-import { GENERATOR_VERSION } from './version';
-import { CHUNK } from './world/constants';
-import { BIOMES } from './world/terrain/Biomes';
+import { CLEAR_WEATHER, computeAtmosphere } from './rendering/Atmosphere';
+import { Camera } from './rendering/Camera';
+import { InstanceBuffer } from './rendering/Renderer';
 import { UIManager } from './ui/UI';
 import { DialogueScreen, TradeScreen } from './ui/DialogueScreen';
+import { InventoryScreen, JournalScreen, MapScreen, StatsScreen, PauseScreen, type Options } from './ui/GameScreens';
+import { TitleScreen, NewGameScreen, drawTitleBackground } from './ui/TitleScreen';
+import { drawHud, type HudState } from './ui/HUD';
+import type { MacroWorld } from './world/MacroWorld';
+import type { Civilization } from './world/civilization/Civilization';
 
 const canvas = document.getElementById('screen') as HTMLCanvasElement;
 const r = new Renderer(canvas);
-const cellH = () => clamp(Math.round(window.innerHeight / 58), 10, 22);
-r.resize(cellH());
-window.addEventListener('resize', () => r.resize(cellH()));
-document.getElementById('boot')?.remove();
 const input = new Input(canvas);
 const screens = new UIManager(r, input);
-canvas.addEventListener('click', () => { if (!screens.modal) input.requestLock(); });
 
-const seedText = new URLSearchParams(location.search).get('seed') || 'TEST-001';
-const t0 = performance.now();
-const game = new Game(seedText, r);
-const genMs = performance.now() - t0;
-let showDebug = true, viewMode = 0;
-game.ui = {
-  openDialogue: (node, onClose) => screens.open(new DialogueScreen(node, onClose)),
-  openTrade: (e) => { screens.closeAll(); screens.open(new TradeScreen(e, game)); },
-};
-const log: { text: string; t: number; color: number }[] = [];
-game.events.on('message', (e) => { log.push({ text: e.text, t: performance.now(), color: e.color ?? C.text }); if (log.length > 6) log.shift(); });
-let last = performance.now(), fps = 60;
+// options (préférences locales du navigateur)
+const DEFAULT_OPTS: Options = { cellSize: Math.max(10, Math.min(20, Math.round(window.innerHeight / 58))), sensitivity: 1, fov: 68, volume: 0.6, timeScale: 1 };
+let opts: Options = { ...DEFAULT_OPTS };
+try { opts = { ...DEFAULT_OPTS, ...JSON.parse(localStorage.getItem('ascii-fort-options') ?? '{}') }; } catch { /* stockage indisponible */ }
+const saveOpts = () => { try { localStorage.setItem('ascii-fort-options', JSON.stringify(opts)); } catch { /* ignore */ } };
+r.resize(opts.cellSize);
+window.addEventListener('resize', () => r.resize(opts.cellSize));
+document.getElementById('boot')?.remove();
 
+let game: Game | null = null;
+let loading: { seed: string; macro?: MacroWorld; civ?: Civilization; frames: number } | null = null;
+const hud: HudState = { log: [], debug: false, fps: 60, genMs: 0, drawCalls: 0 };
+const idleCam = new Camera();
+const idleInst = new InstanceBuffer();
+
+function applyOptions() {
+  saveOpts();
+  if (r.cssCellH !== opts.cellSize) r.resize(opts.cellSize);
+  if (game) { game.sensitivity = opts.sensitivity; game.camera.fovY = (opts.fov * Math.PI) / 180; game.time.scale = opts.timeScale; }
+}
+
+function hasSave(): boolean { try { return !!localStorage.getItem('ascii-fort-save-meta'); } catch { return false; } }
+
+function showTitle() {
+  screens.closeAll();
+  screens.open(new TitleScreen(hasSave(), {
+    newGame: () => screens.open(new NewGameScreen(input, {
+      create: (seed, macro, civ) => { screens.closeAll(); loading = { seed, macro, civ, frames: 0 }; },
+      back: () => screens.close(),
+    })),
+    continueGame: () => window.dispatchEvent(new CustomEvent('ascii-fort-load')),
+    options: () => screens.open(new PauseScreen({ seed: { text: '—' } } as unknown as Game, opts, { save() {}, load() {}, quit() { screens.close(); }, applyOptions })),
+  }));
+}
+
+function startGame(seed: string, macro?: MacroWorld, civ?: Civilization): Game {
+  const t0 = performance.now();
+  game?.dispose();
+  const g = new Game(seed, r, macro, civ);
+  game = g;
+  hud.genMs = performance.now() - t0;
+  hud.log = [];
+  g.events.on('message', (e) => { hud.log.push({ text: e.text, t: performance.now(), color: e.color ?? C.text }); if (hud.log.length > 30) hud.log.shift(); });
+  g.ui = {
+    openDialogue: (node, onClose) => screens.open(new DialogueScreen(node, onClose)),
+    openTrade: (e) => { screens.closeAll(); screens.open(new TradeScreen(e, g)); },
+  };
+  applyOptions();
+  g.events.emit('message', { text: `Bienvenue dans les ${g.world.macro.worldName}. Vous arrivez à ${g.world.civ.start.name}.`, color: C.title });
+  g.events.emit('message', { text: 'Clic : capturer la souris · ZQSD : marcher · E : interagir · Tab : sac · M : carte · J : journal', color: C.dim });
+  return g;
+}
+
+function pause() {
+  if (!game || screens.modal) return;
+  screens.open(new PauseScreen(game, opts, {
+    save: () => window.dispatchEvent(new CustomEvent('ascii-fort-save')),
+    load: () => window.dispatchEvent(new CustomEvent('ascii-fort-load')),
+    quit: () => { game?.dispose(); game = null; showTitle(); },
+    applyOptions,
+  }));
+}
+
+canvas.addEventListener('click', () => { if (game && !screens.modal) input.requestLock(); });
+document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement && game && !screens.modal) pause(); });
+
+const idle = (now: number) => r.render({ camera: idleCam, atmo: computeAtmosphere(12, CLEAR_WEATHER), time: now / 1000, items: [], clipRadius: 0, instances: idleInst, lights: [], viewMode: 0, sceneOn: false });
+
+let last = performance.now();
 function tick(now: number) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  fps = fps * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
-  if (input.key('F3')) showDebug = !showDebug;
-  if (input.key('n')) game.player.noclip = !game.player.noclip;
-  if (input.key('t')) game.time.minutes += 60;
-  for (let k = 1; k <= 5; k++) if (input.pressed('Digit' + k)) viewMode = k - 1;
-  if (screens.modal) screens.update(); else game.update(dt, input);
+  hud.fps = hud.fps * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
+  const ui = r.ui;
+  ui.clear();
 
-  const ui = r.ui; ui.clear();
-  const p = game.player;
-  if (showDebug) {
-    const m = game.world.macro;
-    const biome = BIOMES[game.world.sampler.biomeAt(p.x, p.z)].name;
-    const region = m.regions[m.region[m.cellOf(p.x, p.z)]]?.name ?? '—';
-    const lines = [
-      `World: ${game.seed.text} · Generator: ${GENERATOR_VERSION} · ${m.worldName}`,
-      `${fps.toFixed(0)} fps · ${r.cols}×${r.rows} car. · draw ${r.drawCalls} · monde généré en ${genMs.toFixed(0)} ms`,
-      `pos ${p.x.toFixed(1)} ${p.y.toFixed(1)} ${p.z.toFixed(1)} · chunk ${Math.floor(p.x / CHUNK)},${Math.floor(p.z / CHUNK)} · ${game.world.chunks.chunks.size} chunks · dernier ${game.world.chunks.lastLoadMs.toFixed(1)} ms`,
-      `${biome} · ${region} · ${game.time.label()} (${game.time.phase})${p.swimming ? ' · nage' : ''}${p.noclip ? ' · NOCLIP' : ''}`,
-      `clic: souris · ZQSD/WASD · Maj sprint · Espace saut · C accroupi · N noclip · T +1h · 1-5 vues · F3`,
-    ];
-    lines.forEach((l, i) => ui.text(1, i, ` ${l} `, i === 0 ? C.title : i === 4 ? C.dim : C.text, C.panel, 0.75));
+  // création du monde : on affiche d'abord un écran de chargement
+  if (loading) {
+    drawTitleBackground(ui, now / 1000);
+    ui.center(Math.floor(r.rows / 2) - 1, ' Génération du monde… ', C.title, C.panel);
+    ui.center(Math.floor(r.rows / 2) + 1, ` ${loading.seed} `, C.dim, C.panel);
+    idle(now);
+    if (++loading.frames > 2) { const l = loading; loading = null; startGame(l.seed, l.macro, l.civ); }
+    input.endFrame();
+    return;
   }
-  ui.text(Math.floor(r.cols / 2), Math.floor(r.rows / 2), '+', C.white);
-  // barres de vie et d'endurance (HUD complet à l'étape 8)
-  const by = r.rows - 4;
-  ui.text(r.cols - 26, by, 'HP  ', C.text); ui.bar(r.cols - 22, by, 12, p.hp / p.maxHp, C.hp); ui.text(r.cols - 9, by, `${Math.ceil(p.hp)}/${p.maxHp}`, C.text);
-  ui.text(r.cols - 26, by + 1, 'STA ', C.text); ui.bar(r.cols - 22, by + 1, 12, p.stamina / p.maxStamina, C.sta);
-  ui.text(r.cols - 26, by + 2, 'MP  ', C.text); ui.bar(r.cols - 22, by + 2, 12, p.mana / p.maxMana, C.mp);
-  const chs = game.character;
-  ui.text(r.cols - 26, by - 1, `Niv ${chs.level} · ${chs.xp}/${chs.xpForNext()} xp · ${chs.inv.gold} or`, C.gold);
-  if (game.target && game.target.alive && Math.hypot(game.target.x - p.x, game.target.z - p.z) < 30) { ui.center(1, ` ${game.target.label} `, C.red, C.panel); ui.bar(Math.floor(r.cols / 2) - 8, 2, 16, game.target.hp / game.target.maxHp, C.hp); }
-  if (p.dead) ui.center(Math.floor(r.rows / 2) - 3, ' Vous êtes mort ', C.red, C.black);
-  if (game.focus) ui.center(Math.floor(r.rows / 2) + 2, ` [E] ${game.focus.label} `, C.yellow, C.panel);
-  const tNow = performance.now();
-  log.filter((l) => tNow - l.t < 6000).forEach((l, i, arr) => ui.text(1, r.rows - 1 - arr.length + i, ` ${l.text} `, l.color, C.panel, 0.7));
+
+  if (!game) {
+    if (!screens.top) showTitle();
+    screens.update();
+    screens.draw();
+    idle(now);
+    input.endFrame();
+    return;
+  }
+
+  const g = game;
+  if (screens.modal) screens.update();
+  else {
+    if (input.key('Tab')) screens.open(new InventoryScreen(g));
+    else if (input.key('m')) screens.open(new MapScreen(g));
+    else if (input.key('j')) screens.open(new JournalScreen(g));
+    else if (input.key('c') && !input.isDown('KeyC')) screens.open(new StatsScreen(g));
+    else if (input.key('Escape')) pause();
+    if (input.key('F3')) hud.debug = !hud.debug;
+    if (!screens.modal) g.update(dt, input);
+  }
+  hud.drawCalls = r.drawCalls;
+  if (!screens.modal || screens.top instanceof DialogueScreen) drawHud(ui, g, hud);
   screens.draw();
-  game.render(viewMode);
+  if (game) g.render(0); else idle(now);
   input.endFrame();
 }
 function frame(now: number) { tick(now); requestAnimationFrame(frame); }
 requestAnimationFrame(frame);
+
 (window as any).__dbg = {
-  game, r, input, screens,
+  r, input, screens,
+  get game() { return game; },
+  newGame: (seed = 'TEST-001') => { screens.closeAll(); return startGame(seed); },
   step: (n = 1) => { for (let i = 0; i < n; i++) { last -= 16; tick(performance.now()); } },
-  tp: (x: number, z: number) => { game.player.x = x; game.player.z = z; game.world.chunks.update(x, z, -1); game.player.y = game.world.heightAt(x, z) + 0.2; },
+  tp: (x: number, z: number) => { if (!game) return; game.player.x = x; game.player.z = z; game.world.chunks.update(x, z, -1); game.player.y = game.world.heightAt(x, z) + 0.2; },
 };

@@ -6,13 +6,11 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Étape 8 — UI terminal. Existant : ui/UI.ts (UIManager, écrans modaux, optionList), ui/DialogueScreen.ts (dialogue +
-TradeScreen), HUD provisoire dans main.ts. À faire : écran titre « ASCII FORT » [N] Nouvelle partie [C] Continuer [O] Options ;
-nouvelle partie (champ seed, RANDOMIZE, CREATE WORLD, aperçu : nom du monde, climat, région de départ, mini-carte) ;
-écran de chargement (création du monde) ; HUD final (barres HP/STA/MP, boussole avec repères de quêtes, heure/météo,
-cible, invites, journal des messages) ; Inventaire (Tab : équiper/utiliser/jeter) ; Journal (J : quêtes actives/terminées) ;
-Carte ASCII (M : brouillard state.explored, lieux découverts state.discovered, routes, rivières, repères de quêtes) ;
-Stats (C : caractéristiques, compétences, répartition des points) ; Pause (Échap : reprendre, sauvegarder, options, quitter).
+Étape 9 — Ambiance. À faire : gameplay/Weather.ts (états clair/couvert/pluie/brouillard/orage/neige selon biome,
+par région, transitions douces, déterministe seed+jour) → computeAtmosphere(…, WeatherMix) dans Game.render, Game.rain()
+/fog()/weather() (PNJ s'abritent déjà si rain()>0.35 ; perception utilise fog), éclairs (flash) ; lanternes des gardes la
+nuit (lumière ponctuelle sur l'entité) ; audio/AudioEngine.ts (Web Audio synthétique : vent, pluie, feu, pas selon le sol,
+impacts, interface), volume = options.volume. Puis étape 10 (sauvegarde IndexedDB + console dev F1 + docs) et 11.
 
 ## Étapes
 - [x] 0. Setup : Vite 8 + TS 7 + Vitest 5, git (identité theol-trying noreply), PROGRESS/CLAUDE.md
@@ -23,7 +21,7 @@ Stats (C : caractéristiques, compétences, répartition des points) ; Pause (É
 - [x] 5. Civilisation : factions, histoire, implantations, routes A* + ponts, plans de village (bâtiments visitables meublés), POI, donjons 3D (entrée/sortie E)
 - [x] 6. Entités & IA : PNJ (identité, emplois du temps, nav locale), monstres (repaires, écologie, perception, utility AI, meutes), simulation par niveaux
 - [x] 7. Gameplay : objets, inventaire, combat, butin, XP, réputation/mémoire, économie, dialogues, rumeurs, quêtes systémiques
-- [ ] 8. UI terminal : titre/nouvelle partie, HUD, inventaire, journal, stats, carte, dialogue, commerce, pause/options
+- [x] 8. UI terminal : titre/nouvelle partie, HUD, inventaire, journal, stats, carte, dialogue, commerce, pause/options
 - [ ] 9. Ambiance : jour/nuit, météo, torches/lanternes/fenêtres, ombres soleil, eau, audio Web Audio
 - [ ] 10. Sauvegarde IndexedDB (diff), outils debug (console F1, overlay F3), docs (README, docs/architecture.md)
 - [ ] 11. Vérification du vertical slice (18 étapes) dans le navigateur
@@ -68,3 +66,6 @@ Stats (C : caractéristiques, compétences, répartition des points) ; Pause (É
   auberge (10 or), prière, puits, cuisson, forge de flèches, potions, clé + porte de donjon, pièges, XP/niveaux, découvertes.
 - 2026-10-06 : 7b fait. Chaîne systémique vérifiée : camp sur la route → pénurie d'outils (31 or) → dialogue du marchand →
   quête → camp démantelé → route débloquée → récompense, opinion +44 → prix revenus à 15 or en 4 jours.
+- 2026-10-06 : 8 fait. Écran titre animé, nouvelle partie (seed, RANDOMIZE, aperçu + mini-carte), chargement, HUD
+  (barres, boussole + repère de quête, heure, lieu, cible, messages, F3), inventaire, journal, carte (brouillard, zoom),
+  personnage (points, compétences, réputation), pause/options (taille, sensibilité, FOV, volume, vitesse du temps).

@@ -3,6 +3,8 @@ import { GameTime } from './Time';
 import { EventBus } from './Events';
 import type { Input } from './Input';
 import { World } from '../world/World';
+import type { MacroWorld } from '../world/MacroWorld';
+import type { Civilization } from '../world/civilization/Civilization';
 import { buildFarTerrain } from '../world/FarTerrain';
 import { generateDungeon, buildDungeon, type DungeonLayout } from '../world/dungeons/DungeonGenerator';
 import type { ChunkData, Prop } from '../world/Chunk';
@@ -69,10 +71,14 @@ export class Game {
   private atmoNight = 0;
   private discoverT = 0;
   private m4 = mat4();
+  /** sensibilité de la souris (options) */
+  sensitivity = 1;
+  /** libère les ressources GPU (retour au titre) */
+  dispose(): void { this.world.chunks.clear(); this.renderer.deleteMesh(this.far); if (this.dungeon) this.renderer.deleteMesh(this.dungeon.mesh); }
 
-  constructor(seedText: string, private renderer: Renderer) {
+  constructor(seedText: string, private renderer: Renderer, macro?: MacroWorld, civ?: Civilization) {
     this.seed = new WorldSeed(seedText);
-    this.world = new World<GpuMesh>(this.seed, { upload: (m) => renderer.createMesh(m), release: (g) => renderer.deleteMesh(g) });
+    this.world = new World<GpuMesh>(this.seed, { upload: (m) => renderer.createMesh(m), release: (g) => renderer.deleteMesh(g) }, macro, civ);
     this.far = renderer.createMesh(buildFarTerrain(this.world.macro, (mb) => this.world.civWorld.landmarks(mb)));
     const sp = this.world.spawn();
     this.player.x = sp.x; this.player.z = sp.z; this.player.heading = sp.heading;
@@ -417,7 +423,7 @@ export class Game {
       this.respawnT -= dt;
       if (this.respawnT <= 0) this.respawn();
     } else {
-      p.look(input);
+      p.look(input, 0.0022 * this.sensitivity);
       p.blocking = input.locked && input.mouseDown(2) && p.stamina > 0;
       const over = this.character.inv.weight() > this.character.carryMax();
       p.update(dt, input, this.world, over ? 0.55 : 1);

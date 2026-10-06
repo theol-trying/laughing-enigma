@@ -16,9 +16,9 @@ export class World<T = unknown> {
   readonly civ: Civilization;
   readonly civWorld: CivWorld;
 
-  constructor(readonly seed: WorldSeed, gpu: GpuBridge<T> | null) {
-    this.macro = MacroWorld.generate(seed);
-    this.civ = Civilization.generate(this.macro);
+  constructor(readonly seed: WorldSeed, gpu: GpuBridge<T> | null, macro?: MacroWorld, civ?: Civilization) {
+    this.macro = macro && macro.seed.text === seed.text ? macro : MacroWorld.generate(seed);
+    this.civ = civ && civ.macro === this.macro ? civ : Civilization.generate(this.macro);
     this.civWorld = new CivWorld(this.civ);
     this.sampler = new TerrainSampler(this.macro);
     this.sampler.addFeature(this.civWorld.feature());
