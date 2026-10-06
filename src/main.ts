@@ -56,7 +56,7 @@ function tick(now: number) {
 function frame(now: number) { tick(now); requestAnimationFrame(frame); }
 requestAnimationFrame(frame);
 (window as any).__dbg = {
-  game, r,
+  game, r, input,
   step: (n = 1) => { for (let i = 0; i < n; i++) { last -= 16; tick(performance.now()); } },
   tp: (x: number, z: number) => { game.player.x = x; game.player.z = z; game.world.chunks.update(x, z, -1); game.player.y = game.world.heightAt(x, z) + 0.2; },
 };

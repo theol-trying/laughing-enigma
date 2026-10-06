@@ -29,7 +29,7 @@ const DEFS: Record<number, MatDef> = {
   [M.SNOW]: { ramp: ' .:-=░▒▓', detail: "*.'°" },
   [M.SAND]: { ramp: ' .,:∙░▒', detail: '.:,∙' },
   [M.MUD]: { ramp: ' .,~:≈░', detail: '~≈.,' },
-  [M.ROAD]: { ramp: ' .·:=░▒', detail: '.:·,' },
+  [M.ROAD]: { ramp: ' .·:-=', detail: '.:·,' },
   [M.FIELD]: { ramp: ' .,|║"▒', detail: '|║"\'' },
   [M.CROP]: { ramp: ' .,|¦"', detail: '|¦"' },
   [M.WATER]: { ramp: ' .-~≈▒', detail: '~≈-_', flags: MF.WATER | MF.ANIM },

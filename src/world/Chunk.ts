@@ -14,6 +14,9 @@ export interface SegCollider { ax: number; az: number; bx: number; bz: number; r
 /** Plateforme praticable (sol de bâtiment, pont, escalier). */
 export interface Platform { cx: number; cz: number; hw: number; hd: number; yaw: number; top: number }
 
+/** Objet interactif (coffre, lit, enclume, entrée de donjon…). */
+export interface Prop { key: string; kind: string; x: number; y: number; z: number; sid: number; bid: number; dungeonId: number }
+
 /** Contenu humain injecté dans un chunk par la civilisation (étape 5). */
 export interface ChunkExtras {
   build(cx: number, cz: number, mb: MeshBuilder, chunk: ChunkData): void;
@@ -28,7 +31,8 @@ export class ChunkData {
   circles: CircleCollider[] = [];
   segs: SegCollider[] = [];
   platforms: Platform[] = [];
-  lights: { x: number; y: number; z: number; radius: number; r: number; g: number; b: number; kind: 'torch' | 'fire' | 'window' }[] = [];
+  props: Prop[] = [];
+  lights: { x: number; y: number; z: number; radius: number; r: number; g: number; b: number; kind: 'torch' | 'fire' | 'window' | 'candle' }[] = [];
   mesh: MeshData | null = null;
   buildMs = 0;
   constructor(readonly cx: number, readonly cz: number) { this.x0 = cx * CHUNK; this.z0 = cz * CHUNK; }

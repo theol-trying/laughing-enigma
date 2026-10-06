@@ -17,6 +17,7 @@ export interface Sample {
   color: number;
   occupied: boolean;  // pas de végétation (route, bâtiment…)
   road: number;       // 0 non, 1 chemin, 2 route, 3 pavés
+  field: number;      // 0 non, 1 blé, 2 potager
 }
 
 /** Modification locale du terrain par la civilisation (route, place, fondation…). */
@@ -82,7 +83,7 @@ export class TerrainSampler {
   }
 
   /** Échantillon complet (relief + eau + civilisation). */
-  sample(x: number, z: number, out: Sample = { h: 0, water: NaN, biome: 0, mat: 0, color: 0, occupied: false, road: 0 }): Sample {
+  sample(x: number, z: number, out: Sample = { h: 0, water: NaN, biome: 0, mat: 0, color: 0, occupied: false, road: 0, field: 0 }): Sample {
     const m = this.macro;
     let h = m.elevAt(x, z);
     const rough = m.sample(this.rough, x, z);
@@ -90,7 +91,7 @@ export class TerrainSampler {
     h += dn.fbm(x / 95, z / 95, 4) * rough + dn.noise(x / 13, z / 13) * rough * 0.12;
     if (rough > 4) h += (dn.ridged(x / 170, z / 170, 4) - 0.45) * rough * 4.5;
     out.water = this.standingWater(x, z);
-    out.road = 0; out.occupied = false;
+    out.road = 0; out.occupied = false; out.field = 0;
 
     // rivières : lit creusé, berges juste au-dessus de l'eau
     const r = m.riverIndex.nearest(x, z);
@@ -126,6 +127,9 @@ export class TerrainSampler {
     if (out.road) {
       mat = out.road === 3 ? M.COBBLE : M.ROAD;
       col = out.road === 3 ? 0x8a867a : out.road === 2 ? 0x8a7454 : 0x7a6a4a;
+    } else if (out.field) {
+      mat = out.field === 1 ? M.CROP : M.FIELD;
+      col = out.field === 1 ? mixColor(0xc8b45a, 0x9aa04a, clamp(0.5 + v, 0, 1)) : 0x5a7a34;
     }
     out.mat = mat;
     out.color = shade(col, 0.92 + v * 0.08);

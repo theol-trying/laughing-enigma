@@ -84,6 +84,17 @@ export class ChunkManager<T = unknown> {
     }
   }
 
+  /** Lumières des chunks proches. */
+  lightsNear(x: number, z: number, r: number): ChunkData['lights'] {
+    const out: ChunkData['lights'] = [];
+    const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK), k = Math.ceil(r / CHUNK);
+    for (let dz = -k; dz <= k; dz++) for (let dx = -k; dx <= k; dx++) {
+      const l = this.chunks.get(this.key(cx + dx, cz + dz));
+      if (l) for (const li of l.data.lights) if (Math.hypot(li.x - x, li.z - z) < r) out.push(li);
+    }
+    return out;
+  }
+
   gpuMeshes(): T[] {
     const out: T[] = [];
     for (const l of this.chunks.values()) if (l.gpu) out.push(l.gpu);
