@@ -6,9 +6,11 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Premier jalon terminé (étapes 0 à 11). Prochaines pistes possibles (voir README « Pistes suivantes ») : génération dans un
-Web Worker, villes plus denses, caravanes simulées, donjons multi-niveaux, plus de quêtes/dialogues, montures,
-réflexions d'eau, ombres des torches. Toujours : lire ce fichier, travailler par étapes, checkpoint + push.
+Jalon 2 (demandé le 2026-10-06) : modèles plus fins, police plus fine, bibliothèques, multi en ligne Cloudflare.
+Décisions validées par l'utilisateur : **un seul Worker Cloudflare** (assets statiques = build Vite + Durable Object
+par salon), **autorité par zone chez les joueurs** (le DO relaie + garde l'état persistant du monde), **coop complet**
+(créatures/combats partagés, coffres/camps/morts partagés et persistants, quêtes et inventaire propres à chacun).
+Prochaine étape non cochée ci-dessous = où reprendre.
 
 ## Étapes
 - [x] 0. Setup : Vite 8 + TS 7 + Vitest 5, git (identité theol-trying noreply), PROGRESS/CLAUDE.md
@@ -23,6 +25,15 @@ réflexions d'eau, ombres des torches. Toujours : lire ce fichier, travailler pa
 - [x] 9. Ambiance : jour/nuit, météo, torches/lanternes/fenêtres, ombres soleil, eau, audio Web Audio
 - [x] 10. Sauvegarde IndexedDB (diff), outils debug (console F1, overlay F3), docs (README, docs/architecture.md)
 - [x] 11. Vérification du vertical slice (18 étapes) dans le navigateur
+### Jalon 2
+- [ ] 12. Modèles procéduraux plus fins (formes effilées/arrondies, membres articulés, équipements visibles)
+- [ ] 13. Finesse d'affichage : police plus petite pour le monde (option), interface lisible
+- [ ] 14. Découpage en bibliothèques (workspaces npm : core, worldgen, render-ascii, sim, net ; apps client/serveur)
+- [ ] 15. Serveur Cloudflare : Worker (assets + /ws) + Durable Object « Room » (salon, relais, état persistant SQLite), wrangler
+- [ ] 16. Client réseau : salons (créer/rejoindre par code), présence, joueurs distants interpolés, heure commune
+- [ ] 17. Autorité par zone : créatures/PNJ simulés par un propriétaire, combats partagés (dégâts, morts, butin)
+- [ ] 18. Monde partagé persistant (coffres, camps, morts uniques), quêtes perso, sauvegarde du perso dans le salon
+- [ ] 19. Vérification à 2 clients en local (wrangler dev), docs (README, architecture, guide de déploiement)
 
 ## Décisions clés (ne pas re-débattre)
 - Dev : `npm run dev` (port 5199). Dépôt : github.com/theol-trying/laughing-enigma (push à chaque checkpoint).
