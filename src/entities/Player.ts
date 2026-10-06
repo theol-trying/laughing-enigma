@@ -12,6 +12,8 @@ export class Player {
   onGround = false; swimming = false; crouch = false; sprinting = false;
   radius = 0.35; eye = 1.65;
   noclip = false;
+  /** borne le joueur au monde (désactivé dans les donjons, hors de la carte) */
+  bounded = true;
   lastFall = 0;           // vitesse verticale à l'atterrissage (dégâts de chute)
   moving = false;
   private circles: CircleCollider[] = [];
@@ -92,7 +94,7 @@ export class Player {
         }
       }
     }
-    this.x = clamp(nx, 2, WORLD - 2); this.z = clamp(nz, 2, WORLD - 2);
+    if (this.bounded) { this.x = clamp(nx, 2, WORLD - 2); this.z = clamp(nz, 2, WORLD - 2); } else { this.x = nx; this.z = nz; }
 
     // vertical : gravité, nage, atterrissage
     const ground = this.groundAt(world, this.x, this.z, this.y);

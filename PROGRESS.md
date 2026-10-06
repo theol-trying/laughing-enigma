@@ -6,11 +6,12 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Étape 5c — Donjons 3D : générateur (salles, boucles, raccourcis, portes, clés, pièges, butin, boss) dans un espace
-séparé (x ≥ DUNGEON_ORIGIN_X), géométrie + collisions, entrée/sortie via les props « entrée » (chunk.props,
-dungeonId). Données déjà prêtes : civ.dungeons (kind grotte/mine/crypte/forteresse, depth, boss), POI liés.
-Ensuite étape 6 (PNJ & IA). Civilisation : world/civilization/* (Civilization, History, Pois, Roads, Layout,
-Builders, CivWorld). Le joueur apparaît devant l'auberge du village de départ (CivWorld.spawn).
+Étape 6 — Entités & IA. À faire : modèles en boîtes animés (entities/Models.ts → InstanceBuffer, lettre roguelike
+au loin), PNJ générés par implantation (identité, métier, domicile/travail = bâtiments du Layout, traits, relations,
+inventaire, besoins, emploi du temps), monstres (loup, bandit, gobelin, squelette, troll/araignée…) issus des POI
+(camps, tanières, donjons : DungeonLayout.spawns), utility AI + perception + pathfinding local, simulation par niveaux.
+Points d'appui : Game.ts (boucle, donjon actif, focus/interact E, props), civ (settlements, pois, factions),
+CivWorld.layouts (bâtiments avec furniture : lits, comptoirs, enclumes…), ChunkManager.propsNear/overlays.
 
 ## Étapes
 - [x] 0. Setup : Vite 8 + TS 7 + Vitest 5, git (identité theol-trying noreply), PROGRESS/CLAUDE.md
@@ -18,7 +19,7 @@ Builders, CivWorld). Le joueur apparaît devant l'auberge du village de départ 
 - [x] 2. Renderer : GL utils, atlas de glyphes, TextGrid (UI), passe scène MRT 2×2, passe cellule (rampes par matière, quadrants, arêtes, brouillard, ciel, pluie), passe présentation, caméra pointer-lock
 - [x] 3. Monde macro : élévation, hydrologie (priority-flood, D8, rivières polylignes, lacs, vallées), climat, biomes, régions, noms + tests déterminisme
 - [x] 4. Chunks : TerrainSampler (h(x,z) pur), maillage chunk, eau, végétation, streaming, terrain lointain ; joueur + collisions
-- [~] 5. Civilisation (5a + 5b faits : données, plans de village, bâtiments visitables, routes/ponts/champs, horizon ; reste 5c donjons 3D) : factions, histoire, implantations, routes A*, ponts, plans de village (bâtiments + intérieurs), POI, donjons
+- [x] 5. Civilisation : factions, histoire, implantations, routes A* + ponts, plans de village (bâtiments visitables meublés), POI, donjons 3D (entrée/sortie E)
 - [ ] 6. Entités & IA : PNJ (identité, emploi du temps), monstres, utility AI, perception, pathfinding local
 - [ ] 7. Gameplay : objets, inventaire, équipement, combat (léger/lourd/blocage/esquive/arc), loot, XP/compétences, réputation/mémoire, économie, dialogues, rumeurs, quêtes systémiques
 - [ ] 8. UI terminal : titre/nouvelle partie, HUD, inventaire, journal, stats, carte, dialogue, commerce, pause/options
@@ -55,3 +56,5 @@ Builders, CivWorld). Le joueur apparaît devant l'auberge du village de départ 
 - 2026-10-06 : 5a fait (15 tests). Bug corrigé : Dijkstra en Float32 (régions + vallées) → Float64. Rapport : docs/civ-TEST-001.txt.
 - 2026-10-06 : 5b fait. Villages rendus (colombages, chaume, puits, places, champs, enceintes, ponts), intérieurs meublés
   éclairés (âtre, bougies), torches la nuit, silhouettes lointaines. Départ devant l'auberge. 60 fps.
+- 2026-10-06 : 5c fait (16 tests). Donjons : graphe de salles + boucles, porte verrouillée devant le boss, clé en salle annexe,
+  pièges, coffres, spawns ; espace x ≥ 20000 ; entrée/sortie par E. Étape 5 terminée.

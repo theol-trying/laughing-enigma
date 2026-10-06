@@ -12,6 +12,8 @@ interface Loaded<T> { data: ChunkData; gpu: T | null }
 export class ChunkManager<T = unknown> {
   readonly chunks = new Map<number, Loaded<T>>();
   radius = 6;
+  /** chunks virtuels superposés (donjon actif) */
+  overlays: ChunkData[] = [];
   extras?: ChunkExtras;
   lastLoadMs = 0;
 
@@ -82,6 +84,21 @@ export class ChunkManager<T = unknown> {
       for (const s of l.data.segs) if (Math.min(s.ax, s.bx) - 8 < x && Math.max(s.ax, s.bx) + 8 > x && Math.min(s.az, s.bz) - 8 < z && Math.max(s.az, s.bz) + 8 > z) segs.push(s);
       for (const p of l.data.platforms) if (Math.abs(p.cx - x) < p.hw + p.hd + 4 && Math.abs(p.cz - z) < p.hw + p.hd + 4) plats.push(p);
     }
+    for (const o of this.overlays) {
+      for (const c of o.circles) if (Math.abs(c.x - x) < 8 && Math.abs(c.z - z) < 8) circles.push(c);
+      for (const s of o.segs) if (Math.min(s.ax, s.bx) - 8 < x && Math.max(s.ax, s.bx) + 8 > x && Math.min(s.az, s.bz) - 8 < z && Math.max(s.az, s.bz) + 8 > z) segs.push(s);
+      for (const p of o.platforms) if (Math.abs(p.cx - x) < p.hw + p.hd + 4 && Math.abs(p.cz - z) < p.hw + p.hd + 4) plats.push(p);
+    }
+  }
+
+  /** Objets interactifs proches (chunks + superpositions). */
+  propsNear(x: number, z: number, r: number): ChunkData['props'] {
+    const out: ChunkData['props'] = [];
+    const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
+    const scan = (d: ChunkData) => { for (const p of d.props) if (Math.hypot(p.x - x, p.z - z) < r) out.push(p); };
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const l = this.chunks.get(this.key(cx + dx, cz + dz)); if (l) scan(l.data); }
+    for (const o of this.overlays) scan(o);
+    return out;
   }
 
   /** Lumières des chunks proches. */
@@ -92,6 +109,7 @@ export class ChunkManager<T = unknown> {
       const l = this.chunks.get(this.key(cx + dx, cz + dz));
       if (l) for (const li of l.data.lights) if (Math.hypot(li.x - x, li.z - z) < r) out.push(li);
     }
+    for (const o of this.overlays) for (const li of o.lights) if (Math.hypot(li.x - x, li.z - z) < r) out.push(li);
     return out;
   }
 

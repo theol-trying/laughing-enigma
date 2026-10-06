@@ -23,6 +23,8 @@ const t0 = performance.now();
 const game = new Game(seedText, r);
 const genMs = performance.now() - t0;
 let showDebug = true, viewMode = 0;
+const log: { text: string; t: number; color: number }[] = [];
+game.events.on('message', (e) => { log.push({ text: e.text, t: performance.now(), color: e.color ?? C.text }); if (log.length > 6) log.shift(); });
 let last = performance.now(), fps = 60;
 
 function tick(now: number) {
@@ -50,6 +52,9 @@ function tick(now: number) {
     lines.forEach((l, i) => ui.text(1, i, ` ${l} `, i === 0 ? C.title : i === 4 ? C.dim : C.text, C.panel, 0.75));
   }
   ui.text(Math.floor(r.cols / 2), Math.floor(r.rows / 2), '+', C.white);
+  if (game.focus) ui.center(Math.floor(r.rows / 2) + 2, ` [E] ${game.propLabel(game.focus)} `, C.yellow, C.panel);
+  const tNow = performance.now();
+  log.filter((l) => tNow - l.t < 6000).forEach((l, i, arr) => ui.text(1, r.rows - 1 - arr.length + i, ` ${l.text} `, l.color, C.panel, 0.7));
   game.render(viewMode);
   input.endFrame();
 }
