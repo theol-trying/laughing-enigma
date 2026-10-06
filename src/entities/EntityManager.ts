@@ -5,7 +5,7 @@ import { buildLairs, makeMonster, type Lair } from './Monster';
 import { NavGrid } from '../ai/Pathfinding';
 import { blockAt, resolveSpot, patrolRoute, type Spot } from '../ai/Schedule';
 import { thinkMonster, moveMonster, turn, type MonsterCtx } from '../ai/MonsterAI';
-import { hitEntity, type CombatHost } from '../gameplay/Combat';
+import { hitEntity, hitPlayer, type CombatHost } from '../gameplay/Combat';
 import { hash2i } from '../core/RNG';
 import type { World } from '../world/World';
 import type { GameTime } from '../core/Time';
@@ -249,6 +249,8 @@ export class EntityManager {
   private think(e: Entity, zone: ActiveZone) {
     const n = e.npc!, p = this.host.player;
     const minute = this.host.time.minuteOfDay, hour = this.host.time.hour;
+    // hostile au joueur (délit) : les gardes le prennent en chasse
+    if (e.hostile && !p.dead && Math.hypot(p.x - e.x, p.z - e.z) < 45 && (n.profession === 'garde' || n.profession === 'soldat')) { e.action = 'combattre'; e.foe = null; e.path = null; return; }
     // menace : les gardes (et les plus braves) combattent, les autres fuient chez eux
     const threat = this.nearestThreat(e, 24);
     if (threat) {
@@ -278,6 +280,19 @@ export class EntityManager {
 
   private moveNpc(e: Entity, dt: number) {
     const foe = e.foe;
+    if (e.action === 'combattre' && !foe && e.hostile) {
+      const p = this.host.player, dx = p.x - e.x, dz = p.z - e.z, d = Math.hypot(dx, dz);
+      e.heading = turn(e.heading, Math.atan2(dx, -dz), dt * 8);
+      if (d > 1.9) { e.x += (dx / d) * e.speed * 2.6 * dt; e.z += (dz / d) * e.speed * 2.6 * dt; e.pose.walk += dt * 10; }
+      else {
+        e.cooldown -= dt;
+        e.pose.swing = Math.max(0, e.cooldown - 0.6);
+        if (e.cooldown <= 0) { e.cooldown = 1.4; hitPlayer(this.host.combat, 10, e); }
+      }
+      const gy0 = this.ground(e.x, e.z, e.y + 0.3);
+      e.y += (gy0 - e.y) * Math.min(1, dt * 12);
+      return;
+    }
     if (e.action === 'combattre' && foe) {
       const dx = foe.x - e.x, dz = foe.z - e.z, d = Math.hypot(dx, dz);
       e.heading = turn(e.heading, Math.atan2(dx, -dz), dt * 8);

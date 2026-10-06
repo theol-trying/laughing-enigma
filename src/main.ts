@@ -8,6 +8,8 @@ import { clamp } from './core/math';
 import { GENERATOR_VERSION } from './version';
 import { CHUNK } from './world/constants';
 import { BIOMES } from './world/terrain/Biomes';
+import { UIManager } from './ui/UI';
+import { DialogueScreen, TradeScreen } from './ui/DialogueScreen';
 
 const canvas = document.getElementById('screen') as HTMLCanvasElement;
 const r = new Renderer(canvas);
@@ -16,13 +18,18 @@ r.resize(cellH());
 window.addEventListener('resize', () => r.resize(cellH()));
 document.getElementById('boot')?.remove();
 const input = new Input(canvas);
-canvas.addEventListener('click', () => input.requestLock());
+const screens = new UIManager(r, input);
+canvas.addEventListener('click', () => { if (!screens.modal) input.requestLock(); });
 
 const seedText = new URLSearchParams(location.search).get('seed') || 'TEST-001';
 const t0 = performance.now();
 const game = new Game(seedText, r);
 const genMs = performance.now() - t0;
 let showDebug = true, viewMode = 0;
+game.ui = {
+  openDialogue: (node, onClose) => screens.open(new DialogueScreen(node, onClose)),
+  openTrade: (e) => { screens.closeAll(); screens.open(new TradeScreen(e, game)); },
+};
 const log: { text: string; t: number; color: number }[] = [];
 game.events.on('message', (e) => { log.push({ text: e.text, t: performance.now(), color: e.color ?? C.text }); if (log.length > 6) log.shift(); });
 let last = performance.now(), fps = 60;
@@ -34,7 +41,7 @@ function tick(now: number) {
   if (input.key('n')) game.player.noclip = !game.player.noclip;
   if (input.key('t')) game.time.minutes += 60;
   for (let k = 1; k <= 5; k++) if (input.pressed('Digit' + k)) viewMode = k - 1;
-  game.update(dt, input);
+  if (screens.modal) screens.update(); else game.update(dt, input);
 
   const ui = r.ui; ui.clear();
   const p = game.player;
@@ -64,13 +71,14 @@ function tick(now: number) {
   if (game.focus) ui.center(Math.floor(r.rows / 2) + 2, ` [E] ${game.focus.label} `, C.yellow, C.panel);
   const tNow = performance.now();
   log.filter((l) => tNow - l.t < 6000).forEach((l, i, arr) => ui.text(1, r.rows - 1 - arr.length + i, ` ${l.text} `, l.color, C.panel, 0.7));
+  screens.draw();
   game.render(viewMode);
   input.endFrame();
 }
 function frame(now: number) { tick(now); requestAnimationFrame(frame); }
 requestAnimationFrame(frame);
 (window as any).__dbg = {
-  game, r, input,
+  game, r, input, screens,
   step: (n = 1) => { for (let i = 0; i < n; i++) { last -= 16; tick(performance.now()); } },
   tp: (x: number, z: number) => { game.player.x = x; game.player.z = z; game.world.chunks.update(x, z, -1); game.player.y = game.world.heightAt(x, z) + 0.2; },
 };

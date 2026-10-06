@@ -17,6 +17,11 @@ import { WorldState, type Dropped } from '../gameplay/WorldState';
 import { item } from '../gameplay/Items';
 import { creatureLoot, containerLoot, type LootLine } from '../gameplay/Loot';
 import { perceives } from '../ai/Perception';
+import { Reputation } from '../gameplay/Reputation';
+import { Economy } from '../gameplay/Economy';
+import { Rumors } from '../gameplay/Rumors';
+import { QuestSystem } from '../gameplay/QuestSystem';
+import { DialogueSystem, type DialogueNode } from '../gameplay/Dialogue';
 import { Camera } from '../rendering/Camera';
 import { computeAtmosphere, CLEAR_WEATHER } from '../rendering/Atmosphere';
 import { M } from '../rendering/Materials';
@@ -45,6 +50,15 @@ export class Game {
   readonly fight = new PlayerCombat();
   readonly entities: EntityManager;
   readonly combat: CombatHost;
+  readonly rep: Reputation;
+  readonly economy: Economy;
+  readonly rumors: Rumors;
+  readonly quests: QuestSystem;
+  readonly dialogue: DialogueSystem;
+  /** branché par l'interface : ouverture des écrans de dialogue et de commerce */
+  ui: { openDialogue(node: DialogueNode, onClose: () => void): void; openTrade(e: Entity): void } | null = null;
+  private stocks = new Map<string, { id: string; qty: number }[]>();
+  private questT = 0;
   private far: GpuMesh;
   dungeon: ActiveDungeon | null = null;
   focus: Focus | null = null;
@@ -68,6 +82,19 @@ export class Game {
     this.entities = new EntityManager(this);
     this.world.chunks.dynamic = this.entities.dynamic;
     this.lastDay = this.time.day;
+    this.rep = new Reputation(this.world.civ, this.events, this.entities);
+    this.rep.day = () => this.time.day;
+    this.economy = new Economy(this.world.civ, this.seed, (sid) => !this.entities.clearedCamps.has(sid));
+    this.rumors = new Rumors(this.world.civ, this.events, () => this.time.day);
+    this.quests = new QuestSystem(this);
+    this.dialogue = new DialogueSystem(this);
+    this.events.on('camp:cleared', () => this.economy.refreshBlocked());
+    this.events.on('entity:killed', (k) => {
+      if (k.killerId !== 'player' || k.kind !== 'npc') return;
+      const w = this.witnesses();
+      this.events.emit('player:crime', { type: 'meurtre', victimId: k.victimId, settlementId: k.settlementId, factionId: k.factionId, witnesses: w.map((x) => x.id) });
+      if (w.length && k.settlementId !== undefined) this.alertGuards(k.settlementId);
+    });
     // équipement de départ du voyageur
     const ch = this.character;
     for (const [id, n] of [['épée courte', 1], ['tunique de cuir', 1], ['pain', 3], ['potion de soin', 2], ['viande crue', 1]] as [string, number][]) ch.inv.add(id, n);
@@ -85,6 +112,36 @@ export class Game {
   }
 
   inDungeon(): boolean { return this.dungeon !== null; }
+  weather(): string { return 'clair'; }
+
+  /** Stock du jour d'un marchand (les achats le vident). */
+  stockOf(e: Entity): { id: string; qty: number }[] {
+    const key = `${e.id}:${this.time.day}`;
+    let s = this.stocks.get(key);
+    if (!s) { s = this.economy.stock(e.npc!, this.time.day); this.stocks.set(key, s); }
+    return s.filter((x) => x.qty > 0);
+  }
+  openTrade(e: Entity): void { if (this.rep.mood(e.npc!) === 'hostile') return; this.ui?.openTrade(e); }
+  payFine(sid: number): boolean {
+    const b = this.rep.bounty.get(sid) ?? 0;
+    if (this.character.inv.gold < b) return false;
+    this.character.inv.gold -= b; this.rep.bounty.delete(sid);
+    for (const e of this.entities.entities) if (e.npc?.sid === sid) e.hostile = false;
+    this.events.emit('message', { text: `Amende payée (${b} or).` });
+    return true;
+  }
+  resistArrest(sid: number): void { this.alertGuards(sid); this.events.emit('message', { text: 'Les gardes dégainent !', color: 0xe05040 }); }
+  alertGuards(sid: number): void { for (const e of this.entities.entities) if (e.npc?.sid === sid && (e.npc.profession === 'garde' || e.npc.profession === 'soldat')) e.hostile = true; }
+
+  /** Le joueur a frappé quelqu'un : agression (témoins, gardes). */
+  onHit(e: Entity): void {
+    this.target = e;
+    if (!e.npc || e.hostile) return;
+    e.hostile = true;
+    const w = this.witnesses();
+    this.events.emit('player:crime', { type: 'agression', victimId: e.id, settlementId: e.npc.sid, factionId: e.npc.factionId, witnesses: [...new Set([...w.map((x) => x.id), e.id])] });
+    this.alertGuards(e.npc.sid);
+  }
   rain(): number { return 0; }
   night(): number { return this.atmoNight; }
   fog(): number { return 0; }
@@ -233,6 +290,7 @@ export class Game {
           const c = this.dungeon.layout.chests.find((x) => x.key === pr.key);
           building = `coffre${c?.tier ?? 1}`; depth = this.world.civ.dungeons[this.dungeon.layout.id]?.depth ?? 1;
           if (c?.hasKey) questItem = this.dungeon.layout.keyItem;
+          if (c && c.tier >= 3) { const k = this.dungeon.layout.kind; if (k === 'crypte') questItem = `quête:relique:${this.dungeon.layout.id}`; if (k === 'forteresse') questItem = `quête:journal:${this.dungeon.layout.id}`; }
         }
         if (building === 'camp' && !this.state.flags.get(`marchandises:${pr.sid}`)) { questItem = `quête:marchandises:${pr.sid}`; this.state.flags.set(`marchandises:${pr.sid}`, true); }
         this.giveLoot(containerLoot(this.seed, pr.key, { building, depth, questItem }), pr.kind === 'coffre' ? 'Coffre' : pr.kind === 'tonneau' ? 'Tonneau' : 'Caisse');
@@ -287,12 +345,10 @@ export class Game {
     }
   }
 
-  /** Dialogue (remplacé par le système de dialogue complet à l'étape 7b). */
   talkTo(e: Entity): void {
-    e.talkT = 8;
-    const n = e.npc!, h = this.time.hour;
-    const hello = h < 5 || h >= 21 ? 'Bonsoir… il est tard' : h < 12 ? 'Bonjour' : 'Le bonjour';
-    this.events.emit('message', { text: `${n.first} ${n.last}, ${n.profession} : « ${hello}, voyageur. »` });
+    e.talkT = 60;
+    const node = this.dialogue.start(e);
+    if (this.ui) this.ui.openDialogue(node, () => { e.talkT = 2; });
   }
 
   sleep(): void {
@@ -352,7 +408,9 @@ export class Game {
   update(dt: number, input: Input): void {
     this.elapsed += dt;
     this.time.advance(dt);
-    if (this.time.day !== this.lastDay) { this.lastDay = this.time.day; this.entities.dailyTick(); }
+    if (this.time.day !== this.lastDay) { this.lastDay = this.time.day; this.entities.dailyTick(); this.economy.dailyTick(); this.rumors.dailyTick(); this.stocks.clear(); }
+    this.questT -= dt;
+    if (this.questT <= 0) { this.questT = 1; this.quests.tick(); }
     const p = this.player;
     this.syncStats();
     if (p.dead) {
@@ -372,7 +430,7 @@ export class Game {
       }
       this.fight.update(dt, input, {
         player: p, character: this.character, events: this.events, combat: this.combat, entities: this.entities.entities,
-        heightAt: (x, z) => (this.dungeon ? 0 : this.world.heightAt(x, z)), onHit: (e) => { this.target = e; },
+        heightAt: (x, z) => (this.dungeon ? 0 : this.world.heightAt(x, z)), onHit: (e) => this.onHit(e),
       });
       if (input.key('h') && this.character.inv.count('potion de soin')) this.useItem('potion de soin');
       if (input.key('b')) this.swapBow();

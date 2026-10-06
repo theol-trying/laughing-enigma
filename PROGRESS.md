@@ -6,14 +6,13 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Étape 7b — Réputation (globale/faction/locale) + mémoire des PNJ (écoute player:crime, entity:killed, player:helped,
-camp:cleared, quest:completed) → opinion, prix, dialogues, hostilité des gardes (arrestation/amende/combat) ;
-Economy (offre/demande par implantation, prix = base × rareté × perturbations : route bloquée par un camp actif →
-pénurie chez le marchand, retour progressif après camp:cleared) ; DialogueSystem (modèles + règles : métier,
-traits, lieu, heure, météo, mémoire, rumeurs, connaissances poi/event/settlement, quêtes) ; Rumeurs (propagation
-le long des routes) ; QuestSystem (bandits ↔ marchandises volées quête:marchandises:{sid} déjà dans la caisse du camp ;
-loups ↔ fermier ; crypte ↔ prêtre ; expédition perdue). Puis UI (étape 8) : dialogue, commerce, inventaire (Tab),
-journal (J), carte (M), stats (C). Game.talkTo() est le point d'entrée du dialogue (provisoire).
+Étape 8 — UI terminal. Existant : ui/UI.ts (UIManager, écrans modaux, optionList), ui/DialogueScreen.ts (dialogue +
+TradeScreen), HUD provisoire dans main.ts. À faire : écran titre « ASCII FORT » [N] Nouvelle partie [C] Continuer [O] Options ;
+nouvelle partie (champ seed, RANDOMIZE, CREATE WORLD, aperçu : nom du monde, climat, région de départ, mini-carte) ;
+écran de chargement (création du monde) ; HUD final (barres HP/STA/MP, boussole avec repères de quêtes, heure/météo,
+cible, invites, journal des messages) ; Inventaire (Tab : équiper/utiliser/jeter) ; Journal (J : quêtes actives/terminées) ;
+Carte ASCII (M : brouillard state.explored, lieux découverts state.discovered, routes, rivières, repères de quêtes) ;
+Stats (C : caractéristiques, compétences, répartition des points) ; Pause (Échap : reprendre, sauvegarder, options, quitter).
 
 ## Étapes
 - [x] 0. Setup : Vite 8 + TS 7 + Vitest 5, git (identité theol-trying noreply), PROGRESS/CLAUDE.md
@@ -23,7 +22,7 @@ journal (J), carte (M), stats (C). Game.talkTo() est le point d'entrée du dialo
 - [x] 4. Chunks : TerrainSampler (h(x,z) pur), maillage chunk, eau, végétation, streaming, terrain lointain ; joueur + collisions
 - [x] 5. Civilisation : factions, histoire, implantations, routes A* + ponts, plans de village (bâtiments visitables meublés), POI, donjons 3D (entrée/sortie E)
 - [x] 6. Entités & IA : PNJ (identité, emplois du temps, nav locale), monstres (repaires, écologie, perception, utility AI, meutes), simulation par niveaux
-- [~] 7. Gameplay (7a fait : objets, inventaire/équipement, combat complet, butin, interactions ; 7b : réputation, économie, dialogues, rumeurs, quêtes) : objets, inventaire, équipement, combat (léger/lourd/blocage/esquive/arc), loot, XP/compétences, réputation/mémoire, économie, dialogues, rumeurs, quêtes systémiques
+- [x] 7. Gameplay : objets, inventaire, combat, butin, XP, réputation/mémoire, économie, dialogues, rumeurs, quêtes systémiques
 - [ ] 8. UI terminal : titre/nouvelle partie, HUD, inventaire, journal, stats, carte, dialogue, commerce, pause/options
 - [ ] 9. Ambiance : jour/nuit, météo, torches/lanternes/fenêtres, ombres soleil, eau, audio Web Audio
 - [ ] 10. Sauvegarde IndexedDB (diff), outils debug (console F1, overlay F3), docs (README, docs/architecture.md)
@@ -67,3 +66,5 @@ journal (J), carte (M), stats (C). Game.talkTo() est le point d'entrée du dialo
   retour), gardes qui combattent, civils qui fuient, mort/réveil à l'auberge, attaque de base (clic), blocage (clic droit).
 - 2026-10-06 : 7a fait. Combat (léger/lourd/blocage/esquive V/arc B/sorts R F/potion H), butin, coffres (vol + témoins),
   auberge (10 or), prière, puits, cuisson, forge de flèches, potions, clé + porte de donjon, pièges, XP/niveaux, découvertes.
+- 2026-10-06 : 7b fait. Chaîne systémique vérifiée : camp sur la route → pénurie d'outils (31 or) → dialogue du marchand →
+  quête → camp démantelé → route débloquée → récompense, opinion +44 → prix revenus à 15 or en 4 jours.

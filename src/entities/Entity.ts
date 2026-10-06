@@ -53,6 +53,8 @@ export class Entity {
   /** effets élémentaires en cours */
   status?: { burn: number; frost: number; poison: number; tick?: number };
   looted = false;
+  /** hostile au joueur (garde après un délit, villageois agressé) */
+  hostile = false;
   cooldown = 0;
   /** bâtiments/zone où l'entité se trouve (pour la nav locale) */
   zone = -1;
