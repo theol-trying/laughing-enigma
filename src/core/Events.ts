@@ -2,13 +2,13 @@
 // (mort → réputation, mémoire des PNJ, rumeurs, quêtes, économie…).
 
 export interface GameEvents {
-  'entity:killed': { victimId: string; killerId: string | null; kind: 'npc' | 'monster' | 'player'; type: string; factionId?: string; settlementId?: string; campId?: string; x: number; z: number };
+  'entity:killed': { victimId: string; killerId: string | null; kind: 'npc' | 'monster' | 'player'; type: string; factionId?: number; settlementId?: number; campId?: number; x: number; z: number };
   'entity:damaged': { targetId: string; sourceId: string | null; amount: number };
-  'player:crime': { type: 'vol' | 'agression' | 'meurtre'; victimId?: string; settlementId?: string; factionId?: string; witnesses: string[]; value?: number };
+  'player:crime': { type: 'vol' | 'agression' | 'meurtre'; victimId?: string; settlementId?: number; factionId?: number; witnesses: string[]; value?: number };
   'player:helped': { npcId: string; magnitude: number; reason: string };
   'item:picked': { itemId: string; qty: number; key?: string };
   'container:opened': { key: string; ownerId?: string };
-  'camp:cleared': { campId: string };
+  'camp:cleared': { campId: number };
   'quest:started': { questId: string };
   'quest:updated': { questId: string };
   'quest:completed': { questId: string };

@@ -21,6 +21,8 @@ export interface MonsterState {
   loot: string;             // table de butin
   element?: 'poison' | 'feu' | 'givre';
   xp: number;
+  windup: number;           // élan de l'attaque en cours (s)
+  lair: string;             // repaire d'origine
 }
 
 export class Entity {
@@ -46,6 +48,9 @@ export class Entity {
   sid = -1;
   npc?: NPCData;
   mon?: MonsterState;
+  /** adversaire au combat (gardes) et recharge d'attaque */
+  foe: Entity | null = null;
+  cooldown = 0;
   /** bâtiments/zone où l'entité se trouve (pour la nav locale) */
   zone = -1;
 

@@ -9,6 +9,7 @@ import type { ChunkData, Prop } from '../world/Chunk';
 import { Player } from '../entities/Player';
 import { EntityManager } from '../entities/EntityManager';
 import type { Entity } from '../entities/Entity';
+import { hitEntity, type CombatHost } from '../gameplay/Combat';
 import { Camera } from '../rendering/Camera';
 import { computeAtmosphere, CLEAR_WEATHER } from '../rendering/Atmosphere';
 import { M } from '../rendering/Materials';
@@ -33,6 +34,13 @@ export class Game {
   /** personnage visé */
   focusEntity: Entity | null = null;
   readonly entities: EntityManager;
+  readonly combat: CombatHost;
+  /** cible du joueur (créature visée au combat) */
+  target: Entity | null = null;
+  private attackCd = 0;
+  private respawnT = 0;
+  private lastDay = 0;
+  private atmoNight = 0;
   elapsed = 0;
   private m4 = mat4();
 
@@ -44,12 +52,32 @@ export class Game {
     this.player.x = sp.x; this.player.z = sp.z; this.player.heading = sp.heading;
     this.world.chunks.update(sp.x, sp.z, -1);
     this.player.y = this.world.heightAt(sp.x, sp.z) + 0.1;
+    this.combat = { player: this.player, events: this.events, onPlayerDeath: () => this.onPlayerDeath(), playerArmor: () => 0 };
     this.entities = new EntityManager(this);
+    this.lastDay = this.time.day;
     this.world.chunks.dynamic = this.entities.dynamic;
   }
 
   inDungeon(): boolean { return this.dungeon !== null; }
   rain(): number { return 0; }
+  night(): number { return this.atmoNight; }
+  fog(): number { return 0; }
+
+  onPlayerDeath(): void {
+    this.respawnT = 4;
+    this.events.emit('message', { text: 'Vous vous effondrez… tout devient noir.', color: 0xe05040 });
+  }
+
+  private respawn(): void {
+    if (this.dungeon) this.exitDungeon();
+    const sp = this.world.spawn(), p = this.player;
+    p.x = sp.x; p.z = sp.z; p.heading = sp.heading; p.vx = p.vz = p.vy = 0;
+    this.world.chunks.update(p.x, p.z, -1);
+    p.y = this.world.heightAt(p.x, p.z) + 0.1;
+    p.dead = false; p.hp = Math.round(p.maxHp * 0.5); p.stamina = p.maxStamina; p.poison = p.burn = p.frost = 0;
+    this.time.minutes += 8 * 60;
+    this.events.emit('message', { text: "Vous vous réveillez à l'auberge, huit heures plus tard. On vous a ramené." });
+  }
 
   /** Nom lisible d'un objet interactif. */
   propLabel(p: Prop): string {
@@ -98,6 +126,8 @@ export class Game {
     this.dungeon = { layout, mesh: this.renderer.createMesh(built.mesh), data: built.data, ret: { x: p.x, y: p.y, z: p.z, heading: p.heading + Math.PI }, doorOpen: false };
     this.applyDoor();
     this.world.chunks.overlays = [built.data];
+    this.entities.clear();
+    this.entities.spawnDungeon(layout);
     p.bounded = false;
     p.x = layout.entrance.x; p.z = layout.entrance.z; p.y = 0.05; p.vx = p.vz = p.vy = 0;
     p.heading = 0; // vers le nord du donjon (−z), où sont les autres salles
@@ -109,6 +139,7 @@ export class Game {
     if (!dg) return;
     this.renderer.deleteMesh(dg.mesh);
     this.world.chunks.overlays = [];
+    this.entities.clearDungeon();
     const p = this.player;
     p.bounded = true;
     p.x = dg.ret.x; p.z = dg.ret.z; p.heading = dg.ret.heading; p.vx = p.vz = p.vy = 0;
@@ -132,8 +163,26 @@ export class Game {
   update(dt: number, input: Input): void {
     this.elapsed += dt;
     this.time.advance(dt);
-    this.player.look(input);
-    this.player.update(dt, input, this.world);
+    if (this.time.day !== this.lastDay) { this.lastDay = this.time.day; this.entities.dailyTick(); }
+    const p = this.player;
+    if (p.dead) {
+      this.respawnT -= dt;
+      if (this.respawnT <= 0) this.respawn();
+    } else {
+      p.look(input);
+      p.blocking = input.mouseDown(2) && p.stamina > 0;
+      p.update(dt, input, this.world);
+      p.tickStatus(dt);
+      if (p.dead) this.onPlayerDeath();
+      if (p.lastFall > 13) { p.hp -= Math.round((p.lastFall - 13) * 6); this.events.emit('message', { text: 'Chute douloureuse.', color: 0xe05040 }); if (p.hp <= 0) { p.hp = 0; p.dead = true; this.onPlayerDeath(); } }
+      // attaque de base (remplacée par les armes à l'étape 7)
+      this.attackCd -= dt;
+      if (input.locked && input.mouseClicked(0) && this.attackCd <= 0 && p.stamina > 8) {
+        this.attackCd = 0.6; p.stamina -= 8;
+        const t = this.entities.pick(p.x, p.z, p.heading, 2.4);
+        if (t && (t.mon || t.npc)) { this.target = t; hitEntity(this.combat, t, 12, 'player'); }
+      }
+    }
     if (!this.dungeon) this.world.chunks.update(this.player.x, this.player.z, 5);
     this.entities.update(dt);
     this.focusEntity = this.entities.pick(this.player.x, this.player.z, this.player.heading);
@@ -145,6 +194,7 @@ export class Game {
     const p = this.player, c = this.camera, dg = this.dungeon;
     c.x = p.x; c.y = p.eyeY; c.z = p.z; c.heading = p.heading; c.pitch = p.pitch;
     const atmo = computeAtmosphere(dg ? 0 : this.time.hour, CLEAR_WEATHER, dg ? 1 : 0, 0);
+    this.atmoNight = dg ? 0.5 : atmo.night;
     if (dg) {
       // souterrain : ni soleil ni ciel, ambiance faible et chaude, brouillard noir
       atmo.sunColor = [0, 0, 0]; atmo.ambSky = [0.13, 0.115, 0.1]; atmo.ambGround = [0.08, 0.07, 0.06];
@@ -166,7 +216,7 @@ export class Game {
       if (lights.length >= 24) break;
     }
     this.instances.reset();
-    this.entities.render(this.instances, c.x, c.z);
+    this.entities.render(this.instances, c.x, c.z, this.target && this.target.alive ? this.target.id : null);
     if (dg && dg.layout.lockedDoor && !dg.doorOpen) {
       const d = dg.layout.lockedDoor;
       this.instances.add(trsYawPitch(this.m4, d.x, 1.6, d.z, d.horizontal ? Math.PI / 2 : 0, 0, 3.4, 3.2, 0.3), 0x5a3a22, M.DOOR, 0, 0, 0.3);

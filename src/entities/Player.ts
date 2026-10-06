@@ -16,6 +16,30 @@ export class Player {
   bounded = true;
   lastFall = 0;           // vitesse verticale à l'atterrissage (dégâts de chute)
   moving = false;
+  // état de combat (étendu à l'étape 7 : équipement, compétences)
+  hp = 100; maxHp = 100;
+  stamina = 100; maxStamina = 100;
+  mana = 50; maxMana = 50;
+  dead = false;
+  invuln = 0;         // fenêtre d'invulnérabilité (esquive)
+  blocking = false;
+  shield = false;
+  hurt = 0;           // flash rouge à l'écran
+  poison = 0; frost = 0; burn = 0;
+
+  /** Effets dans le temps : poison, brûlure, givre (ralentit), régénération d'endurance. */
+  tickStatus(dt: number): number {
+    let dmg = 0;
+    if (this.poison > 0) { this.poison -= dt; dmg += 2.2 * dt; }
+    if (this.burn > 0) { this.burn -= dt; dmg += 4 * dt; }
+    if (this.frost > 0) this.frost -= dt;
+    if (this.invuln > 0) this.invuln -= dt;
+    if (this.hurt > 0) this.hurt -= dt;
+    const regen = this.blocking ? 4 : this.sprinting ? -14 : 16;
+    this.stamina = Math.max(0, Math.min(this.maxStamina, this.stamina + regen * dt));
+    if (dmg > 0) { this.hp -= dmg; if (this.hp <= 0) { this.hp = 0; this.dead = true; } }
+    return dmg;
+  }
   private circles: CircleCollider[] = [];
   private segs: SegCollider[] = [];
   private plats: Platform[] = [];
@@ -48,7 +72,7 @@ export class Player {
     const ml = Math.hypot(mx, mz);
     if (ml > 0) { mx /= ml; mz /= ml; }
     this.moving = ml > 0;
-    this.sprinting = input.isDown('ShiftLeft') && f > 0 && !this.crouch;
+    this.sprinting = input.isDown('ShiftLeft') && f > 0 && !this.crouch && this.stamina > 2;
 
     if (this.noclip) {
       const sp = (this.sprinting ? 60 : 15) * dt;
@@ -59,7 +83,7 @@ export class Player {
       return;
     }
 
-    const speed = (this.swimming ? 2.4 : this.sprinting ? 7 : this.crouch ? 2 : 4.2) * speedMul;
+    const speed = (this.swimming ? 2.4 : this.sprinting ? 7 : this.crouch ? 2 : 4.2) * speedMul * (this.frost > 0 ? 0.6 : 1) * (this.blocking ? 0.55 : 1);
     const acc = this.onGround || this.swimming ? 12 : 2.5;
     const k = Math.min(1, acc * dt);
     this.vx += (mx * speed - this.vx) * k;

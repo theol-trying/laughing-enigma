@@ -6,12 +6,14 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Étape 6b — Monstres & IA de combat : entities/Monster.ts (définitions loup, bandit/chef bandit, gobelin/chef, squelette,
-spectre, araignée, troll : stats, perception, territoire, agressivité, nocturne, butin), spawn depuis civ.pois (tanières,
-camps = settlements type camp, antre, nid) et DungeonLayout.spawns, populations agrégées hors zone active
-(écologie : proies/prédateurs, bandits sur routes, danger loin des villes, nocturnes), utility AI (errance, patrouille,
-chasse, attaque, fuite, retour au territoire, garde du nid, appel des alliés), perception (vue + ouïe + lumière).
-Déjà fait (6a) : entities/{NPC,Models,Entity,EntityManager}.ts, ai/{Pathfinding,Schedule}.ts, PNJ actifs < 250 m.
+Étape 7 — Gameplay. À faire : gameplay/Items.ts (armes : épée, hache, masse, lance, arc, dague, bâton ; bouclier ;
+armures ; nourriture ; potions ; matériaux ; clés ; objets de quête ; valeurs), Inventory + équipement, combat joueur
+complet (léger/lourd/blocage/esquive V ou double-tap/arc + projectiles/endurance/élémentaire ; remplace l'attaque de
+base de Game.update), Loot (tables par créature/biome/lieu/faction), Skills (XP, niveaux, caractéristiques, compétences),
+Reputation + Memory (événements → opinion, prix, quêtes), Economy (productions/besoins/prix, perturbations de route),
+Dialogue (modèles + règles, connaissances des PNJ), Rumeurs, Quêtes systémiques (camp de bandits ↔ route ↔ marchand ;
+loups ↔ fermier ; crypte/relique ↔ prêtre ; expédition perdue), interactions des props (coffres, lits, enclume, autel,
+porte verrouillée du donjon via la clé). Combat.ts (hitEntity/hitPlayer) et Player (hp, stamina, statuts) existent.
 
 ## Étapes
 - [x] 0. Setup : Vite 8 + TS 7 + Vitest 5, git (identité theol-trying noreply), PROGRESS/CLAUDE.md
@@ -20,7 +22,7 @@ Déjà fait (6a) : entities/{NPC,Models,Entity,EntityManager}.ts, ai/{Pathfindin
 - [x] 3. Monde macro : élévation, hydrologie (priority-flood, D8, rivières polylignes, lacs, vallées), climat, biomes, régions, noms + tests déterminisme
 - [x] 4. Chunks : TerrainSampler (h(x,z) pur), maillage chunk, eau, végétation, streaming, terrain lointain ; joueur + collisions
 - [x] 5. Civilisation : factions, histoire, implantations, routes A* + ponts, plans de village (bâtiments visitables meublés), POI, donjons 3D (entrée/sortie E)
-- [~] 6. Entités & IA (6a fait : PNJ + emplois du temps + pathfinding ; 6b : monstres) : PNJ (identité, emploi du temps), monstres, utility AI, perception, pathfinding local
+- [x] 6. Entités & IA : PNJ (identité, emplois du temps, nav locale), monstres (repaires, écologie, perception, utility AI, meutes), simulation par niveaux
 - [ ] 7. Gameplay : objets, inventaire, équipement, combat (léger/lourd/blocage/esquive/arc), loot, XP/compétences, réputation/mémoire, économie, dialogues, rumeurs, quêtes systémiques
 - [ ] 8. UI terminal : titre/nouvelle partie, HUD, inventaire, journal, stats, carte, dialogue, commerce, pause/options
 - [ ] 9. Ambiance : jour/nuit, météo, torches/lanternes/fenêtres, ombres soleil, eau, audio Web Audio
@@ -60,3 +62,6 @@ Déjà fait (6a) : entities/{NPC,Models,Entity,EntityManager}.ts, ai/{Pathfindin
   pièges, coffres, spawns ; espace x ≥ 20000 ; entrée/sortie par E. Étape 5 terminée.
 - 2026-10-06 : 6a fait (18 tests). PNJ générés par implantation (identité, métier, foyer, relations, connaissances,
   objectifs), emplois du temps → lieux concrets, grille de nav 1 m (portes rouvertes, zones connexes), modèles animés.
+- 2026-10-06 : 6b fait (18 tests). Repaires (loups, araignées, troll, bandits + chef, gobelins, squelettes, spectre),
+  créatures de donjon, IA (repos nocturne, errance élargie la nuit, chasse, attaque avec élan, 2 assaillants max, fuite,
+  retour), gardes qui combattent, civils qui fuient, mort/réveil à l'auberge, attaque de base (clic), blocage (clic droit).
