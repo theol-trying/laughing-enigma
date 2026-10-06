@@ -6,12 +6,12 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Étape 6 — Entités & IA. À faire : modèles en boîtes animés (entities/Models.ts → InstanceBuffer, lettre roguelike
-au loin), PNJ générés par implantation (identité, métier, domicile/travail = bâtiments du Layout, traits, relations,
-inventaire, besoins, emploi du temps), monstres (loup, bandit, gobelin, squelette, troll/araignée…) issus des POI
-(camps, tanières, donjons : DungeonLayout.spawns), utility AI + perception + pathfinding local, simulation par niveaux.
-Points d'appui : Game.ts (boucle, donjon actif, focus/interact E, props), civ (settlements, pois, factions),
-CivWorld.layouts (bâtiments avec furniture : lits, comptoirs, enclumes…), ChunkManager.propsNear/overlays.
+Étape 6b — Monstres & IA de combat : entities/Monster.ts (définitions loup, bandit/chef bandit, gobelin/chef, squelette,
+spectre, araignée, troll : stats, perception, territoire, agressivité, nocturne, butin), spawn depuis civ.pois (tanières,
+camps = settlements type camp, antre, nid) et DungeonLayout.spawns, populations agrégées hors zone active
+(écologie : proies/prédateurs, bandits sur routes, danger loin des villes, nocturnes), utility AI (errance, patrouille,
+chasse, attaque, fuite, retour au territoire, garde du nid, appel des alliés), perception (vue + ouïe + lumière).
+Déjà fait (6a) : entities/{NPC,Models,Entity,EntityManager}.ts, ai/{Pathfinding,Schedule}.ts, PNJ actifs < 250 m.
 
 ## Étapes
 - [x] 0. Setup : Vite 8 + TS 7 + Vitest 5, git (identité theol-trying noreply), PROGRESS/CLAUDE.md
@@ -20,7 +20,7 @@ CivWorld.layouts (bâtiments avec furniture : lits, comptoirs, enclumes…), Chu
 - [x] 3. Monde macro : élévation, hydrologie (priority-flood, D8, rivières polylignes, lacs, vallées), climat, biomes, régions, noms + tests déterminisme
 - [x] 4. Chunks : TerrainSampler (h(x,z) pur), maillage chunk, eau, végétation, streaming, terrain lointain ; joueur + collisions
 - [x] 5. Civilisation : factions, histoire, implantations, routes A* + ponts, plans de village (bâtiments visitables meublés), POI, donjons 3D (entrée/sortie E)
-- [ ] 6. Entités & IA : PNJ (identité, emploi du temps), monstres, utility AI, perception, pathfinding local
+- [~] 6. Entités & IA (6a fait : PNJ + emplois du temps + pathfinding ; 6b : monstres) : PNJ (identité, emploi du temps), monstres, utility AI, perception, pathfinding local
 - [ ] 7. Gameplay : objets, inventaire, équipement, combat (léger/lourd/blocage/esquive/arc), loot, XP/compétences, réputation/mémoire, économie, dialogues, rumeurs, quêtes systémiques
 - [ ] 8. UI terminal : titre/nouvelle partie, HUD, inventaire, journal, stats, carte, dialogue, commerce, pause/options
 - [ ] 9. Ambiance : jour/nuit, météo, torches/lanternes/fenêtres, ombres soleil, eau, audio Web Audio
@@ -58,3 +58,5 @@ CivWorld.layouts (bâtiments avec furniture : lits, comptoirs, enclumes…), Chu
   éclairés (âtre, bougies), torches la nuit, silhouettes lointaines. Départ devant l'auberge. 60 fps.
 - 2026-10-06 : 5c fait (16 tests). Donjons : graphe de salles + boucles, porte verrouillée devant le boss, clé en salle annexe,
   pièges, coffres, spawns ; espace x ≥ 20000 ; entrée/sortie par E. Étape 5 terminée.
+- 2026-10-06 : 6a fait (18 tests). PNJ générés par implantation (identité, métier, foyer, relations, connaissances,
+  objectifs), emplois du temps → lieux concrets, grille de nav 1 m (portes rouvertes, zones connexes), modèles animés.

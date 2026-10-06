@@ -52,7 +52,8 @@ function tick(now: number) {
     lines.forEach((l, i) => ui.text(1, i, ` ${l} `, i === 0 ? C.title : i === 4 ? C.dim : C.text, C.panel, 0.75));
   }
   ui.text(Math.floor(r.cols / 2), Math.floor(r.rows / 2), '+', C.white);
-  if (game.focus) ui.center(Math.floor(r.rows / 2) + 2, ` [E] ${game.propLabel(game.focus)} `, C.yellow, C.panel);
+  if (game.focusEntity) ui.center(Math.floor(r.rows / 2) + 2, ` [E] Parler à ${game.focusEntity.label} `, C.yellow, C.panel);
+  else if (game.focus) ui.center(Math.floor(r.rows / 2) + 2, ` [E] ${game.propLabel(game.focus)} `, C.yellow, C.panel);
   const tNow = performance.now();
   log.filter((l) => tNow - l.t < 6000).forEach((l, i, arr) => ui.text(1, r.rows - 1 - arr.length + i, ` ${l.text} `, l.color, C.panel, 0.7));
   game.render(viewMode);

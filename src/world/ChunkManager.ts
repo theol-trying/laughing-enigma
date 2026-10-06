@@ -14,6 +14,8 @@ export class ChunkManager<T = unknown> {
   radius = 6;
   /** chunks virtuels superposés (donjon actif) */
   overlays: ChunkData[] = [];
+  /** obstacles mobiles (PNJ, monstres) mis à jour chaque image */
+  dynamic: CircleCollider[] = [];
   extras?: ChunkExtras;
   lastLoadMs = 0;
 
@@ -84,11 +86,23 @@ export class ChunkManager<T = unknown> {
       for (const s of l.data.segs) if (Math.min(s.ax, s.bx) - 8 < x && Math.max(s.ax, s.bx) + 8 > x && Math.min(s.az, s.bz) - 8 < z && Math.max(s.az, s.bz) + 8 > z) segs.push(s);
       for (const p of l.data.platforms) if (Math.abs(p.cx - x) < p.hw + p.hd + 4 && Math.abs(p.cz - z) < p.hw + p.hd + 4) plats.push(p);
     }
+    for (const c of this.dynamic) if (Math.abs(c.x - x) < 8 && Math.abs(c.z - z) < 8) circles.push(c);
     for (const o of this.overlays) {
       for (const c of o.circles) if (Math.abs(c.x - x) < 8 && Math.abs(c.z - z) < 8) circles.push(c);
       for (const s of o.segs) if (Math.min(s.ax, s.bx) - 8 < x && Math.max(s.ax, s.bx) + 8 > x && Math.min(s.az, s.bz) - 8 < z && Math.max(s.az, s.bz) + 8 > z) segs.push(s);
       for (const p of o.platforms) if (Math.abs(p.cx - x) < p.hw + p.hd + 4 && Math.abs(p.cz - z) < p.hw + p.hd + 4) plats.push(p);
     }
+  }
+
+  /** Tous les obstacles des chunks qui recouvrent un rectangle (construction de grilles de navigation). */
+  collidersInRect(x0: number, z0: number, x1: number, z1: number): { circles: CircleCollider[]; segs: SegCollider[] } {
+    const circles: CircleCollider[] = [], segs: SegCollider[] = [];
+    for (let cz = Math.floor(z0 / CHUNK); cz <= Math.floor(z1 / CHUNK); cz++) for (let cx = Math.floor(x0 / CHUNK); cx <= Math.floor(x1 / CHUNK); cx++) {
+      const l = this.chunks.get(this.key(cx, cz));
+      if (l) { circles.push(...l.data.circles); segs.push(...l.data.segs); }
+    }
+    for (const o of this.overlays) { circles.push(...o.circles); segs.push(...o.segs); }
+    return { circles, segs };
   }
 
   /** Objets interactifs proches (chunks + superpositions). */

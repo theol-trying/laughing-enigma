@@ -7,6 +7,8 @@ import { buildFarTerrain } from '../world/FarTerrain';
 import { generateDungeon, buildDungeon, type DungeonLayout } from '../world/dungeons/DungeonGenerator';
 import type { ChunkData, Prop } from '../world/Chunk';
 import { Player } from '../entities/Player';
+import { EntityManager } from '../entities/EntityManager';
+import type { Entity } from '../entities/Entity';
 import { Camera } from '../rendering/Camera';
 import { computeAtmosphere, CLEAR_WEATHER } from '../rendering/Atmosphere';
 import { M } from '../rendering/Materials';
@@ -28,6 +30,9 @@ export class Game {
   dungeon: ActiveDungeon | null = null;
   /** objet interactif visé (pour l'invite « [E] … ») */
   focus: Prop | null = null;
+  /** personnage visé */
+  focusEntity: Entity | null = null;
+  readonly entities: EntityManager;
   elapsed = 0;
   private m4 = mat4();
 
@@ -39,7 +44,12 @@ export class Game {
     this.player.x = sp.x; this.player.z = sp.z; this.player.heading = sp.heading;
     this.world.chunks.update(sp.x, sp.z, -1);
     this.player.y = this.world.heightAt(sp.x, sp.z) + 0.1;
+    this.entities = new EntityManager(this);
+    this.world.chunks.dynamic = this.entities.dynamic;
   }
+
+  inDungeon(): boolean { return this.dungeon !== null; }
+  rain(): number { return 0; }
 
   /** Nom lisible d'un objet interactif. */
   propLabel(p: Prop): string {
@@ -64,6 +74,14 @@ export class Game {
   }
 
   interact(): void {
+    const e = this.focusEntity;
+    if (e && e.npc) {
+      e.talkT = 8;
+      const n = e.npc, h = this.time.hour;
+      const hello = h < 5 || h >= 21 ? 'Bonsoir… il est tard' : h < 12 ? 'Bonjour' : 'Le bonjour';
+      this.events.emit('message', { text: `${n.first} ${n.last}, ${n.profession} : « ${hello}, voyageur. »` });
+      return;
+    }
     const f = this.focus;
     if (!f) return;
     if (f.kind === 'entrée') this.enterDungeon(f.dungeonId);
@@ -117,7 +135,9 @@ export class Game {
     this.player.look(input);
     this.player.update(dt, input, this.world);
     if (!this.dungeon) this.world.chunks.update(this.player.x, this.player.z, 5);
-    this.focus = this.findFocus();
+    this.entities.update(dt);
+    this.focusEntity = this.entities.pick(this.player.x, this.player.z, this.player.heading);
+    this.focus = this.focusEntity ? null : this.findFocus();
     if (input.key('e')) this.interact();
   }
 
@@ -146,6 +166,7 @@ export class Game {
       if (lights.length >= 24) break;
     }
     this.instances.reset();
+    this.entities.render(this.instances, c.x, c.z);
     if (dg && dg.layout.lockedDoor && !dg.doorOpen) {
       const d = dg.layout.lockedDoor;
       this.instances.add(trsYawPitch(this.m4, d.x, 1.6, d.z, d.horizontal ? Math.PI / 2 : 0, 0, 3.4, 3.2, 0.3), 0x5a3a22, M.DOOR, 0, 0, 0.3);
