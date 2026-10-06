@@ -8,7 +8,7 @@
 ## ➜ REPRENDRE ICI
 Jalon 2 terminé (étapes 12 à 19) : modèles articulés, police fine (deux grilles), bibliothèques (packages/*),
 multijoueur coop Cloudflare (un Worker : assets + Durable Object Room ; autorité par zone ; faits partagés).
-Déploiement : à faire par l'utilisateur (compte Cloudflare + import du dépôt, voir README « Mettre le jeu en ligne »).
+Déployé le 2026-10-06 par l'utilisateur : Worker Cloudflare « ascii-fort » relié au dépôt (build réussi, redéploiement à chaque push sur main).
 Pistes : projectiles/effets visibles chez tous, échanges d'objets, gardes/réputation partagés, salons publics,
 puis les pistes du jalon 1 (Web Worker, villes denses, caravanes, donjons multi-niveaux…).
 Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest` (`npm run autosave`).
