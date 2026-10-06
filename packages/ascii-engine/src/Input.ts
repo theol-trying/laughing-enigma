@@ -49,14 +49,16 @@ export class Input {
   }
   exitLock(): void { if (this.locked) document.exitPointerLock?.(); }
 
-  isDown(code: string): boolean { return this.down.has(code); }
-  pressed(code: string): boolean { return this.pressedCodes.has(code); }
+  /** entrées neutralisées : le jeu continue de tourner sous un écran (partie en ligne) */
+  muted = false;
+  isDown(code: string): boolean { return !this.muted && this.down.has(code); }
+  pressed(code: string): boolean { return !this.muted && this.pressedCodes.has(code); }
   /** raccourci par caractère (e.key en minuscule) ou nom de touche (« Escape », « Tab »…) */
-  key(k: string): boolean { return this.pressedKeys.includes(k); }
+  key(k: string): boolean { return !this.muted && this.pressedKeys.includes(k); }
   keysThisFrame(): readonly string[] { return this.pressedKeys; }
-  mouseClicked(b = 0): boolean { return (this.clicked & (1 << b)) !== 0; }
-  mouseReleased(b = 0): boolean { return (this.released & (1 << b)) !== 0; }
-  mouseDown(b = 0): boolean { return (this.buttons & (1 << b)) !== 0; }
+  mouseClicked(b = 0): boolean { return !this.muted && (this.clicked & (1 << b)) !== 0; }
+  mouseReleased(b = 0): boolean { return !this.muted && (this.released & (1 << b)) !== 0; }
+  mouseDown(b = 0): boolean { return !this.muted && (this.buttons & (1 << b)) !== 0; }
 
   endFrame(): void {
     this.pressedCodes.clear(); this.pressedKeys = [];

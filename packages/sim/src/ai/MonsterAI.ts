@@ -1,4 +1,4 @@
-import type { Entity } from '../entities/Entity';
+import type { Entity, RemoteTarget } from '../entities/Entity';
 import type { Player } from '../entities/Player';
 import { MONSTERS } from '../entities/Monster';
 import { perceives, type Env } from './Perception';
@@ -18,12 +18,16 @@ export interface MonsterCtx {
   combat: CombatHost;
   ground(x: number, z: number, fromY: number): number;
   hash(e: Entity, k: number): number; // pseudo-aléa stable (errance)
+  /** autres joueurs (multijoueur) et coups qui leur sont portés */
+  others: RemoteTarget[];
+  hurtRemote(id: string, amount: number, src: Entity, element?: 'poison' | 'feu' | 'givre'): void;
 }
 
 const HOSTILE_TO_VILLAGERS = new Set(['loup', 'bandit', 'chef bandit', 'gobelin', 'chef gobelin', 'squelette', 'spectre', 'troll', 'araignée', 'roi-squelette', 'gardien des tombes']);
 
 function targetPos(id: string, ctx: MonsterCtx): { x: number; z: number; y: number; alive: boolean; ent: Entity | null } | null {
   if (id === 'player') { const p = ctx.player; return { x: p.x, z: p.z, y: p.y, alive: !p.dead, ent: null }; }
+  if (id.startsWith('p:')) { const o = ctx.others.find((x) => x.id === id); return o ? { x: o.x, z: o.z, y: o.y, alive: !o.dead, ent: null } : null; }
   const t = ctx.ents.find((e) => e.id === id);
   return t ? { x: t.x, z: t.z, y: t.y, alive: t.alive, ent: t } : null;
 }
@@ -47,12 +51,13 @@ export function thinkMonster(e: Entity, ctx: MonsterCtx): void {
     // candidats : le joueur, et les villageois pour les créatures hostiles
     const cands: { id: string; x: number; z: number; y: number; stealth: number; noise: number }[] = [];
     if (!p.dead) cands.push({ id: 'player', x: p.x, z: p.z, y: p.y, stealth: p.crouch ? 1 : 0, noise: p.sprinting ? 1 : 0 });
+    for (const o of ctx.others) if (!o.dead) cands.push({ id: o.id, x: o.x, z: o.z, y: o.y, stealth: o.crouch ? 1 : 0, noise: o.sprint ? 1 : 0 });
     if (HOSTILE_TO_VILLAGERS.has(m.def)) for (const o of ctx.ents) if (o.npc && o.alive && Math.hypot(o.x - e.x, o.z - e.z) < m.perception) cands.push({ id: o.id, x: o.x, z: o.z, y: o.y, stealth: 0, noise: 0.2 });
     cands.sort((a, b) => Math.hypot(a.x - e.x, a.z - e.z) - Math.hypot(b.x - e.x, b.z - e.z));
     for (const c of cands) {
       if (Math.hypot(c.x - e.x, c.z - e.z) > m.perception * 1.2) break;
       if (!perceives(ctx.chunks, { x: e.x, z: e.z, y: e.y, heading: e.heading, range: m.perception, nocturnal: m.nocturnal, asleep }, c, ctx.env)) continue;
-      if (ctx.hash(e, 7) > m.aggro && c.id === 'player' && !m.alerted) continue; // créature peu agressive : laisse passer
+      if (ctx.hash(e, 7) > m.aggro && (c.id === 'player' || c.id.startsWith('p:')) && !m.alerted) continue; // créature peu agressive : laisse passer
       m.targetId = c.id; m.alerted = true;
       // appel des alliés du même repaire
       for (const o of ctx.ents) if (o.mon && o.alive && o.mon.lair === m.lair && m.lair && !o.mon.targetId && Math.hypot(o.x - e.x, o.z - e.z) < 35) { o.mon.targetId = c.id; o.mon.alerted = true; }
@@ -128,6 +133,7 @@ export function moveMonster(e: Entity, dt: number, ctx: MonsterCtx): void {
             m.cooldown = d.attackCd;
             if (dist < d.reach + 0.6) {
               if (t.ent) hitEntity(ctx.combat, t.ent, d.damage * 0.8, e.id, d.element);
+              else if (m.targetId!.startsWith('p:')) ctx.hurtRemote(m.targetId!, d.damage, e, d.element);
               else hitPlayer(ctx.combat, d.damage, e, d.element);
             }
           }

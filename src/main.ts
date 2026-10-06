@@ -15,6 +15,10 @@ import type { MacroWorld } from '@ascii-fort/worldgen/MacroWorld';
 import type { Civilization } from '@ascii-fort/worldgen/civilization/Civilization';
 import { SaveManager } from './game/SaveManager';
 import { DevConsole } from './ui/DevConsole';
+import { MultiScreen, ChatScreen } from './ui/MultiScreen';
+import { NetClient, shareLink, type Welcome } from './net/NetClient';
+import { Coop } from './net/Coop';
+import { roomCode } from '@ascii-fort/net/protocol';
 
 const canvas = document.getElementById('screen') as HTMLCanvasElement;
 const r = new Renderer(canvas);
@@ -31,7 +35,9 @@ window.addEventListener('resize', () => r.resize(opts.cellSize, opts.detail));
 document.getElementById('boot')?.remove();
 
 let game: Game | null = null;
-let loading: { seed: string; macro?: MacroWorld; civ?: Civilization; frames: number } | null = null;
+let loading: { seed: string; macro?: MacroWorld; civ?: Civilization; frames: number; online?: { net: NetClient; welcome: Welcome } } | null = null;
+/** code de salon passé dans l'adresse (?salon=CODE) : ouvre directement l'écran multijoueur */
+let inviteCode = new URLSearchParams(location.search).get('salon') ?? '';
 const hud: HudState = { log: [], debug: false, fps: 60, genMs: 0, drawCalls: 0 };
 const idleCam = new Camera();
 const idleInst = new InstanceBuffer();
@@ -52,8 +58,27 @@ function showTitle() {
       back: () => screens.close(),
     })),
     continueGame: () => window.dispatchEvent(new CustomEvent('ascii-fort-load')),
+    multi: () => openMulti(''),
     options: () => screens.open(new PauseScreen({ seed: { text: '—' } } as unknown as Game, opts, { save() {}, load() {}, quit() { screens.close(); }, applyOptions })),
   }));
+}
+
+function openMulti(code: string) {
+  screens.open(new MultiScreen(input, code, {
+    create: (name, seed) => goOnline(new NetClient(roomCode(), name, { seed })),
+    join: (name, c) => goOnline(new NetClient(c, name)),
+    back: () => screens.close(),
+  }));
+}
+
+/** Connexion au salon puis génération du monde de sa seed. */
+async function goOnline(net: NetClient): Promise<void> {
+  const welcome = await net.connect();
+  game?.dispose(); game = null;
+  screens.closeAll();
+  loading = { seed: welcome.seed, frames: 0, online: { net, welcome } };
+  const q = new URLSearchParams(location.search); q.set('salon', net.code);
+  history.replaceState(null, '', '?' + q);
 }
 
 function startGame(seed: string, macro?: MacroWorld, civ?: Civilization): Game {
@@ -78,12 +103,14 @@ function startGame(seed: string, macro?: MacroWorld, civ?: Civilization): Game {
 let autosaveT = 120;
 async function saveTo(slot: string, label: string, quiet = false) {
   if (!game) return;
+  if (game.coop) { game.coop.saveNow(); if (!quiet) game.events.emit('message', { text: 'Personnage sauvegardé dans le salon.', color: C.green }); return; }
   try {
     await SaveManager.save(slot, game.toSave(label));
     if (!quiet) game.events.emit('message', { text: `Partie sauvegardée (${label}).`, color: C.green });
   } catch (e) { game.events.emit('message', { text: 'Échec de la sauvegarde : ' + String(e), color: C.red }); }
 }
 async function loadFrom(slot?: string) {
+  if (game?.coop) { game.events.emit('message', { text: 'En ligne, le salon conserve la partie : pas de chargement.', color: C.dim }); return; }
   const meta = SaveManager.latest();
   const key = slot ?? meta?.slot;
   if (!key) return;
@@ -103,7 +130,7 @@ function pause() {
   screens.open(new PauseScreen(game, opts, {
     save: () => window.dispatchEvent(new CustomEvent('ascii-fort-save')),
     load: () => window.dispatchEvent(new CustomEvent('ascii-fort-load')),
-    quit: () => { void saveTo('auto', 'automatique', true).then(() => { game?.dispose(); game = null; showTitle(); }); },
+    quit: () => { void saveTo('auto', 'automatique', true).then(() => { game?.dispose(); game = null; const q = new URLSearchParams(location.search); q.delete('salon'); history.replaceState(null, '', q.size ? '?' + q : location.pathname); showTitle(); }); },
     applyOptions,
   }));
 }
@@ -126,13 +153,23 @@ function tick(now: number) {
     ui.center(Math.floor(r.rows / 2) - 1, ' Génération du monde… ', C.title, C.panel);
     ui.center(Math.floor(r.rows / 2) + 1, ` ${loading.seed} `, C.dim, C.panel);
     idle(now);
-    if (++loading.frames > 2) { const l = loading; loading = null; startGame(l.seed, l.macro, l.civ); }
+    if (++loading.frames > 2) {
+      const l = loading; loading = null;
+      const g = startGame(l.seed, l.macro, l.civ);
+      if (l.online) {
+        const { net, welcome } = l.online;
+        g.coop = new Coop(net, g, welcome);
+        const others = welcome.players.map((p) => p.name).join(', ');
+        g.events.emit('message', { text: `En ligne — salon ${net.code}${others ? ' avec ' + others : ''}. Invitez vos amis : ${shareLink(net.code)}`, color: C.cyan });
+        g.events.emit('message', { text: 'Entrée : discuter · les coffres et les cadavres reviennent au premier qui les fouille.', color: C.dim });
+      }
+    }
     input.endFrame();
     return;
   }
 
   if (!game) {
-    if (!screens.top) showTitle();
+    if (!screens.top) { showTitle(); if (inviteCode) { openMulti(inviteCode); inviteCode = ''; } }
     screens.update();
     screens.draw();
     idle(now);
@@ -141,23 +178,30 @@ function tick(now: number) {
   }
 
   const g = game;
-  if (screens.modal) screens.update();
-  else {
+  if (screens.modal) {
+    screens.update();
+    if (g.coop && game === g) {
+      const dbl = input.doubleTapped; input.doubleTapped = null; input.muted = true;
+      g.update(dt, input);
+      input.muted = false; input.doubleTapped = dbl;
+    }
+  } else {
     if (input.key('Tab')) screens.open(new InventoryScreen(g));
     else if (input.key('m')) screens.open(new MapScreen(g));
     else if (input.key('j')) screens.open(new JournalScreen(g));
     else if (input.key('c') && !input.isDown('KeyC')) screens.open(new StatsScreen(g));
     else if (input.key('Escape')) pause();
+    else if (input.key('Enter') && g.coop) screens.open(new ChatScreen(input, (t) => g.coop?.chat(t)));
     if (input.key('F3')) hud.debug = !hud.debug;
     if (input.key('F1')) screens.open(new DevConsole(g, input, () => {}));
     if (input.key('F5')) void saveTo('rapide', 'rapide');
     if (input.key('F9')) void loadFrom('rapide');
     autosaveT -= dt;
-    if (autosaveT <= 0) { autosaveT = 120; void saveTo('auto', 'automatique', true); }
+    if (autosaveT <= 0) { autosaveT = 120; if (!g.coop) void saveTo('auto', 'automatique', true); }
     if (!screens.modal) g.update(dt, input);
   }
   hud.drawCalls = r.drawCalls;
-  if (!screens.modal || screens.top instanceof DialogueScreen) drawHud(ui, g, hud);
+  if (!screens.modal || screens.top instanceof DialogueScreen || screens.top instanceof ChatScreen) drawHud(ui, g, hud);
   screens.draw();
   if (game) g.render(0); else idle(now);
   input.endFrame();
@@ -169,6 +213,7 @@ requestAnimationFrame(frame);
   r, input, screens,
   get game() { return game; },
   newGame: (seed = 'TEST-001') => { screens.closeAll(); return startGame(seed); },
+  online: (name: string, code?: string, seed = 'TEST-001') => goOnline(code ? new NetClient(code, name) : new NetClient(roomCode(), name, { seed })),
   step: (n = 1) => { for (let i = 0; i < n; i++) { last -= 16; tick(performance.now()); } },
   tp: (x: number, z: number) => { if (!game) return; game.player.x = x; game.player.z = z; game.world.chunks.update(x, z, -1); game.player.y = game.world.heightAt(x, z) + 0.2; },
 };

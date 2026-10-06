@@ -25,6 +25,9 @@ export interface MonsterState {
   lair: string;             // repaire d'origine
 }
 
+/** Autre joueur vu par la simulation (multijoueur) : cible possible des créatures. */
+export interface RemoteTarget { id: string; x: number; y: number; z: number; dead: boolean; crouch: boolean; sprint: boolean }
+
 export class Entity {
   x = 0; y = 0; z = 0;
   vx = 0; vz = 0;
@@ -58,6 +61,12 @@ export class Entity {
   cooldown = 0;
   /** bâtiments/zone où l'entité se trouve (pour la nav locale) */
   zone = -1;
+  /** zone d'autorité (multijoueur) : « s<id> » implantation, « lair:<id> » repaire, « d<id> » donjon */
+  zoneKey = '';
+  /** dernier état reçu du propriétaire de la zone (entité « marionnette » simulée ailleurs) */
+  remote: { x: number; y: number; z: number; h: number } | null = null;
+  /** envois du propriétaire où l'entité manquait (disparue chez lui) */
+  missing = 0;
 
   constructor(readonly id: string, readonly kind: 'npc' | 'monster', readonly type: string, public name: string, readonly model: ModelDef, hp: number) {
     this.radius = model.radius;

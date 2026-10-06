@@ -50,9 +50,10 @@ ok((await a.next((m) => m.t === 'owner')).id === wa.you, 'Alice devient proprié
 await b.next((m) => m.t === 'owner'); // diffusion de la prise de s12 par Alice
 b.send({ t: 'claim', z: 's12' });
 ok((await b.next((m) => m.t === 'owner' && m.z === 's12')).id === wa.you, 'Bruno apprend qu\'Alice possède s12');
-a.send({ t: 'ents', z: 's12', l: [['n12:0', 5, 0, 5]] });
-ok((await b.next((m) => m.t === 'ents')).l.length === 1, 'entités de la zone relayées');
-b.send({ t: 'ents', z: 's12', l: [['triche']] });
+a.send({ t: 'ents', zs: [{ z: 's12', l: [['n12:0', 5, 0, 5]] }, { z: 'pas-a-moi', l: [] }] });
+const en = await b.next((m) => m.t === 'ents');
+ok(en.zs.length === 1 && en.zs[0].l.length === 1, 'entités de la zone relayées (zones non possédées filtrées)');
+b.send({ t: 'ents', zs: [{ z: 's12', l: [['triche']] }] });
 
 b.send({ t: 'to', to: wa.you, d: { hit: 7 } });
 ok((await a.next((m) => m.t === 'to')).d.hit === 7, 'message adressé (dégâts) reçu par Alice');

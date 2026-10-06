@@ -18,6 +18,7 @@ import { PlayerCombat } from '@ascii-fort/sim/gameplay/PlayerCombat';
 import { WorldState, type Dropped } from '@ascii-fort/sim/gameplay/WorldState';
 import { item } from '@ascii-fort/sim/gameplay/Items';
 import { packBits, unpackBits, type SaveData } from './SaveManager';
+import type { Coop } from '../net/Coop';
 import { GAME_VERSION, GENERATOR_VERSION } from '../version';
 import type { Good } from '@ascii-fort/worldgen/civilization/types';
 import { creatureLoot, containerLoot, type LootLine } from '@ascii-fort/sim/gameplay/Loot';
@@ -91,7 +92,10 @@ export class Game {
   /** sensibilité de la souris (options) */
   sensitivity = 1;
   /** libère les ressources GPU (retour au titre) */
-  dispose(): void { this.world.chunks.clear(); this.renderer.deleteMesh(this.far); if (this.dungeon) this.renderer.deleteMesh(this.dungeon.mesh); }
+  /** mode coopératif en ligne (null en solo) */
+  coop: Coop | null = null;
+
+  dispose(): void { this.coop?.dispose(); this.coop = null; this.world.chunks.clear(); this.renderer.deleteMesh(this.far); if (this.dungeon) this.renderer.deleteMesh(this.dungeon.mesh); }
 
   constructor(seedText: string, private renderer: Renderer, macro?: MacroWorld, civ?: Civilization) {
     this.seed = new WorldSeed(seedText);
@@ -101,7 +105,7 @@ export class Game {
     this.player.x = sp.x; this.player.z = sp.z; this.player.heading = sp.heading;
     this.world.chunks.update(sp.x, sp.z, -1);
     this.player.y = this.world.heightAt(sp.x, sp.z) + 0.1;
-    this.combat = { player: this.player, events: this.events, onPlayerDeath: () => this.onPlayerDeath(), playerArmor: () => this.character.armor };
+    this.combat = { player: this.player, events: this.events, onPlayerDeath: () => this.onPlayerDeath(), playerArmor: () => this.character.armor, forward: (e, a, el) => !!this.coop?.forwardHit(e, a, el) };
     this.entities = new EntityManager(this);
     this.world.chunks.dynamic = this.entities.dynamic;
     this.lastDay = this.time.day;
@@ -196,9 +200,9 @@ export class Game {
     p.dead = false; p.hp = Math.round(p.maxHp * 0.5); p.stamina = p.maxStamina; p.poison = p.burn = p.frost = 0;
     const lost = Math.floor(this.character.inv.gold * 0.2);
     this.character.inv.gold -= lost;
-    this.time.minutes += 8 * 60;
+    if (!this.coop) this.time.minutes += 8 * 60;
     this.respawnT = 0;
-    this.events.emit('message', { text: `Vous vous réveillez à l'auberge, huit heures plus tard. Votre bourse est plus légère (−${lost} or).` });
+    this.events.emit('message', { text: `Vous vous réveillez à l'auberge${this.coop ? '' : ', huit heures plus tard'}. Votre bourse est plus légère (−${lost} or).` });
   }
 
   // ------------------------------------------------------------------ objets interactifs
@@ -285,7 +289,9 @@ export class Game {
         e.looted = true;
         const biome = this.world.sampler.biomeAt(e.x, e.z);
         const table = e.mon ? e.mon.loot : 'maison';
-        this.giveLoot(creatureLoot(this.seed, table, `${e.id}:${this.time.day}`, { biome }), e.name);
+        const seedKey = `${e.id}:${this.time.day}`;
+        const give = () => this.giveLoot(creatureLoot(this.seed, table, seedKey, { biome }), e.name);
+        if (this.coop) this.coop.claimOnce('loot:' + seedKey, give); else give();
       }
       return;
     }
@@ -303,7 +309,7 @@ export class Game {
         const dg = this.dungeon;
         if (!dg) break;
         if (ch.inv.count(dg.layout.keyItem)) {
-          this.state.flags.set(`door:dj${dg.layout.id}`, true);
+          this.setFlag(`door:dj${dg.layout.id}`, true);
           this.applyDoor();
           this.events.emit('message', { text: 'La clé tourne dans la serrure. La porte s’ouvre en grinçant.', color: 0xf0d060 });
         } else this.events.emit('message', { text: 'Verrouillée. Il doit y avoir une clé quelque part dans ces souterrains.' });
@@ -311,22 +317,8 @@ export class Game {
       }
       case 'coffre': case 'tonneau': case 'caisse': {
         if (this.state.opened.has(pr.key)) break;
-        this.state.opened.add(pr.key);
-        let building = this.buildingKind(pr), questItem: string | null = null, depth = 0;
-        if (pr.key.startsWith('dj') && this.dungeon) {
-          const c = this.dungeon.layout.chests.find((x) => x.key === pr.key);
-          building = `coffre${c?.tier ?? 1}`; depth = this.world.civ.dungeons[this.dungeon.layout.id]?.depth ?? 1;
-          if (c?.hasKey) questItem = this.dungeon.layout.keyItem;
-          if (c && c.tier >= 3) { const k = this.dungeon.layout.kind; if (k === 'crypte') questItem = `quête:relique:${this.dungeon.layout.id}`; if (k === 'forteresse') questItem = `quête:journal:${this.dungeon.layout.id}`; }
-        }
-        if (building === 'camp' && !this.state.flags.get(`marchandises:${pr.sid}`)) { questItem = `quête:marchandises:${pr.sid}`; this.state.flags.set(`marchandises:${pr.sid}`, true); }
-        this.giveLoot(containerLoot(this.seed, pr.key, { building, depth, questItem }), pr.kind === 'coffre' ? 'Coffre' : pr.kind === 'tonneau' ? 'Tonneau' : 'Caisse');
-        if (this.isOwned(pr)) {
-          const w = this.witnesses();
-          this.events.emit('player:crime', { type: 'vol', settlementId: pr.sid, factionId: this.world.civ.settlements[pr.sid]?.factionId, witnesses: w.map((x) => x.id), value: 10 });
-          if (w.length) this.events.emit('message', { text: `${w[0].label} vous a vu voler !`, color: 0xe05040 });
-          else ch.practice('furtivité', 2);
-        }
+        if (this.coop) { this.coop.claimOnce('open:' + pr.key, () => this.openContainer(pr)); break; }
+        this.openContainer(pr);
         break;
       }
       case 'lit': {
@@ -366,10 +358,37 @@ export class Game {
         } else this.events.emit('message', { text: 'Il faut deux herbes médicinales.' });
         break;
       case 'piège':
-        if (ch.skills.furtivité >= 15 || ch.stats.AGI >= 7) { this.state.flags.set(pr.key, true); ch.practice('furtivité', 3); this.events.emit('message', { text: 'Piège désamorcé.' }); }
+        if (ch.skills.furtivité >= 15 || ch.stats.AGI >= 7) { this.setFlag(pr.key, true); ch.practice('furtivité', 3); this.events.emit('message', { text: 'Piège désamorcé.' }); }
         else this.events.emit('message', { text: 'Le mécanisme est trop délicat pour vous (Furtivité 15 requise).' });
         break;
     }
+  }
+
+  /** Fouille d'un contenant : butin, objets de quête, vol devant témoins. */
+  private openContainer(pr: Prop): void {
+    const ch = this.character;
+    this.state.opened.add(pr.key);
+    let building = this.buildingKind(pr), questItem: string | null = null, depth = 0;
+    if (pr.key.startsWith('dj') && this.dungeon) {
+      const c = this.dungeon.layout.chests.find((x) => x.key === pr.key);
+      building = `coffre${c?.tier ?? 1}`; depth = this.world.civ.dungeons[this.dungeon.layout.id]?.depth ?? 1;
+      if (c?.hasKey) questItem = this.dungeon.layout.keyItem;
+      if (c && c.tier >= 3) { const k = this.dungeon.layout.kind; if (k === 'crypte') questItem = `quête:relique:${this.dungeon.layout.id}`; if (k === 'forteresse') questItem = `quête:journal:${this.dungeon.layout.id}`; }
+    }
+    if (building === 'camp' && !this.state.flags.get(`marchandises:${pr.sid}`)) { questItem = `quête:marchandises:${pr.sid}`; this.state.flags.set(`marchandises:${pr.sid}`, true); }
+    this.giveLoot(containerLoot(this.seed, pr.key, { building, depth, questItem }), pr.kind === 'coffre' ? 'Coffre' : pr.kind === 'tonneau' ? 'Tonneau' : 'Caisse');
+    if (this.isOwned(pr)) {
+      const w = this.witnesses();
+      this.events.emit('player:crime', { type: 'vol', settlementId: pr.sid, factionId: this.world.civ.settlements[pr.sid]?.factionId, witnesses: w.map((x) => x.id), value: 10 });
+      if (w.length) this.events.emit('message', { text: `${w[0].label} vous a vu voler !`, color: 0xe05040 });
+      else ch.practice('furtivité', 2);
+    }
+  }
+
+  /** Drapeau du monde ; en ligne, partagé avec le salon (porte de donjon, piège désamorcé). */
+  setFlag(key: string, v: boolean): void {
+    this.state.flags.set(key, v);
+    this.coop?.fact('flag:' + key, v);
   }
 
   talkTo(e: Entity): void {
@@ -382,6 +401,11 @@ export class Game {
     const t = this.time, p = this.player;
     const h = t.hour;
     const wake = h >= 18 || h < 6 ? ((24 + 7 - h) % 24) * 60 : 3 * 60;
+    if (this.coop) {
+      p.hp = p.maxHp; p.stamina = p.maxStamina; p.mana = p.maxMana;
+      this.events.emit('message', { text: 'Vous vous reposez un moment. (En ligne, le temps ne s’arrête pour personne.)', color: 0x9ad0ff });
+      return;
+    }
     t.minutes += wake;
     p.hp = p.maxHp; p.stamina = p.maxStamina; p.mana = p.maxMana;
     this.events.emit('message', { text: `Vous dormez. ${t.label()}.`, color: 0x9ad0ff });
@@ -434,7 +458,7 @@ export class Game {
   // ------------------------------------------------------------------ boucle
   update(dt: number, input: Input): void {
     this.elapsed += dt;
-    this.time.advance(dt);
+    if (this.coop) this.time.minutes = this.coop.clockMinutes(); else this.time.advance(dt);
     if (this.time.day !== this.lastDay) { this.lastDay = this.time.day; this.entities.dailyTick(); this.economy.dailyTick(); this.rumors.dailyTick(); this.stocks.clear(); }
     // météo au point du joueur
     const prevState = this.wx.state;
@@ -476,6 +500,7 @@ export class Game {
     }
     if (!this.dungeon) this.world.chunks.update(p.x, p.z, 5);
     this.entities.update(dt);
+    this.coop?.update(dt);
     this.focus = p.dead ? null : this.findFocus();
     if (input.key('e')) this.interact();
     // découverte des lieux et brouillard de la carte
@@ -658,6 +683,7 @@ export class Game {
     }
     this.instances.reset();
     this.entities.render(this.instances, c.x, c.z, this.target && this.target.alive ? this.target.id : null);
+    this.coop?.render(this.instances, c.x, c.z);
     if (dg && dg.layout.lockedDoor && !this.state.flags.get(`door:dj${dg.layout.id}`)) {
       const d = dg.layout.lockedDoor;
       this.instances.add(trsYawPitch(this.m4, d.x, 1.6, d.z, d.horizontal ? Math.PI / 2 : 0, 0, 3.4, 3.2, 0.3), 0x5a3a22, M.DOOR, 0, 0, 0.3);

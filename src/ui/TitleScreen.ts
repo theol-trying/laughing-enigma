@@ -45,7 +45,7 @@ export function drawTitleBackground(g: TextGrid, t: number): void {
 
 export class TitleScreen implements Screen {
   modal = true;
-  constructor(private hasSave: boolean, private actions: { newGame(): void; continueGame(): void; options(): void }) {}
+  constructor(private hasSave: boolean, private actions: { newGame(): void; continueGame(): void; multi(): void; options(): void }) {}
   draw(ctx: UICtx): void {
     const g = ctx.grid;
     drawTitleBackground(g, performance.now() / 1000);
@@ -53,19 +53,21 @@ export class TitleScreen implements Screen {
     const y0 = Math.max(1, Math.floor(g.rows * 0.18) - 3);
     big.forEach((l, i) => g.center(y0 + i, l, i < 2 ? 0xf0d080 : 0xd8a850));
     g.center(y0 + big.length + 1, 'un RPG procédural fait de caractères', C.dim);
-    const labels = ['[N] Nouvelle partie', this.hasSave ? '[C] Continuer' : '[C] Continuer (aucune sauvegarde)', '[O] Options'];
+    const labels = ['[N] Nouvelle partie', this.hasSave ? '[C] Continuer' : '[C] Continuer (aucune sauvegarde)', '[M] Multijoueur en ligne', '[O] Options'];
     const w = 34, x = Math.floor((g.cols - w) / 2), y = Math.floor(g.rows * 0.62);
     g.box(x - 2, y - 1, w + 4, labels.length + 2, { bg: 0x0b0d10, alpha: 0.85 });
     const k = optionList(ctx, x, y, w, labels.map((l) => l.replace(/^\[.\] /, '')), C.text, C.sel);
     if (k === 0) this.actions.newGame();
     if (k === 1 && this.hasSave) this.actions.continueGame();
-    if (k === 2) this.actions.options();
+    if (k === 2) this.actions.multi();
+    if (k === 3) this.actions.options();
     g.text(1, g.rows - 1, `v${GAME_VERSION} · générateur ${GENERATOR_VERSION}`, C.faint);
   }
   input(ctx: UICtx): void {
     const i = ctx.input;
     if (i.key('n')) this.actions.newGame();
     if (i.key('c') && this.hasSave) this.actions.continueGame();
+    if (i.key('m')) this.actions.multi();
     if (i.key('o')) this.actions.options();
   }
 }

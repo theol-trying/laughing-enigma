@@ -9,6 +9,8 @@ export interface CombatHost {
   events: EventBus;
   onPlayerDeath(): void;
   playerArmor(): number;
+  /** multijoueur : coup sur une entité simulée par un autre joueur → transmis (renvoie true) */
+  forward?(e: Entity, amount: number, element?: Element): boolean;
 }
 
 export type Element = 'poison' | 'feu' | 'givre' | undefined;
@@ -16,6 +18,11 @@ export type Element = 'poison' | 'feu' | 'givre' | undefined;
 /** Dégâts infligés à une entité ; renvoie les dégâts réels. */
 export function hitEntity(host: CombatHost, e: Entity, amount: number, sourceId: string | null, element?: Element): number {
   if (!e.alive) return 0;
+  if (sourceId === 'player' && host.forward?.(e, amount, element)) {
+    e.flash = 0.18;
+    host.events.emit('entity:damaged', { targetId: e.id, sourceId, amount });
+    return amount;
+  }
   const armor = e.mon ? e.mon.armor : e.npc ? (e.npc.profession === 'garde' || e.npc.profession === 'soldat' ? 4 : 0) : 0;
   let dmg = Math.max(1, Math.round(amount * (1 - armor / (armor + 12))));
   if (element === 'feu' && e.mon?.def === 'troll') dmg = Math.round(dmg * 1.6); // le feu empêche le troll de se régénérer

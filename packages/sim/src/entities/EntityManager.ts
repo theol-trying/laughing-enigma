@@ -1,4 +1,5 @@
-import { Entity } from './Entity';
+import { Entity, type RemoteTarget } from './Entity';
+export type { RemoteTarget } from './Entity';
 import { generateNPCs, type NPCData } from './NPC';
 import { humanoid, drawModel, type ModelDef } from './Models';
 import { buildLairs, makeMonster, type Lair } from './Monster';
@@ -29,6 +30,21 @@ export interface EntityHost {
   fog(): number;
 }
 
+/**
+ * Multijoueur : autorité par zone. Le propriétaire d'une zone y simule PNJ et créatures et
+ * diffuse leur état ; chez les autres joueurs, ces entités sont des « marionnettes ».
+ */
+export interface EntityNet {
+  owns(zone: string): boolean;
+  claim(zone: string): void;
+  release(zone: string): void;
+  others(): RemoteTarget[];
+  hurtRemote(id: string, amount: number, src: Entity, element?: 'poison' | 'feu' | 'givre'): void;
+}
+
+const NO_OTHERS: RemoteTarget[] = [];
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
 interface ActiveZone { sid: number; L: Layout; grid: NavGrid; ents: Entity[]; patrol: { x: number; z: number }[] }
 
 const ACTIVATE = 250, DEACTIVATE = 330, DRAW = 170, LAIR_ON = 230, LAIR_OFF = 320;
@@ -55,12 +71,17 @@ export class EntityManager {
   readonly killed = new Set<string>();
   readonly clearedCamps = new Set<number>();
   private mctx: MonsterCtx;
+  /** multijoueur (null en solo) */
+  net: EntityNet | null = null;
+  private dungeonId = -1;
+  private dungeonEnts: Entity[] = [];
 
   constructor(private host: EntityHost) {
     this.lairs = buildLairs(host.world.civ, host.world.seed);
     this.mctx = {
       chunks: host.world.chunks, player: host.player, ents: this.entities, env: { night: 0, fog: 0 }, combat: host.combat,
       ground: (x, z, y) => this.ground(x, z, y),
+      others: NO_OTHERS, hurtRemote: (id, a, src, el) => this.net?.hurtRemote(id, a, src, el),
       hash: (e, k) => hash2i(e.id.length * 131 + e.id.charCodeAt(e.id.length - 1) * 17 + e.id.charCodeAt(0), k, e.id.length) / 4294967296,
     };
     host.events.on('entity:killed', (ev) => this.onKilled(ev.victimId));
@@ -110,7 +131,7 @@ export class EntityManager {
       if (!n.alive) continue;
       const e = new Entity(n.id, 'npc', n.look, `${n.first} ${n.last}`, this.modelFor(n), n.profession === 'garde' || n.profession === 'soldat' ? 60 : 30);
       e.hp = Math.max(1, Math.min(e.maxHp, n.hp));
-      e.npc = n; e.sid = sid;
+      e.npc = n; e.sid = sid; e.zoneKey = 's' + sid;
       e.speed = n.profession === 'garde' ? 1.6 : 1.3 + n.traits.sociability * 0.3;
       const sp = this.spotFor(e, zone, minute, hour);
       e.spot = sp;
@@ -122,6 +143,7 @@ export class EntityManager {
       zone.ents.push(e); this.entities.push(e);
     }
     this.zones.set(sid, zone);
+    this.net?.claim('s' + sid);
   }
 
   private deactivate(sid: number) {
@@ -130,6 +152,7 @@ export class EntityManager {
     for (const e of z.ents) if (e.npc) e.npc.hp = e.alive ? e.hp : 0;
     this.remove(z.ents);
     this.zones.delete(sid);
+    this.net?.release('s' + sid);
   }
 
   private remove(list: Entity[]) {
@@ -150,10 +173,11 @@ export class EntityManager {
       });
       if (isLeader) e.name = `${e.name} (${this.host.world.civ.settlements[l.sid]?.name.replace('Camp ', '') ?? ''})`;
       e.y = this.ground(e.x, e.z, 1000);
-      e.heading = a;
+      e.heading = a; e.zoneKey = l.key;
       ents.push(e); this.entities.push(e);
     }
     this.activeLairs.set(l.key, ents);
+    this.net?.claim(l.key);
   }
 
   private deactivateLair(l: Lair) {
@@ -162,6 +186,7 @@ export class EntityManager {
     l.leaderAlive = ents.some((e) => e.alive && e.mon?.leader);
     this.remove(ents);
     this.activeLairs.delete(l.key);
+    this.net?.release(l.key);
   }
 
   clear(): void {
@@ -171,15 +196,21 @@ export class EntityManager {
 
   /** Créatures d'un donjon (celles déjà tuées ne reviennent pas). */
   spawnDungeon(L: DungeonLayout): void {
+    this.dungeonId = L.id; this.dungeonEnts = [];
     L.spawns.forEach((s, i) => {
       const key = `dj${L.id}:m${i}`;
       if (this.killed.has(key)) return;
       const e = makeMonster(key, s.type, s.x, s.z, s.x, s.z, s.boss ? 10 : 14, { unique: key, leader: s.boss, perception: s.boss ? 20 : 16 });
-      e.y = 0;
-      this.entities.push(e);
+      e.y = 0; e.zoneKey = 'd' + L.id;
+      this.entities.push(e); this.dungeonEnts.push(e);
     });
+    this.net?.claim('d' + L.id);
   }
-  clearDungeon(): void { this.remove(this.entities.filter((e) => e.id.startsWith('dj'))); }
+  clearDungeon(): void {
+    this.remove(this.entities.filter((e) => e.id.startsWith('dj')));
+    if (this.dungeonId >= 0) this.net?.release('d' + this.dungeonId);
+    this.dungeonId = -1; this.dungeonEnts = [];
+  }
 
   private onKilled(id: string) {
     const e = this.entities.find((x) => x.id === id);
@@ -350,6 +381,7 @@ export class EntityManager {
     if (this.frozen) return;
     this.mctx.env.night = h.night(); this.mctx.env.fog = h.fog();
     this.mctx.ents = this.entities;
+    this.mctx.others = this.net ? this.net.others() : NO_OTHERS;
     this.checkT -= dt;
     if (this.checkT <= 0) {
       this.checkT = 1;
@@ -380,6 +412,7 @@ export class EntityManager {
     }
     for (const e of this.entities) {
       if (e.flash > 0) e.flash -= dt;
+      if (this.isPuppet(e)) { this.updatePuppet(e, dt); continue; }
       if (!e.alive) {
         e.deadT += dt;
         e.pose.dead = Math.min(1, e.pose.dead + dt * 2.5);
@@ -410,6 +443,97 @@ export class EntityManager {
     if (gone.length) this.remove(gone);
     this.dynamic.length = 0;
     for (const e of this.entities) if (e.alive && Math.hypot(e.x - p.x, e.z - p.z) < 12) this.dynamic.push({ x: e.x, z: e.z, r: e.radius, bottom: e.y, top: e.y + e.model.height });
+    for (const o of this.mctx.others) if (!o.dead && Math.hypot(o.x - p.x, o.z - p.z) < 12) this.dynamic.push({ x: o.x, z: o.z, r: 0.32, bottom: o.y, top: o.y + 1.8 });
+  }
+
+  // ---------------------------------------------------------------- multijoueur : autorité par zone
+  zoneOf(e: Entity): string | null { return e.zoneKey || null; }
+  private isPuppet(e: Entity): boolean { return !!this.net && !!e.zoneKey && !this.net.owns(e.zoneKey); }
+
+  /** Zones actives localement (redéclarées au serveur après une reconnexion). */
+  activeZoneKeys(): string[] {
+    const out = [...this.zones.keys()].map((s) => 's' + s);
+    for (const k of this.activeLairs.keys()) out.push(k);
+    if (this.dungeonId >= 0) out.push('d' + this.dungeonId);
+    return out;
+  }
+
+  private zoneList(z: string): Entity[] | null {
+    if (z.startsWith('s')) return this.zones.get(Number(z.slice(1)))?.ents ?? null;
+    if (z.startsWith('lair:')) return this.activeLairs.get(z) ?? null;
+    if (z.startsWith('d')) return Number(z.slice(1)) === this.dungeonId ? this.dungeonEnts : null;
+    return null;
+  }
+
+  /** État des entités des zones que l'on simule, pour les autres joueurs. */
+  snapshot(): { z: string; l: unknown[] }[] {
+    const out: { z: string; l: unknown[] }[] = [];
+    if (!this.net) return out;
+    for (const z of this.activeZoneKeys()) {
+      if (!this.net.owns(z)) continue;
+      const list = this.zoneList(z);
+      if (!list) continue;
+      out.push({ z, l: list.map((e) => [e.id, e.type, r2(e.x), r2(e.y), r2(e.z), r2(e.heading), r2(e.pose.walk % 1000), r2(e.pose.swing), r2(e.pose.block), r2(e.pose.dead), Math.round(e.hp), e.maxHp, e.alive ? 1 : 0]) });
+    }
+    return out;
+  }
+
+  /** Applique l'état envoyé par le propriétaire d'une zone : marionnettes créées, déplacées, retirées. */
+  applySnapshot(z: string, list: unknown[][]): void {
+    if (!this.net || this.net.owns(z)) return;
+    const local = this.zoneList(z);
+    if (!local) return;
+    const seen = new Set<string>();
+    for (const r of list) {
+      const [id, type, x, y, zz, h, walk, swing, block, dead, hp, maxHp, alive] = r as [string, string, number, number, number, number, number, number, number, number, number, number, number];
+      if (typeof id !== 'string') continue;
+      seen.add(id);
+      let e = local.find((q) => q.id === id);
+      if (!e) {
+        const ne = this.spawnPuppet(z, id, type, x, zz);
+        if (!ne) continue;
+        e = ne; e.x = x; e.y = y; e.z = zz; e.heading = h;
+        local.push(e); this.entities.push(e);
+      }
+      e.remote = { x, y, z: zz, h };
+      e.missing = 0;
+      e.pose.walk = walk; e.pose.swing = swing; e.pose.block = block; e.pose.dead = dead;
+      e.hp = hp; e.maxHp = maxHp;
+      if (e.alive && !alive) { e.alive = false; e.deadT = 0; if (e.npc) { e.npc.alive = false; e.npc.hp = 0; } }
+    }
+    const gone = local.filter((e) => !seen.has(e.id) && ++e.missing > 15);
+    if (gone.length) { this.remove(gone); for (const e of gone) local.splice(local.indexOf(e), 1); }
+  }
+
+  /** Entité présente chez le propriétaire mais pas ici (populations divergentes) : on la crée. */
+  private spawnPuppet(z: string, id: string, type: string, x: number, zz: number): Entity | null {
+    if (z.startsWith('s')) {
+      const n = this.findNpc(id);
+      if (!n) return null;
+      const e = new Entity(n.id, 'npc', n.look, `${n.first} ${n.last}`, this.modelFor(n), n.profession === 'garde' || n.profession === 'soldat' ? 60 : 30);
+      e.npc = n; e.sid = n.sid; e.zoneKey = z;
+      return e;
+    }
+    const l = this.lairs.find((q) => q.key === z);
+    const e = makeMonster(id, type, x, zz, l?.x ?? x, l?.z ?? zz, l?.territory ?? 14, l ? { lair: l.key, poiId: l.poiId, campId: l.sid, leader: type === l.leader, unique: type === l.leader ? `${l.key}:chef` : '' } : { unique: id });
+    e.zoneKey = z;
+    return e;
+  }
+
+  private updatePuppet(e: Entity, dt: number) {
+    const r = e.remote;
+    if (!e.alive) { e.deadT += dt; e.pose.dead = Math.min(1, e.pose.dead + dt * 2.5); }
+    if (!r) return;
+    const k = Math.min(1, dt * 10), far = Math.hypot(r.x - e.x, r.z - e.z) > 10;
+    e.x = far ? r.x : e.x + (r.x - e.x) * k; e.z = far ? r.z : e.z + (r.z - e.z) * k; e.y = far ? r.y : e.y + (r.y - e.y) * k;
+    let dh = r.h - e.heading; while (dh > Math.PI) dh -= Math.PI * 2; while (dh < -Math.PI) dh += Math.PI * 2;
+    e.heading += dh * k;
+  }
+
+  /** La zone change de propriétaire : si c'est nous, l'IA reprend là où en étaient les marionnettes. */
+  ownerChanged(z: string): void {
+    if (!this.net?.owns(z)) return;
+    for (const e of this.zoneList(z) ?? []) { e.remote = null; e.thinkT = 0; e.path = null; }
   }
 
   /** Met à jour les populations des repaires actifs (avant une sauvegarde). */

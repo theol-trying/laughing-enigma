@@ -12,7 +12,8 @@
     "autosave": "node scripts/autosave.mjs",
     "dev:server": "vite build && wrangler dev --port 8787",
     "deploy": "npm run build && wrangler deploy",
-    "test:room": "node scripts/test-room.mjs"
+    "test:room": "node scripts/test-room.mjs",
+    "bot": "node scripts/bot.mjs"
   },
   "type": "module",
   "devDependencies": {

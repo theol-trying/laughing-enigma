@@ -48,6 +48,24 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
   if (q && !game.dungeon) put(q.target!.x, q.target!.z, '!', C.yellow);
   g.text(cx0 - 1, 1, '[', C.dim, C.panel, 0.6); g.text(cx0 + cw, 1, ']', C.dim, C.panel, 0.6);
 
+  // en ligne : salon, joueurs, noms au-dessus des têtes
+  const coop = game.coop;
+  if (coop) {
+    const n = coop.players.size + 1, st = coop.net.status;
+    const info = st === 'en ligne' ? ` Salon ${coop.net.code} · ${n} joueur${n > 1 ? 's' : ''} · ${Math.round(coop.net.rtt)} ms ` : ` Salon ${coop.net.code} · ${st}… `;
+    g.text(1, 2, info, st === 'en ligne' ? C.cyan : C.orange, C.panel, 0.6);
+    const cam = game.camera, dg = game.dungeon ? game.dungeon.layout.id : -1;
+    for (const r of coop.players.values()) {
+      if (!r.seen || r.dungeon !== dg) continue;
+      const d = Math.hypot(r.x - p.x, r.z - p.z);
+      if (d > 60) continue;
+      const pr = cam.project(r.x, r.y + 2.15, r.z);
+      if (!pr || pr.u < 0 || pr.u > 1 || pr.v < 0 || pr.v > 1) continue;
+      const label = ` ${r.name}${r.pose.dead > 0.5 ? ' (à terre)' : r.hp < r.maxHp * 0.35 ? ' (blessé)' : ''} `;
+      g.text(Math.round(pr.u * cols - label.length / 2), Math.round(pr.v * rows), label, C.cyan, C.panel, 0.45);
+    }
+  }
+
   // heure, météo, lieu
   const civ = game.world.civ, m = game.world.macro;
   const here = civ.settlements.find((s) => !s.abandoned && Math.hypot(s.x - p.x, s.z - p.z) < s.radius + 20);

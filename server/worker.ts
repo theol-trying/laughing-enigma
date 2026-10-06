@@ -4,7 +4,7 @@
 // - /ws/<CODE> : connexion WebSocket au salon, un Durable Object « Room » par code.
 import { DurableObject } from 'cloudflare:workers';
 import {
-  PROTOCOL, MAX_PLAYERS, MAX_MESSAGE, ROOM_TTL_MS, ROOM_RE,
+  PROTOCOL, MAX_PLAYERS, MAX_MESSAGE, MAX_SAVE, ROOM_TTL_MS, ROOM_RE,
   roomCode, shortId, cleanName, cleanSeed, cleanCode,
   type ClientMsg, type ServerMsg, type PlayerInfo,
 } from '@ascii-fort/net/protocol';
@@ -87,15 +87,18 @@ export class Room extends DurableObject<Env> {
     if (!c.ready) return;
     switch (m.t) {
       case 'st': this.broadcast({ t: 'st', id: c.id, s: m.s }, ws); break;
-      case 'ents':
-        if (typeof m.z === 'string' && c.owns.includes(m.z) && Array.isArray(m.l)) this.broadcast({ t: 'ents', id: c.id, z: m.z, l: m.l }, ws);
+      case 'ents': {
+        // seules les zones dont l'expéditeur est propriétaire sont relayées
+        const zs = Array.isArray(m.zs) ? m.zs.filter((x) => x && c.owns.includes(x.z) && Array.isArray(x.l)) : [];
+        if (zs.length) this.broadcast({ t: 'ents', id: c.id, zs }, ws);
         break;
+      }
       case 'claim': this.claim(ws, c, String(m.z).slice(0, 40)); break;
       case 'release': this.release(ws, c, String(m.z).slice(0, 40)); break;
       case 'to': for (const w of this.sockets()) if (this.conn(w).id === m.to) this.send(w, { t: 'to', from: c.id, d: m.d }); break;
       case 'fx': this.broadcast({ t: 'fx', id: c.id, d: m.d }, ws); break;
       case 'fact': await this.fact(ws, c, m); break;
-      case 'save': if (c.key && JSON.stringify(m.c ?? null).length < 60_000) await this.ctx.storage.put('c:' + c.key, m.c); break;
+      case 'save': if (c.key && JSON.stringify(m.c ?? null).length < MAX_SAVE) await this.ctx.storage.put('c:' + c.key, m.c); break;
       case 'chat': { const text = String(m.text ?? '').replace(/[\u0000-\u001f]/g, '').slice(0, 200); if (text) this.broadcast({ t: 'chat', id: c.id, name: c.name, text }); break; }
       case 'ping': this.send(ws, { t: 'pong', n: Number(m.n) || 0, now: Date.now() }); break;
     }

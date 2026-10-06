@@ -9,20 +9,23 @@
 /** Version du protocole : un client et un serveur de versions différentes refusent de se parler. */
 export const PROTOCOL = 1;
 export const MAX_PLAYERS = 8;
-export const MAX_MESSAGE = 64 * 1024;
+export const MAX_MESSAGE = 160 * 1024;
+/** Taille maximale d'une sauvegarde de personnage (JSON). */
+export const MAX_SAVE = 150_000;
 /** Fréquence d'envoi de l'état des joueurs et des entités (Hz). */
 export const NET_HZ = 10;
 /** Un salon vide est effacé après ce délai. */
 export const ROOM_TTL_MS = 30 * 24 * 3600 * 1000;
 
 export interface PlayerInfo { id: string; name: string }
+export interface ZoneEnts { z: string; l: unknown[] }
 
 export type ClientMsg =
   | { t: 'hello'; name: string; key: string; gen: string; proto: number; create?: { seed: string } }
   /** état du joueur (position, pose, apparence…), relayé aux autres */
   | { t: 'st'; s: unknown }
-  /** entités d'une zone dont l'expéditeur est propriétaire */
-  | { t: 'ents'; z: string; l: unknown[] }
+  /** entités des zones dont l'expéditeur est propriétaire (un seul message par envoi) */
+  | { t: 'ents'; zs: ZoneEnts[] }
   /** intérêt pour une zone (devient propriétaire si personne ne l'est) / fin d'intérêt */
   | { t: 'claim'; z: string }
   | { t: 'release'; z: string }
@@ -42,7 +45,7 @@ export type ServerMsg =
   | { t: 'join'; p: PlayerInfo }
   | { t: 'leave'; id: string }
   | { t: 'st'; id: string; s: unknown }
-  | { t: 'ents'; id: string; z: string; l: unknown[] }
+  | { t: 'ents'; id: string; zs: ZoneEnts[] }
   | { t: 'owner'; z: string; id: string | null }
   | { t: 'to'; from: string; d: unknown }
   | { t: 'fact'; k: string; v: unknown; by: string }
