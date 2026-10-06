@@ -22,7 +22,7 @@ import type { Coop } from '../net/Coop';
 import { GAME_VERSION, GENERATOR_VERSION } from '../version';
 import type { Good } from '@ascii-fort/worldgen/civilization/types';
 import { creatureLoot, containerLoot, type LootLine } from '@ascii-fort/sim/gameplay/Loot';
-import { perceives } from '@ascii-fort/sim/ai/Perception';
+import { perceives, lineOfSight, playerNoise } from '@ascii-fort/sim/ai/Perception';
 import { Reputation } from '@ascii-fort/sim/gameplay/Reputation';
 import { Economy } from '@ascii-fort/sim/gameplay/Economy';
 import { Rumors } from '@ascii-fort/sim/gameplay/Rumors';
@@ -41,7 +41,7 @@ interface ActiveDungeon { layout: DungeonLayout; mesh: GpuMesh; data: ChunkData;
 
 /** Ce que le joueur vise : objet, personnage ou créature (vivante ou morte), objet au sol. */
 export type Focus =
-  | { t: 'prop'; prop: Prop; label: string }
+  | { t: 'prop'; prop: Prop; label: string; hint?: string; danger?: boolean }
   | { t: 'entity'; e: Entity; label: string }
   | { t: 'drop'; d: Dropped; label: string };
 
@@ -168,7 +168,7 @@ export class Game {
   onHit(e: Entity): void {
     this.target = e;
     if (!e.npc || e.hostile) return;
-    e.hostile = true;
+    e.hostile = true; e.thinkT = 0;
     const w = this.witnesses();
     this.events.emit('player:crime', { type: 'agression', victimId: e.id, settlementId: e.npc.sid, factionId: e.npc.factionId, witnesses: [...new Set([...w.map((x) => x.id), e.id])] });
     this.alertGuards(e.npc.sid);
@@ -241,7 +241,8 @@ export class Game {
   private findFocus(): Focus | null {
     const p = this.player;
     const e = this.entities.pick(p.x, p.z, p.heading, 3.2, false);
-    if (e) {
+    const see = (x: number, z: number) => lineOfSight(this.world.chunks, p.x, p.z, x, z, p.y);
+    if (e && see(e.x, e.z)) {
       if (e.alive && e.npc) return { t: 'entity', e, label: `Parler à ${e.label}` };
       if (!e.alive && !e.looted) return { t: 'entity', e, label: `Fouiller : ${e.npc ? e.label : e.name}` };
     }
@@ -252,7 +253,13 @@ export class Game {
       const facing = d < 0.8 ? 1 : (dx * fx + dz * fz) / d;
       if (facing < 0.35 || Math.abs(pr.y - p.y) > 2.5) continue;
       const label = this.propLabel(pr);
-      if (label && d - facing < bs) { bs = d - facing; best = { t: 'prop', prop: pr, label }; }
+      if (label && d - facing < bs && see(pr.x, pr.z)) { bs = d - facing; best = { t: 'prop', prop: pr, label }; }
+    }
+    // vol : on montre s'il y a des témoins
+    if (best?.t === 'prop' && /^(coffre|tonneau|caisse)$/.test(best.prop.kind) && this.isOwned(best.prop)) {
+      const n = this.watchers().npcs.length;
+      best.hint = n ? `${n} témoin${n > 1 ? 's' : ''} vous voi${n > 1 ? 'ent' : 't'} !` : 'personne ne vous voit';
+      best.danger = n > 0;
     }
     for (const dr of this.state.dropped) {
       const d = Math.hypot(dr.x - p.x, dr.z - p.z);
@@ -274,9 +281,20 @@ export class Game {
 
   /** PNJ qui voient le joueur (témoins d'un délit). */
   witnesses(): Entity[] {
-    const p = this.player, env = { night: this.atmoNight, fog: 0 };
-    return this.entities.entities.filter((e) => e.npc && e.alive && Math.hypot(e.x - p.x, e.z - p.z) < 22
-      && perceives(this.world.chunks, { x: e.x, z: e.z, y: e.y, heading: e.heading, range: 22, nocturnal: false, asleep: e.action === 'dormir' }, { x: p.x, z: p.z, y: p.y, stealth: p.crouch ? this.character.stealth() : 0, noise: 0 }, env));
+    const p = this.player, env = { night: this.atmoNight, fog: this.fog() };
+    return this.entities.entities.filter((e) => e.npc && e.alive && !e.remote && Math.hypot(e.x - p.x, e.z - p.z) < 22
+      && perceives(this.world.chunks, { x: e.x, z: e.z, y: e.y, heading: e.heading, range: 22, nocturnal: false, asleep: e.action === 'dormir' }, { x: p.x, z: p.z, y: p.y, stealth: p.crouch ? Math.max(0.35, this.character.stealth()) : 0, noise: playerNoise(p) }, env));
+  }
+
+  private watchT = 0;
+  private watchCache: { npcs: Entity[]; hunters: Entity[] } = { npcs: [], hunters: [] };
+  /** Qui voit le joueur en ce moment (témoins et créatures qui le chassent), recalculé 4 fois par seconde. */
+  watchers(): { npcs: Entity[]; hunters: Entity[] } {
+    if (this.elapsed - this.watchT < 0.25) return this.watchCache;
+    this.watchT = this.elapsed;
+    const hunters = this.entities.entities.filter((e) => e.alive && e.mon && e.mon.targetId === 'player');
+    this.watchCache = { npcs: this.witnesses(), hunters };
+    return this.watchCache;
   }
 
   interact(): void {

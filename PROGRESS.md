@@ -38,8 +38,8 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 19. Vérification à 2 clients en local (wrangler dev), docs (README, architecture, guide de déploiement)
 
 ### Jalon 3 — corrections après les retours de jeu en ligne (2026-10-06)
-- [ ] 20. Murs : pas d'interaction ni de détection à travers les murs ; indicateurs discrétion (accroupi) et vol ; C = accroupi (bascule), fiche sur P ; fin de dialogue qui se ferme
-- [ ] 21. PNJ : garde qui court allongé (pose de sommeil), villageois qui fuient vite ou se défendent quand on les attaque
+- [x] 20. Murs : pas d'interaction ni de détection à travers les murs ; indicateurs discrétion (accroupi) et vol ; C = accroupi (bascule), fiche sur P ; fin de dialogue qui se ferme
+- [x] 21. PNJ : garde qui court allongé (pose de sommeil), villageois qui fuient vite ou se défendent quand on les attaque
 - [ ] 22. Déplacements : pentes trop raides infranchissables, saut plus haut, eau (ralentit, nage, teinte sous l'eau, éclaboussures)
 - [ ] 23. Génération : sol de maison qui clignote, coffre et tonneau superposés (GENERATOR_VERSION 0.2.0)
 - [ ] 24. Pluie : visible dans le décor (gouttes en profondeur, éclaboussures, sol mouillé), son plus doux

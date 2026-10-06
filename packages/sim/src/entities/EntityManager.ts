@@ -286,6 +286,28 @@ export class EntityManager {
     const minute = this.host.time.minuteOfDay, hour = this.host.time.hour;
     // hostile au joueur (délit) : les gardes le prennent en chasse
     if (e.hostile && !p.dead && Math.hypot(p.x - e.x, p.z - e.z) < 45 && (n.profession === 'garde' || n.profession === 'soldat')) { e.action = 'combattre'; e.foe = null; e.path = null; return; }
+    // villageois agressé : les plus braves rendent les coups, les autres crient et s'enfuient en courant
+    const pd = Math.hypot(p.x - e.x, p.z - e.z);
+    if (e.hostile && !p.dead && pd < 30) {
+      const tough = ['forgeron', 'chasseur', 'bûcheron', 'mineur', 'fermier', 'meunier'].includes(n.profession);
+      if (tough && n.traits.bravery > 0.6 && e.hp > e.maxHp * 0.45) { e.action = 'combattre'; e.foe = null; e.path = null; return; }
+      if (!e.shouted) {
+        e.shouted = true;
+        this.host.events.emit('message', { text: `${e.label} : « À l'aide ! On m'attaque ! »`, color: 0xf09040 });
+      }
+      e.action = 'fuir';
+      // point de fuite : à l'opposé du joueur, sur la grille de navigation
+      const ax = (e.x - p.x) / (pd || 1), az = (e.z - p.z) / (pd || 1);
+      if (!e.target || Math.hypot(e.target.x - p.x, e.target.z - p.z) < 14 || !e.path) {
+        const i = zone.grid.nearestFree(e.x + ax * 16, e.z + az * 16, 6);
+        const tx = i >= 0 ? zone.grid.x0 + (i % zone.grid.w) + 0.5 : e.x + ax * 16;
+        const tz = i >= 0 ? zone.grid.z0 + Math.floor(i / zone.grid.w) + 0.5 : e.z + az * 16;
+        e.target = { x: tx, z: tz }; e.path = null;
+        if (!e.pathPending) { e.pathPending = true; this.pathQueue.unshift(e); }
+      }
+      return;
+    }
+    if (e.hostile && pd >= 30) e.action = 'loisir';
     // menace : les gardes (et les plus braves) combattent, les autres fuient chez eux
     const threat = this.nearestThreat(e, 24);
     if (threat) {
@@ -315,6 +337,8 @@ export class EntityManager {
 
   private moveNpc(e: Entity, dt: number) {
     const foe = e.foe;
+    // seul le sommeil couche un PNJ : réveillé, il se relève aussitôt
+    if (e.action !== 'dormir') e.pose.dead = Math.max(0, e.pose.dead - dt * 4);
     if (e.action === 'combattre' && !foe && e.hostile) {
       const p = this.host.player, dx = p.x - e.x, dz = p.z - e.z, d = Math.hypot(dx, dz);
       e.heading = turn(e.heading, Math.atan2(dx, -dz), dt * 8);
@@ -322,7 +346,8 @@ export class EntityManager {
       else {
         e.cooldown -= dt;
         e.pose.swing = Math.max(0, e.cooldown - 0.6);
-        if (e.cooldown <= 0) { e.cooldown = 1.4; hitPlayer(this.host.combat, 10, e); }
+        const guard = e.npc?.profession === 'garde' || e.npc?.profession === 'soldat';
+        if (e.cooldown <= 0) { e.cooldown = guard ? 1.4 : 1.7; hitPlayer(this.host.combat, guard ? 10 : 5, e); }
       }
       const gy0 = this.ground(e.x, e.z, e.y + 0.3);
       e.y += (gy0 - e.y) * Math.min(1, dt * 12);
@@ -349,8 +374,8 @@ export class EntityManager {
         tx = e.target.x; tz = e.target.z; moving = Math.hypot(tx - e.x, tz - e.z) > 0.3;
       }
       const p = this.host.player;
-      const blocked = Math.hypot(p.x - e.x, p.z - e.z) < 0.9 && moving;
-      const speed = e.speed * (e.action === 'fuir' ? 2.4 : 1);
+      const blocked = Math.hypot(p.x - e.x, p.z - e.z) < 0.9 && moving && e.action !== 'fuir';
+      const speed = e.speed * (e.action === 'fuir' ? 3.2 : 1);
       if (moving && !blocked) {
         const dx = tx - e.x, dz = tz - e.z, d = Math.hypot(dx, dz) || 1;
         const step = Math.min(d, speed * dt);

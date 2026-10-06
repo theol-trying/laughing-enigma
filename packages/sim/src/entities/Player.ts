@@ -71,7 +71,8 @@ export class Player {
   update(dt: number, input: Input, world: World<any>, speedMul = 1): void {
     const f = input.isDown('KeyW') ? 1 : 0, b = input.isDown('KeyS') ? 1 : 0;
     const l = input.isDown('KeyA') ? 1 : 0, r = input.isDown('KeyD') ? 1 : 0;
-    this.crouch = input.isDown('KeyC');
+    if (input.pressed('KeyC') && !this.noclip) this.crouch = !this.crouch;
+    if (input.isDown('ShiftLeft') && f > 0) this.crouch = false;
     const sh = Math.sin(this.heading), ch = Math.cos(this.heading);
     let mx = (f - b) * sh + (r - l) * ch, mz = -(f - b) * ch + (r - l) * sh;
     const ml = Math.hypot(mx, mz);
@@ -83,7 +84,7 @@ export class Player {
       const sp = (this.sprinting ? 60 : 15) * dt;
       this.x += mx * sp; this.z += mz * sp;
       if (input.isDown('Space')) this.y += sp;
-      if (this.crouch) this.y -= sp;
+      if (input.isDown('KeyC')) this.y -= sp;
       this.vx = this.vy = this.vz = 0;
       return;
     }

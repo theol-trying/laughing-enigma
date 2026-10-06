@@ -20,7 +20,9 @@ export class UIManager {
 
   open(s: Screen): void { this.stack.push(s); if (s.modal) this.inputRef.exitLock(); }
   replace(s: Screen): void { this.stack.pop(); this.open(s); }
-  close(): void { this.stack.pop(); }
+  /** appelé quand le dernier écran modal se ferme (pour recapturer la souris en jeu) */
+  onResume: (() => void) | null = null;
+  close(): void { this.stack.pop(); if (!this.modal) this.onResume?.(); }
   closeAll(): void { this.stack = []; }
   get top(): Screen | undefined { return this.stack[this.stack.length - 1]; }
   get modal(): boolean { return this.stack.some((s) => s.modal); }

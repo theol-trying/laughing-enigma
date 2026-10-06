@@ -65,6 +65,8 @@ export class Entity {
   zoneKey = '';
   /** dernier état reçu du propriétaire de la zone (entité « marionnette » simulée ailleurs) */
   remote: { x: number; y: number; z: number; h: number } | null = null;
+  /** a déjà crié à l'aide (villageois agressé) */
+  shouted = false;
   /** envois du propriétaire où l'entité manquait (disparue chez lui) */
   missing = 0;
 

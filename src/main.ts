@@ -24,6 +24,7 @@ const canvas = document.getElementById('screen') as HTMLCanvasElement;
 const r = new Renderer(canvas);
 const input = new Input(canvas);
 const screens = new UIManager(r, input);
+screens.onResume = () => { if (game) input.requestLock(); };
 
 // options (préférences locales du navigateur)
 const DEFAULT_OPTS: Options = { cellSize: Math.max(10, Math.min(20, Math.round(window.innerHeight / 58))), detail: 0.75, sensitivity: 1, fov: 68, volume: 0.6, timeScale: 1 };
@@ -189,7 +190,7 @@ function tick(now: number) {
     if (input.key('Tab')) screens.open(new InventoryScreen(g));
     else if (input.key('m')) screens.open(new MapScreen(g));
     else if (input.key('j')) screens.open(new JournalScreen(g));
-    else if (input.key('c') && !input.isDown('KeyC')) screens.open(new StatsScreen(g));
+    else if (input.key('p')) screens.open(new StatsScreen(g));
     else if (input.key('Escape')) pause();
     else if (input.key('Enter') && g.coop) screens.open(new ChatScreen(input, (t) => g.coop?.chat(t)));
     if (input.key('F3')) hud.debug = !hud.debug;
@@ -201,6 +202,7 @@ function tick(now: number) {
     if (!screens.modal) g.update(dt, input);
   }
   hud.drawCalls = r.drawCalls;
+  hud.locked = input.locked;
   if (!screens.modal || screens.top instanceof DialogueScreen || screens.top instanceof ChatScreen) drawHud(ui, g, hud);
   screens.draw();
   if (game) g.render(0); else idle(now);

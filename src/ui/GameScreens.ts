@@ -191,11 +191,11 @@ export class StatsScreen implements Screen {
     g.text(x + 2, y + 15, 'Réputation', C.title);
     g.text(x + 3, y + 16, `Renommée ${Math.round(rep.global)}`, C.text);
     civ.factions.forEach((f, i) => g.text(x + 3 + (i % 2) * Math.floor(w / 2), y + 17 + Math.floor(i / 2), `${f.name.slice(0, 32).padEnd(33)} ${Math.round(rep.faction[f.id]).toString().padStart(4)}`, rep.faction[f.id] < -10 ? C.red : rep.faction[f.id] > 10 ? C.green : C.text));
-    g.text(x + 2, y + h - 2, '1-6 ou clic : augmenter une caractéristique · C/Échap : fermer', C.dim);
+    g.text(x + 2, y + h - 2, '1-6 ou clic : augmenter une caractéristique · P/Échap : fermer', C.dim);
   }
   private raise(i: number) { const ch = this.game.character; if (ch.statPoints <= 0) return; ch.stats[STATS[i]]++; ch.statPoints--; this.game.syncStats(); }
   input(ctx: UICtx): void {
-    if (ctx.input.key('Escape') || ctx.input.key('c')) { ctx.close(); return; }
+    if (ctx.input.key('Escape') || ctx.input.key('p')) { ctx.close(); return; }
     for (let k = 0; k < 6; k++) if (ctx.input.pressed('Digit' + (k + 1))) this.raise(k);
   }
 }

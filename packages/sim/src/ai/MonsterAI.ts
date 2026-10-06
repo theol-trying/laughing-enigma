@@ -1,7 +1,7 @@
 import type { Entity, RemoteTarget } from '../entities/Entity';
 import type { Player } from '../entities/Player';
 import { MONSTERS } from '../entities/Monster';
-import { perceives, type Env } from './Perception';
+import { perceives, playerNoise, type Env } from './Perception';
 import { hitEntity, hitPlayer, type CombatHost } from '../gameplay/Combat';
 import type { ChunkManager } from '@ascii-fort/worldgen/ChunkManager';
 import type { CircleCollider, SegCollider, Platform } from '@ascii-fort/worldgen/Chunk';
@@ -50,8 +50,8 @@ export function thinkMonster(e: Entity, ctx: MonsterCtx): void {
   if (!m.targetId) {
     // candidats : le joueur, et les villageois pour les créatures hostiles
     const cands: { id: string; x: number; z: number; y: number; stealth: number; noise: number }[] = [];
-    if (!p.dead) cands.push({ id: 'player', x: p.x, z: p.z, y: p.y, stealth: p.crouch ? 1 : 0, noise: p.sprinting ? 1 : 0 });
-    for (const o of ctx.others) if (!o.dead) cands.push({ id: o.id, x: o.x, z: o.z, y: o.y, stealth: o.crouch ? 1 : 0, noise: o.sprint ? 1 : 0 });
+    if (!p.dead) cands.push({ id: 'player', x: p.x, z: p.z, y: p.y, stealth: p.crouch ? 0.75 : 0, noise: playerNoise(p) });
+    for (const o of ctx.others) if (!o.dead) cands.push({ id: o.id, x: o.x, z: o.z, y: o.y, stealth: o.crouch ? 0.75 : 0, noise: o.sprint ? 1 : o.crouch ? 0 : 0.25 });
     if (HOSTILE_TO_VILLAGERS.has(m.def)) for (const o of ctx.ents) if (o.npc && o.alive && Math.hypot(o.x - e.x, o.z - e.z) < m.perception) cands.push({ id: o.id, x: o.x, z: o.z, y: o.y, stealth: 0, noise: 0.2 });
     cands.sort((a, b) => Math.hypot(a.x - e.x, a.z - e.z) - Math.hypot(b.x - e.x, b.z - e.z));
     for (const c of cands) {

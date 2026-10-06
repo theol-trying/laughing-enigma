@@ -6,7 +6,7 @@ import { BIOMES } from '@ascii-fort/worldgen/terrain/Biomes';
 
 // Interface de jeu en caractères : barres, boussole, heure, cible, invites, messages.
 
-export interface HudState { log: { text: string; t: number; color: number }[]; debug: boolean; fps: number; genMs: number; drawCalls: number }
+export interface HudState { log: { text: string; t: number; color: number }[]; debug: boolean; fps: number; genMs: number; drawCalls: number; locked?: boolean }
 
 const DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
 
@@ -83,7 +83,18 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
   }
   const mid = Math.floor(rows / 2);
   g.text(Math.floor(cols / 2), mid, game.fight.charge > 0.42 && ch.weapon?.weapon?.kind !== 'arc' ? '✶'.length ? '*' : '+' : '+', p.blocking ? C.cyan : C.white);
-  if (game.focus) g.center(mid + 2, ` [E] ${game.focus.label} `, C.yellow, C.panel);
+  if (game.focus) {
+    g.center(mid + 2, ` [E] ${game.focus.label} `, C.yellow, C.panel);
+    const f = game.focus;
+    if (f.t === 'prop' && f.hint) g.center(mid + 3, ` ${f.hint} `, f.danger ? C.red : C.green, C.panel);
+  }
+  if (p.crouch && !p.dead) {
+    const w = game.watchers();
+    const by = w.hunters[0]?.name ?? w.npcs[0]?.label;
+    const txt = by ? ` ◉ Repéré par ${by} ` : ' ○ Caché ';
+    g.center(mid + 5, txt, by ? C.red : C.green, C.panel);
+  }
+  if (!st.locked && !p.dead) g.center(rows - 6, ' Cliquez dans le jeu pour reprendre la souris ', C.white, C.panel);
   if (ch.weapon?.weapon?.kind === 'arc' && game.fight.charge > 0) g.bar(Math.floor(cols / 2) - 5, mid + 1, 10, Math.min(1, game.fight.charge / 0.8), C.gold, C.faint);
 
   // messages

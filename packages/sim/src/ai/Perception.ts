@@ -24,11 +24,19 @@ export function lineOfSight(chunks: ChunkManager<any>, ax: number, az: number, b
   return true;
 }
 
+/** Bruit d'un joueur : course 1, marche 0,25, immobile ou accroupi presque rien. */
+export function playerNoise(p: { sprinting: boolean; moving: boolean; crouch: boolean }): number {
+  return p.sprinting ? 1 : p.crouch ? 0 : p.moving ? 0.25 : 0.05;
+}
+
 export function perceives(chunks: ChunkManager<any>, o: Observer, s: Stimulus, env: Env): boolean {
   const dx = s.x - o.x, dz = s.z - o.z, d = Math.hypot(dx, dz);
-  // ouïe : on entend courir et se battre
-  const hear = (o.asleep ? 4 : 10) + s.noise * 16;
+  if (d > Math.max(o.range, 26) * 1.2) return false;
+  const walls = !lineOfSight(chunks, o.x, o.z, s.x, s.z, o.y);
+  // ouïe : on entend marcher, courir et se battre ; la discrétion et les murs étouffent les bruits
+  const hear = ((o.asleep ? 2 : 5) + s.noise * 16) * (1 - s.stealth * 0.6) * (walls ? 0.4 : 1);
   if (d < hear) return true;
+  if (walls) return false;
   const light = o.nocturnal ? 1 : 1 - env.night * 0.45;
   const range = o.range * light * (1 - env.fog * 0.5) * (1 - s.stealth * 0.55) * (o.asleep ? 0.25 : 1);
   if (d > range) return false;
@@ -36,5 +44,5 @@ export function perceives(chunks: ChunkManager<any>, o: Observer, s: Stimulus, e
     const fx = Math.sin(o.heading), fz = -Math.cos(o.heading);
     if ((dx * fx + dz * fz) / d < 0.34) return false; // cône d'environ 140°
   }
-  return lineOfSight(chunks, o.x, o.z, s.x, s.z, o.y);
+  return true;
 }
