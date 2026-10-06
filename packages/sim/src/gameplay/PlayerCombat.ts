@@ -14,6 +14,9 @@ import type { Element } from './Items';
 
 export interface Projectile { x: number; y: number; z: number; vx: number; vy: number; vz: number; dmg: number; element?: Element; kind: 'flèche' | 'feu'; life: number; stuck: boolean; owner: string }
 
+/** Effet d'un tir ou d'un sort, tel qu'il est montré aux autres joueurs. */
+export type CastFx = { k: 'shot'; kind: 'flèche' | 'feu'; x: number; y: number; z: number; vx: number; vy: number; vz: number } | { k: 'heal'; x: number; y: number; z: number };
+
 export interface CombatWorld {
   player: Player;
   character: Character;
@@ -34,6 +37,8 @@ export class PlayerCombat {
   private cooldown = 0;
   dashT = 0;
   projectiles: Projectile[] = [];
+  /** multijoueur : tir ou sort lancé (pour le montrer aux autres joueurs) */
+  onCast: ((fx: CastFx) => void) | null = null;
   lastTarget: Entity | null = null;
 
   update(dt: number, input: Input, w: CombatWorld): void {
@@ -84,10 +89,12 @@ export class PlayerCombat {
       p.mana -= 15;
       const f = this.aim(p);
       this.projectiles.push({ x: p.x + f[0] * 0.8, y: p.eyeY - 0.2, z: p.z + f[2] * 0.8, vx: f[0] * 24, vy: f[1] * 24, vz: f[2] * 24, dmg: 16 * ch.spellMult(), element: 'feu', kind: 'feu', life: 3, stuck: false, owner: 'player' });
+      this.cast(this.projectiles[this.projectiles.length - 1]);
       if (ch.practice('magie', 2)) w.events.emit('message', { text: `Magie : ${ch.skills.magie}`, color: 0x9a7ae0 });
     }
     if (input.key('f') && p.mana >= 20 && p.hp < p.maxHp) {
       p.mana -= 20; p.hp = Math.min(p.maxHp, p.hp + 25 * ch.spellMult()); p.poison = 0;
+      this.onCast?.({ k: 'heal', x: p.x, y: p.y, z: p.z });
       w.events.emit('message', { text: 'Une chaleur douce referme vos plaies.', color: 0x60d070 });
       ch.practice('magie', 2);
     }
@@ -130,7 +137,13 @@ export class PlayerCombat {
     const f = this.aim(p), v = 22 + 38 * draw;
     p.stamina = Math.max(0, p.stamina - wd.stamina);
     this.projectiles.push({ x: p.x + f[0] * 0.6, y: p.eyeY - 0.1, z: p.z + f[2] * 0.6, vx: f[0] * v, vy: f[1] * v, vz: f[2] * v, dmg: wd.damage * ch.bowMult() * (0.3 + 0.7 * draw), element: wd.element, kind: 'flèche', life: 6, stuck: false, owner: 'player' });
+    this.cast(this.projectiles[this.projectiles.length - 1]);
     this.cooldown = 0.35;
+  }
+
+  private cast(pr: Projectile) {
+    const r = (v: number) => Math.round(v * 100) / 100;
+    this.onCast?.({ k: 'shot', kind: pr.kind, x: r(pr.x), y: r(pr.y), z: r(pr.z), vx: r(pr.vx), vy: r(pr.vy), vz: r(pr.vz) });
   }
 
   private updateProjectiles(dt: number, w: CombatWorld) {

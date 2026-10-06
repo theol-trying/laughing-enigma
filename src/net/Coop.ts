@@ -4,7 +4,11 @@ import { hitEntity, hitPlayer, type Element } from '@ascii-fort/sim/gameplay/Com
 import type { Entity } from '@ascii-fort/sim/entities/Entity';
 import type { EntityNet, RemoteTarget } from '@ascii-fort/sim/entities/EntityManager';
 import { MIN_PER_DAY } from '@ascii-fort/core/Time';
+import { item } from '@ascii-fort/sim/gameplay/Items';
 import type { InstanceBuffer } from '@ascii-fort/ascii-engine/Renderer';
+import { M } from '@ascii-fort/ascii-engine/Materials';
+import { trsYawPitch, mat4 } from '@ascii-fort/core/math';
+import type { CastFx } from '@ascii-fort/sim/gameplay/PlayerCombat';
 import { C } from '@ascii-fort/ascii-engine/TextGrid';
 import type { Game } from '../game/Game';
 import type { SaveData } from '../game/SaveManager';
@@ -24,7 +28,19 @@ interface PlayerState { x: number; y: number; z: number; h: number; sw: number; 
 type Direct =
   | { k: 'dmg'; id: string; a: number; el?: Element }                    // coup sur une entité dont le destinataire est propriétaire
   | { k: 'hurt'; a: number; x: number; z: number; el?: Element; by: string } // une créature frappe le destinataire
-  | { k: 'kill'; id: string; type: string; kind: 'npc' | 'monster'; sid?: number; fid?: number; camp?: number; x: number; z: number };
+  | { k: 'kill'; id: string; type: string; kind: 'npc' | 'monster'; sid?: number; fid?: number; camp?: number; x: number; z: number }
+  // échanges entre joueurs
+  | { k: 'trade-ask' } | { k: 'trade-answer'; ok: boolean } | { k: 'trade-cancel' }
+  | { k: 'trade-offer'; items: [string, number][]; gold: number; v: number }
+  | { k: 'trade-ok'; mine: number; theirs: number };
+
+/** Échange en cours avec un autre joueur ; ok* = versions des deux offres au moment de la validation. */
+export interface TradeSession {
+  with: string; name: string;
+  mine: { items: Map<string, number>; gold: number; v: number };
+  theirs: { items: [string, number][]; gold: number; v: number };
+  okMine: [number, number] | null; okTheirs: [number, number] | null;
+}
 
 export class RemotePlayer {
   x = 0; y = 0; z = 0; heading = 0;
@@ -34,6 +50,7 @@ export class RemotePlayer {
   look = '';
   model: ModelDef;
   seen = 0;
+  prevSwing = 0;
   constructor(readonly id: string, public name: string) { this.model = playerModel(name, ''); }
 }
 
@@ -67,6 +84,15 @@ export class Coop implements EntityNet {
   private applying = false;
   private pending = new Map<string, () => void>();
   private targets: RemoteTarget[] = [];
+  /** tirs et sorts des autres joueurs, rejoués pour l'affichage (sans dégâts : ceux-ci passent par le propriétaire des zones) */
+  shots: { kind: 'flèche' | 'feu'; x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; stuck: boolean; dg: number }[] = [];
+  private sparkles: { x: number; y: number; z: number; t: number }[] = [];
+  private m4 = mat4();
+  /** échange en cours, demande envoyée, et écrans ouverts par le jeu */
+  trade: TradeSession | null = null;
+  private asking: string | null = null;
+  onTradeAsk: ((name: string, answer: (ok: boolean) => void) => void) | null = null;
+  onTradeOpen: ((s: TradeSession) => void) | null = null;
   private off: () => void;
 
   constructor(readonly net: NetClient, readonly game: Game, welcome: Welcome) {
@@ -85,6 +111,8 @@ export class Coop implements EntityNet {
     });
     ev.on('camp:cleared', (c) => { if (!this.applying) this.fact('camp:' + c.campId, 1); });
     game.entities.net = this;
+    // nos tirs et sorts sont montrés aux autres joueurs
+    game.fight.onCast = (fx) => { if (this.players.size) this.net.send({ t: 'fx', d: { ...fx, dg: game.dungeon ? game.dungeon.layout.id : -1 } }); };
   }
 
   dispose(): void {
@@ -92,6 +120,7 @@ export class Coop implements EntityNet {
     this.off();
     this.net.close();
     this.game.entities.net = null;
+    this.game.fight.onCast = null;
   }
 
   get online(): boolean { return this.net.status === 'en ligne'; }
@@ -121,7 +150,7 @@ export class Coop implements EntityNet {
     switch (m.t) {
       case 'welcome': this.welcome(m, false); break;
       case 'join': this.players.set(m.p.id, new RemotePlayer(m.p.id, m.p.name)); this.msg(`${m.p.name} rejoint la partie.`, C.cyan); break;
-      case 'leave': { const p = this.players.get(m.id); this.players.delete(m.id); if (p) this.msg(`${p.name} quitte la partie.`, C.dim); break; }
+      case 'leave': { const p = this.players.get(m.id); this.players.delete(m.id); if (p) this.msg(`${p.name} quitte la partie.`, C.dim); if (this.trade?.with === m.id) { this.trade = null; this.msg('Échange annulé.', C.dim); } break; }
       case 'st': this.onState(m.id, m.s as PlayerState); break;
       case 'owner':
         if (m.id) this.owners.set(m.z, m.id); else this.owners.delete(m.z);
@@ -130,6 +159,7 @@ export class Coop implements EntityNet {
       case 'ents': for (const z of m.zs) if (this.owners.get(z.z) === m.id) g.entities.applySnapshot(z.z, z.l as unknown[][]); break;
       case 'to': this.onDirect(m.from, m.d as Direct); break;
       case 'fact': this.onFact(m.k, m.v, m.by); break;
+      case 'fx': this.onFx(m.id, m.d as CastFx & { dg: number }); break;
       case 'chat': this.msg(`[${m.name}] ${m.text}`, m.id === this.myId ? C.white : C.yellow); break;
       case 'err': this.msg(m.msg, C.red); break;
     }
@@ -142,8 +172,24 @@ export class Coop implements EntityNet {
     p.tx = s.x; p.ty = s.y; p.tz = s.z; p.th = s.h;
     p.pose.swing = s.sw; p.pose.block = s.bl; p.hp = s.hp; p.maxHp = s.mhp; p.dungeon = s.dg; p.crouch = !!s.cr; p.sprint = !!s.sp;
     p.seen = performance.now();
+    if (s.sw > 0.6 && p.prevSwing <= 0.6) this.game.audio.swing({ x: s.x, y: s.y + 1.2, z: s.z });
+    p.prevSwing = s.sw;
     if (s.lk !== p.look) { p.look = s.lk; p.model = playerModel(p.name, s.lk); }
     p.pose.dead = s.d;
+  }
+
+  private onFx(from: string, f: CastFx & { dg: number }) {
+    if (!f || typeof f.x !== 'number') return;
+    const g = this.game, here = g.dungeon ? g.dungeon.layout.id : -1;
+    if (f.dg !== here) return;
+    if (f.k === 'shot') {
+      this.shots.push({ kind: f.kind, x: f.x, y: f.y, z: f.z, vx: f.vx, vy: f.vy, vz: f.vz, life: f.kind === 'feu' ? 3 : 6, stuck: false, dg: f.dg });
+      if (this.shots.length > 60) this.shots.shift();
+      g.audio.shot(f.kind, { x: f.x, y: f.y, z: f.z });
+    } else if (f.k === 'heal') {
+      for (let i = 0; i < 14; i++) this.sparkles.push({ x: f.x + (Math.random() - 0.5) * 1.2, y: f.y + Math.random() * 1.6, z: f.z + (Math.random() - 0.5) * 1.2, t: 1.2 + Math.random() * 0.6 });
+      void from;
+    }
   }
 
   private onDirect(from: string, d: Direct) {
@@ -154,10 +200,119 @@ export class Coop implements EntityNet {
       if (e && e.alive) hitEntity(g.combat, e, d.a, 'p:' + from, d.el);
     } else if (d.k === 'hurt') {
       if (!g.god) hitPlayer(g.combat, d.a, { x: d.x, z: d.z } as Entity, d.el);
+    } else if (d.k.startsWith('trade')) {
+      this.onTrade(from, d);
     } else if (d.k === 'kill') {
       // crédit du coup fatal : rejoué localement comme si l'entité était simulée ici
       g.events.emit('entity:killed', { victimId: d.id, killerId: 'player', kind: d.kind, type: d.type, factionId: d.fid, settlementId: d.sid, campId: d.camp, x: d.x, z: d.z });
     }
+  }
+
+  // ---------------------------------------------------------------- échanges entre joueurs
+  askTrade(id: string): void {
+    const r = this.players.get(id);
+    if (!r || this.trade) return;
+    this.asking = id;
+    this.direct(id, { k: 'trade-ask' });
+    this.msg(`Proposition d'échange envoyée à ${r.name}…`, C.dim);
+  }
+
+  private onTrade(from: string, d: Direct) {
+    const r = this.players.get(from);
+    if (!r) return;
+    const t = this.trade;
+    switch (d.k) {
+      case 'trade-ask':
+        if (t || !this.onTradeAsk) { this.direct(from, { k: 'trade-answer', ok: false }); break; }
+        this.onTradeAsk(r.name, (ok) => { this.direct(from, { k: 'trade-answer', ok }); if (ok) this.openTrade(from); });
+        break;
+      case 'trade-answer':
+        if (this.asking !== from) break;
+        this.asking = null;
+        if (d.ok) this.openTrade(from); else this.msg(`${r.name} refuse l'échange.`, C.dim);
+        break;
+      case 'trade-offer':
+        if (t?.with !== from) break;
+        t.theirs = { items: (Array.isArray(d.items) ? d.items : []).filter(([id, n]) => this.tradeable(id) && n > 0).map(([id, n]) => [id, Math.floor(n)] as [string, number]), gold: Math.max(0, Math.floor(d.gold) || 0), v: d.v };
+        t.okMine = null; t.okTheirs = null;
+        break;
+      case 'trade-ok':
+        if (t?.with !== from) break;
+        t.okTheirs = [d.mine, d.theirs];
+        this.tryComplete();
+        break;
+      case 'trade-cancel':
+        if (t?.with !== from) break;
+        this.trade = null;
+        this.msg(`${r.name} annule l'échange.`, C.dim);
+        break;
+    }
+  }
+
+  private tradeable(id: string): boolean {
+    try { const d = item(id); return !!d && d.cat !== 'quête' && d.cat !== 'clé'; } catch { return false; }
+  }
+
+  private openTrade(id: string) {
+    const r = this.players.get(id);
+    if (!r) return;
+    this.trade = { with: id, name: r.name, mine: { items: new Map(), gold: 0, v: 0 }, theirs: { items: [], gold: 0, v: 0 }, okMine: null, okTheirs: null };
+    this.onTradeOpen?.(this.trade);
+  }
+
+  /** Change la quantité offerte d'un objet (ou de l'or). */
+  setOffer(id: string, n: number): void {
+    const t = this.trade;
+    if (!t) return;
+    if (id === 'or') t.mine.gold = n; else if (n > 0) t.mine.items.set(id, n); else t.mine.items.delete(id);
+    t.mine.v++; t.okMine = null; t.okTheirs = null;
+    this.direct(t.with, { k: 'trade-offer', items: [...t.mine.items], gold: t.mine.gold, v: t.mine.v });
+  }
+
+  validateTrade(): void {
+    const t = this.trade;
+    if (!t) return;
+    t.okMine = [t.mine.v, t.theirs.v];
+    this.direct(t.with, { k: 'trade-ok', mine: t.mine.v, theirs: t.theirs.v });
+    this.tryComplete();
+  }
+
+  cancelTrade(): void {
+    if (!this.trade) return;
+    this.direct(this.trade.with, { k: 'trade-cancel' });
+    this.trade = null;
+  }
+
+  tradeStatus(): string {
+    const t = this.trade;
+    if (!t) return '';
+    if (t.okMine && t.okTheirs) return 'Échange en cours…';
+    if (t.okMine) return `Vous avez validé : en attente de ${t.name}.`;
+    if (t.okTheirs) return `${t.name} a validé : à vous de valider (Entrée).`;
+    return 'Composez votre offre, puis validez (Entrée). Toute modification annule les validations.';
+  }
+
+  /** Les deux joueurs ont validé les mêmes offres : chacun applique l'échange de son côté. */
+  private tryComplete() {
+    const t = this.trade;
+    if (!t || !t.okMine || !t.okTheirs) return;
+    const [m0, m1] = t.okMine, [t0, t1] = t.okTheirs;
+    if (m0 !== t.mine.v || m1 !== t.theirs.v || t0 !== t.theirs.v || t1 !== t.mine.v) return;
+    const ch = this.game.character;
+    const missing = ch.inv.gold < t.mine.gold || [...t.mine.items].some(([id, n]) => ch.inv.count(id) - (ch.isEquipped(id) ? 1 : 0) < n);
+    if (missing) { this.msg('Échange impossible : vous n’avez plus tout ce que vous offriez.', C.red); this.cancelTrade(); return; }
+    ch.inv.gold -= t.mine.gold;
+    for (const [id, n] of t.mine.items) ch.inv.remove(id, n);
+    ch.inv.gold += t.theirs.gold;
+    for (const [id, n] of t.theirs.items) ch.inv.add(id, n);
+    const got = [...(t.theirs.gold ? [`${t.theirs.gold} or`] : []), ...t.theirs.items.map(([id, n]) => `${item(id).name}${n > 1 ? ' ×' + n : ''}`)];
+    const now = performance.now();
+    if (t.theirs.gold) this.game.lootFeed.push({ text: `+ ${t.theirs.gold} pièces d’or`, color: 0xe8c050, t: now });
+    for (const [id, n] of t.theirs.items) this.game.lootFeed.push({ text: `+ ${n > 1 ? n + ' ' : ''}${item(id).name}`, color: 0xe8e8e0, t: now });
+    this.msg(`Échange conclu avec ${t.name}${got.length ? ' : vous recevez ' + got.join(', ') : ''}.`, C.green);
+    this.trade = null;
+    this.game.audio.chime();
+    this.saveNow();
   }
 
   // ---------------------------------------------------------------- faits partagés
@@ -248,6 +403,21 @@ export class Coop implements EntityNet {
       r.pose.walk = moved > 0.002 ? r.pose.walk + moved * 3.2 : r.pose.walk * 0.85;
       this.targets.push({ id: 'p:' + r.id, x: r.x, y: r.y, z: r.z, dead: r.pose.dead > 0.5, crouch: r.crouch, sprint: r.sprint });
     }
+    // tirs des autres joueurs : même trajectoire que chez eux (gravité pour les flèches)
+    for (const s of this.shots) {
+      s.life -= dt;
+      if (s.stuck) continue;
+      if (s.kind === 'flèche') s.vy -= 9.8 * dt;
+      s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt;
+      const ground = g.dungeon ? 0 : g.world.heightAt(s.x, s.z);
+      let hit = s.y < ground;
+      for (const e of g.entities.entities) if (e.alive && Math.hypot(e.x - s.x, e.z - s.z) < e.radius + 0.15 && s.y > e.y && s.y < e.y + e.model.height) { hit = true; break; }
+      if (hit) { s.stuck = true; s.life = s.kind === 'feu' ? 0 : Math.min(s.life, 15); }
+    }
+    this.shots = this.shots.filter((s) => s.life > 0);
+    if (this.trade) { const r = this.players.get(this.trade.with); if (r && Math.hypot(r.x - p.x, r.z - p.z) > 15) { this.cancelTrade(); this.msg('Échange annulé : vous vous êtes éloignés.', C.dim); } }
+    for (const sp of this.sparkles) { sp.t -= dt; sp.y += dt * 0.9; }
+    this.sparkles = this.sparkles.filter((s) => s.t > 0);
     if (!this.online) return;
     this.sendT -= dt;
     if (this.sendT <= 0 && this.players.size) {
@@ -283,6 +453,20 @@ export class Coop implements EntityNet {
       if (!r.seen || r.dungeon !== dg || Math.hypot(r.x - cx, r.z - cz) > 170) continue;
       drawModel(ib, r.model, r.x, r.y, r.z, r.heading, r.pose);
     }
+    for (const s of this.shots) {
+      const sp = Math.hypot(s.vx, s.vz) || 1, fire = s.kind === 'feu';
+      trsYawPitch(this.m4, s.x, s.y, s.z, -Math.atan2(s.vx, -s.vz), Math.atan2(s.vy, sp), fire ? 0.35 : 0.03, fire ? 0.35 : 0.03, fire ? 0.35 : 0.8);
+      ib.add(this.m4, fire ? 0xff7a20 : 0xb8a070, fire ? M.FIRE : M.WOOD, 0, 0, 1);
+    }
+    for (const s of this.sparkles) {
+      trsYawPitch(this.m4, s.x, s.y, s.z, 0, 0, 0.08, 0.08, 0.08);
+      ib.add(this.m4, 0x70f090, M.GLOW, '+'.charCodeAt(0) - 31, 0, 1, 2);
+    }
+  }
+
+  /** Lumières des traits de feu des autres joueurs. */
+  lights(): { x: number; y: number; z: number; radius: number; r: number; g: number; b: number }[] {
+    return this.shots.filter((s) => s.kind === 'feu' && !s.stuck).map((s) => ({ x: s.x, y: s.y, z: s.z, radius: 8, r: 2, g: 0.9, b: 0.3 }));
   }
 
   private msg(text: string, color = C.text) { this.game.events.emit('message', { text, color }); }

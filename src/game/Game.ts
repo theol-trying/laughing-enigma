@@ -49,7 +49,8 @@ export interface Buff { id: string; name: string; t: number; dmg?: number; armor
 export type Focus =
   | { t: 'prop'; prop: Prop; label: string; hint?: string; danger?: boolean }
   | { t: 'entity'; e: Entity; label: string }
-  | { t: 'drop'; d: Dropped; label: string };
+  | { t: 'drop'; d: Dropped; label: string }
+  | { t: 'player'; id: string; label: string };
 
 /** Partie en cours : monde, joueur, temps et systèmes. */
 export class Game {
@@ -273,6 +274,15 @@ export class Game {
       if (!e.alive && !e.looted) return { t: 'entity', e, label: `Fouiller : ${e.npc ? e.label : e.name}` };
     }
     const fx = Math.sin(p.heading), fz = -Math.cos(p.heading);
+    // un autre joueur juste devant : on peut lui proposer un échange
+    if (this.coop) {
+      const dg = this.dungeon ? this.dungeon.layout.id : -1;
+      for (const r of this.coop.players.values()) {
+        const dx = r.x - p.x, dz = r.z - p.z, d = Math.hypot(dx, dz);
+        if (!r.seen || r.dungeon !== dg || d > 3 || (d > 0.6 && (dx * fx + dz * fz) / d < 0.6) || r.pose.dead > 0.5 || !see(r.x, r.z)) continue;
+        return { t: 'player', id: r.id, label: `Proposer un échange à ${r.name}` };
+      }
+    }
     let best: Focus | null = null, bs = Infinity;
     for (const pr of this.world.chunks.propsNear(p.x, p.z, 3.2)) {
       const dx = pr.x - p.x, dz = pr.z - p.z, d = Math.hypot(dx, dz);
@@ -347,6 +357,7 @@ export class Game {
       }
       return;
     }
+    if (f.t === 'player') { this.coop?.askTrade(f.id); return; }
     if (f.t === 'drop') {
       ch.inv.add(f.d.id, f.d.qty);
       this.lootFeed.push({ text: `+ ${f.d.qty > 1 ? f.d.qty + ' ' : ''}${item(f.d.id).name}`, color: 0xe8e8e0, t: performance.now() });
@@ -859,6 +870,7 @@ export class Game {
     const near = this.world.chunks.lightsNear(c.x, c.z, 90).map((l) => ({ l, d: Math.hypot(l.x - c.x, l.z - c.z) })).sort((a, b) => a.d - b.d);
     if (!dg) for (const l of this.entities.lanterns(atmo.night)) lights.push(l);
     for (const pr of this.fight.projectiles) if (pr.kind === 'feu') lights.push({ x: pr.x, y: pr.y, z: pr.z, radius: 8, r: 2, g: 0.9, b: 0.3 });
+    if (this.coop) lights.push(...this.coop.lights());
     for (const { l } of near) {
       const k = (l.kind === 'torch' ? torchOn : 1) * (0.85 + 0.15 * Math.sin(this.elapsed * 11 + l.x * 3) * Math.sin(this.elapsed * 7 + l.z * 5));
       if (k < 0.02) continue;

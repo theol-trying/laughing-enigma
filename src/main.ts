@@ -16,6 +16,7 @@ import type { Civilization } from '@ascii-fort/worldgen/civilization/Civilizatio
 import { SaveManager } from './game/SaveManager';
 import { DevConsole } from './ui/DevConsole';
 import { MultiScreen, ChatScreen } from './ui/MultiScreen';
+import { TradeAskScreen, PlayerTradeScreen } from './ui/PlayerTradeScreen';
 import { NetClient, shareLink, type Welcome } from './net/NetClient';
 import { Coop } from './net/Coop';
 import { roomCode } from '@ascii-fort/net/protocol';
@@ -159,7 +160,10 @@ function tick(now: number) {
       const g = startGame(l.seed, l.macro, l.civ);
       if (l.online) {
         const { net, welcome } = l.online;
-        g.coop = new Coop(net, g, welcome);
+        const coop = new Coop(net, g, welcome);
+        g.coop = coop;
+        coop.onTradeAsk = (name, answer) => screens.open(new TradeAskScreen(name, answer));
+        coop.onTradeOpen = (s) => { screens.closeAll(); screens.open(new PlayerTradeScreen(coop, s)); };
         const others = welcome.players.map((p) => p.name).join(', ');
         g.events.emit('message', { text: `En ligne — salon ${net.code}${others ? ' avec ' + others : ''}. Invitez vos amis : ${shareLink(net.code)}`, color: C.cyan });
         g.events.emit('message', { text: 'Entrée : discuter · les coffres et les cadavres reviennent au premier qui les fouille.', color: C.dim });
