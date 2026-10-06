@@ -1,0 +1,22 @@
+// Déploiement Cloudflare : un seul Worker sert le jeu (build Vite) et les salons multijoueur.
+// Déployer : `npm run deploy` (après `npx wrangler login`), ou brancher le dépôt GitHub dans
+// le tableau de bord Cloudflare (Workers → Créer → Importer un dépôt) avec la commande de
+// build `npm run build` et la commande de déploiement `npx wrangler deploy`.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ascii-fort",
+  "main": "server/worker.ts",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/ws/*", "/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "Room" }]
+  },
+  // Durable Objects à stockage SQLite : seul type disponible avec l'offre gratuite
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  "observability": { "enabled": true }
+}

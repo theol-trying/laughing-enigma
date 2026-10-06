@@ -30,7 +30,7 @@ Prochaine étape non cochée ci-dessous = où reprendre. Si du travail non commi
 - [x] 12. Modèles procéduraux plus fins (formes effilées/arrondies, membres articulés, équipements visibles)
 - [x] 13. Finesse d'affichage : police plus petite pour le monde (option), interface lisible
 - [x] 14. Découpage en bibliothèques (workspaces npm : core, worldgen, render-ascii, sim, net ; apps client/serveur)
-- [ ] 15. Serveur Cloudflare : Worker (assets + /ws) + Durable Object « Room » (salon, relais, état persistant SQLite), wrangler
+- [x] 15. Serveur Cloudflare : Worker (assets + /ws) + Durable Object « Room » (salon, relais, état persistant SQLite), wrangler
 - [ ] 16. Client réseau : salons (créer/rejoindre par code), présence, joueurs distants interpolés, heure commune
 - [ ] 17. Autorité par zone : créatures/PNJ simulés par un propriétaire, combats partagés (dégâts, morts, butin)
 - [ ] 18. Monde partagé persistant (coffres, camps, morts uniques), quêtes perso, sauvegarde du perso dans le salon
@@ -94,3 +94,6 @@ Prochaine étape non cochée ci-dessous = où reprendre. Si du travail non commi
 - 2026-10-06 : 14 fait. Workspaces npm : packages/core, ascii-engine (rendu + Input), worldgen, sim ; le jeu reste dans
   src/ (game/Game.ts, game/SaveManager.ts, ui/, audio/). Imports par sous-chemin @ascii-fort/<paquet>/<module>.
   GENERATOR_VERSION est désormais dans packages/core/src/version.ts. README par paquet. 21 tests, build OK.
+- 2026-10-06 : 15 fait. packages/net (protocole partagé), server/worker.ts (Worker : assets dist/ + /api/new + /ws/<code>
+  → Durable Object Room SQLite, hibernation WebSocket, propriété des zones, faits persistants, sauvegardes perso, nettoyage
+  après 30 j), wrangler.jsonc. Test : npm run dev:server puis npm run test:room (17 vérifications OK).

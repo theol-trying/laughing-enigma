@@ -1,0 +1,9 @@
+{
+  "name": "@ascii-fort/net",
+  "version": "0.2.0",
+  "description": "Protocole du mode multijoueur (messages, codes de salon, validation), partagé entre le jeu et le serveur.",
+  "type": "module",
+  "private": true,
+  "exports": { "./*": "./src/*.ts" },
+  "dependencies": {}
+}

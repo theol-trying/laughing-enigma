@@ -4,28 +4,34 @@
   "description": "ASCII FORT — RPG 3D procédural rendu en caractères",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && tsc --noEmit -p server && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p server",
     "test": "vitest run",
     "checkpoint": "node scripts/checkpoint.mjs",
-    "autosave": "node scripts/autosave.mjs"
+    "autosave": "node scripts/autosave.mjs",
+    "dev:server": "vite build && wrangler dev --port 8787",
+    "deploy": "npm run build && wrangler deploy",
+    "test:room": "node scripts/test-room.mjs"
   },
   "type": "module",
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261006.1",
     "@types/node": "^26.6.4",
     "typescript": "^7.0.2",
     "vite": "^8.3.2",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "wrangler": "^4.147.0"
   },
   "private": true,
   "workspaces": [
     "packages/*"
   ],
   "dependencies": {
-    "@ascii-fort/core": "*",
     "@ascii-fort/ascii-engine": "*",
+    "@ascii-fort/core": "*",
+    "@ascii-fort/sim": "*",
     "@ascii-fort/worldgen": "*",
-    "@ascii-fort/sim": "*"
+    "@ascii-fort/net": "*"
   }
 }
