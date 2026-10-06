@@ -363,6 +363,13 @@ export class EntityManager {
         e.pose.swing = 0;
         continue;
       }
+      if (e.status) {
+        const s = e.status;
+        s.burn = Math.max(0, s.burn - dt); s.frost = Math.max(0, s.frost - dt); s.poison = Math.max(0, s.poison - dt);
+        s.tick = (s.tick ?? 0) + dt;
+        if (s.tick >= 0.5) { s.tick -= 0.5; const dot = (s.burn > 0 ? 2.5 : 0) + (s.poison > 0 ? 1.5 : 0); if (dot > 0) hitEntity(this.host.combat, e, dot, 'player'); }
+        if (!e.alive) continue;
+      }
       if (e.mon) {
         e.thinkT -= dt;
         if (e.thinkT <= 0) { e.thinkT = 0.3; thinkMonster(e, this.mctx); }

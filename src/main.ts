@@ -53,13 +53,15 @@ function tick(now: number) {
   }
   ui.text(Math.floor(r.cols / 2), Math.floor(r.rows / 2), '+', C.white);
   // barres de vie et d'endurance (HUD complet à l'étape 8)
-  const by = r.rows - 3;
+  const by = r.rows - 4;
   ui.text(r.cols - 26, by, 'HP  ', C.text); ui.bar(r.cols - 22, by, 12, p.hp / p.maxHp, C.hp); ui.text(r.cols - 9, by, `${Math.ceil(p.hp)}/${p.maxHp}`, C.text);
   ui.text(r.cols - 26, by + 1, 'STA ', C.text); ui.bar(r.cols - 22, by + 1, 12, p.stamina / p.maxStamina, C.sta);
+  ui.text(r.cols - 26, by + 2, 'MP  ', C.text); ui.bar(r.cols - 22, by + 2, 12, p.mana / p.maxMana, C.mp);
+  const chs = game.character;
+  ui.text(r.cols - 26, by - 1, `Niv ${chs.level} · ${chs.xp}/${chs.xpForNext()} xp · ${chs.inv.gold} or`, C.gold);
   if (game.target && game.target.alive && Math.hypot(game.target.x - p.x, game.target.z - p.z) < 30) { ui.center(1, ` ${game.target.label} `, C.red, C.panel); ui.bar(Math.floor(r.cols / 2) - 8, 2, 16, game.target.hp / game.target.maxHp, C.hp); }
   if (p.dead) ui.center(Math.floor(r.rows / 2) - 3, ' Vous êtes mort ', C.red, C.black);
-  if (game.focusEntity) ui.center(Math.floor(r.rows / 2) + 2, ` [E] Parler à ${game.focusEntity.label} `, C.yellow, C.panel);
-  else if (game.focus) ui.center(Math.floor(r.rows / 2) + 2, ` [E] ${game.propLabel(game.focus)} `, C.yellow, C.panel);
+  if (game.focus) ui.center(Math.floor(r.rows / 2) + 2, ` [E] ${game.focus.label} `, C.yellow, C.panel);
   const tNow = performance.now();
   log.filter((l) => tNow - l.t < 6000).forEach((l, i, arr) => ui.text(1, r.rows - 1 - arr.length + i, ` ${l.text} `, l.color, C.panel, 0.7));
   game.render(viewMode);

@@ -145,6 +145,7 @@ export function moveMonster(e: Entity, dt: number, ctx: MonsterCtx): void {
     }
   }
   if (m.windup <= 0) e.pose.swing = Math.max(0, e.pose.swing - dt * 4);
+  if (e.status && e.status.frost > 0) speed *= 0.5; // le givre ralentit
   if (go) {
     const dx = tx - e.x, dz = tz - e.z, l = Math.hypot(dx, dz);
     if (l > 0.3) {

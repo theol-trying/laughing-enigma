@@ -50,6 +50,9 @@ export class Entity {
   mon?: MonsterState;
   /** adversaire au combat (gardes) et recharge d'attaque */
   foe: Entity | null = null;
+  /** effets élémentaires en cours */
+  status?: { burn: number; frost: number; poison: number; tick?: number };
+  looted = false;
   cooldown = 0;
   /** bâtiments/zone où l'entité se trouve (pour la nav locale) */
   zone = -1;

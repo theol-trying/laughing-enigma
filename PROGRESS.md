@@ -6,14 +6,14 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Étape 7 — Gameplay. À faire : gameplay/Items.ts (armes : épée, hache, masse, lance, arc, dague, bâton ; bouclier ;
-armures ; nourriture ; potions ; matériaux ; clés ; objets de quête ; valeurs), Inventory + équipement, combat joueur
-complet (léger/lourd/blocage/esquive V ou double-tap/arc + projectiles/endurance/élémentaire ; remplace l'attaque de
-base de Game.update), Loot (tables par créature/biome/lieu/faction), Skills (XP, niveaux, caractéristiques, compétences),
-Reputation + Memory (événements → opinion, prix, quêtes), Economy (productions/besoins/prix, perturbations de route),
-Dialogue (modèles + règles, connaissances des PNJ), Rumeurs, Quêtes systémiques (camp de bandits ↔ route ↔ marchand ;
-loups ↔ fermier ; crypte/relique ↔ prêtre ; expédition perdue), interactions des props (coffres, lits, enclume, autel,
-porte verrouillée du donjon via la clé). Combat.ts (hitEntity/hitPlayer) et Player (hp, stamina, statuts) existent.
+Étape 7b — Réputation (globale/faction/locale) + mémoire des PNJ (écoute player:crime, entity:killed, player:helped,
+camp:cleared, quest:completed) → opinion, prix, dialogues, hostilité des gardes (arrestation/amende/combat) ;
+Economy (offre/demande par implantation, prix = base × rareté × perturbations : route bloquée par un camp actif →
+pénurie chez le marchand, retour progressif après camp:cleared) ; DialogueSystem (modèles + règles : métier,
+traits, lieu, heure, météo, mémoire, rumeurs, connaissances poi/event/settlement, quêtes) ; Rumeurs (propagation
+le long des routes) ; QuestSystem (bandits ↔ marchandises volées quête:marchandises:{sid} déjà dans la caisse du camp ;
+loups ↔ fermier ; crypte ↔ prêtre ; expédition perdue). Puis UI (étape 8) : dialogue, commerce, inventaire (Tab),
+journal (J), carte (M), stats (C). Game.talkTo() est le point d'entrée du dialogue (provisoire).
 
 ## Étapes
 - [x] 0. Setup : Vite 8 + TS 7 + Vitest 5, git (identité theol-trying noreply), PROGRESS/CLAUDE.md
@@ -23,7 +23,7 @@ porte verrouillée du donjon via la clé). Combat.ts (hitEntity/hitPlayer) et Pl
 - [x] 4. Chunks : TerrainSampler (h(x,z) pur), maillage chunk, eau, végétation, streaming, terrain lointain ; joueur + collisions
 - [x] 5. Civilisation : factions, histoire, implantations, routes A* + ponts, plans de village (bâtiments visitables meublés), POI, donjons 3D (entrée/sortie E)
 - [x] 6. Entités & IA : PNJ (identité, emplois du temps, nav locale), monstres (repaires, écologie, perception, utility AI, meutes), simulation par niveaux
-- [ ] 7. Gameplay : objets, inventaire, équipement, combat (léger/lourd/blocage/esquive/arc), loot, XP/compétences, réputation/mémoire, économie, dialogues, rumeurs, quêtes systémiques
+- [~] 7. Gameplay (7a fait : objets, inventaire/équipement, combat complet, butin, interactions ; 7b : réputation, économie, dialogues, rumeurs, quêtes) : objets, inventaire, équipement, combat (léger/lourd/blocage/esquive/arc), loot, XP/compétences, réputation/mémoire, économie, dialogues, rumeurs, quêtes systémiques
 - [ ] 8. UI terminal : titre/nouvelle partie, HUD, inventaire, journal, stats, carte, dialogue, commerce, pause/options
 - [ ] 9. Ambiance : jour/nuit, météo, torches/lanternes/fenêtres, ombres soleil, eau, audio Web Audio
 - [ ] 10. Sauvegarde IndexedDB (diff), outils debug (console F1, overlay F3), docs (README, docs/architecture.md)
@@ -65,3 +65,5 @@ porte verrouillée du donjon via la clé). Combat.ts (hitEntity/hitPlayer) et Pl
 - 2026-10-06 : 6b fait (18 tests). Repaires (loups, araignées, troll, bandits + chef, gobelins, squelettes, spectre),
   créatures de donjon, IA (repos nocturne, errance élargie la nuit, chasse, attaque avec élan, 2 assaillants max, fuite,
   retour), gardes qui combattent, civils qui fuient, mort/réveil à l'auberge, attaque de base (clic), blocage (clic droit).
+- 2026-10-06 : 7a fait. Combat (léger/lourd/blocage/esquive V/arc B/sorts R F/potion H), butin, coffres (vol + témoins),
+  auberge (10 or), prière, puits, cuisson, forge de flèches, potions, clé + porte de donjon, pièges, XP/niveaux, découvertes.

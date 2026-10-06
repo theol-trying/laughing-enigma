@@ -45,6 +45,8 @@ export interface FrameInput {
   lights: PointLight[];
   viewMode: number;
   sceneOn: boolean;
+  /** 0..1 : liseré rouge de douleur */
+  hurt?: number;
 }
 
 const SHADOW_SIZE = 2048, SHADOW_RANGE = 110;
@@ -298,7 +300,7 @@ export class Renderer {
       .v3('uSkyTop', a.skyTop).v3('uSkyHorizon', a.skyHorizon).v3('uFogColor', a.fogColor).f('uFogDensity', a.fogDensity)
       .f('uNight', a.night).f('uCloud', a.cloud).f('uRain', a.rain).f('uSnow', a.snow).v2('uWind', a.windX, a.windZ)
       .f('uFlash', a.flash).f('uIndoor', a.indoor).f('uTime', f.time).f('uBgFactor', 0.32).f('uLetterDist', 22)
-      .i('uViewMode', f.viewMode).i('uSceneOn', f.sceneOn ? 1 : 0);
+      .i('uViewMode', f.viewMode).i('uSceneOn', f.sceneOn ? 1 : 0).f('uHurt', Math.min(1, f.hurt ?? 0));
     gl.bindVertexArray(this.emptyVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 

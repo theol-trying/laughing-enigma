@@ -26,6 +26,8 @@ export class Player {
   shield = false;
   hurt = 0;           // flash rouge à l'écran
   poison = 0; frost = 0; burn = 0;
+  /** esquive : vitesse imposée pendant dashT secondes */
+  dashT = 0; dashX = 0; dashZ = 0;
 
   /** Effets dans le temps : poison, brûlure, givre (ralentit), régénération d'endurance. */
   tickStatus(dt: number): number {
@@ -88,6 +90,7 @@ export class Player {
     const k = Math.min(1, acc * dt);
     this.vx += (mx * speed - this.vx) * k;
     this.vz += (mz * speed - this.vz) * k;
+    if (this.dashT > 0) { this.vx = this.dashX; this.vz = this.dashZ; this.dashT -= dt; }
     if (input.pressed('Space') && (this.onGround || this.swimming)) { this.vy = this.swimming ? 3 : 5.3; this.onGround = false; }
 
     world.chunks.collidersNear(this.x, this.z, this.circles, this.segs, this.plats);
