@@ -6,12 +6,12 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Jalon 2 (demandé le 2026-10-06) : modèles plus fins, police plus fine, bibliothèques, multi en ligne Cloudflare.
-Décisions validées par l'utilisateur : **un seul Worker Cloudflare** (assets statiques = build Vite + Durable Object
-par salon), **autorité par zone chez les joueurs** (le DO relaie + garde l'état persistant du monde), **coop complet**
-(créatures/combats partagés, coffres/camps/morts partagés et persistants, quêtes et inventaire propres à chacun).
-Prochaine étape non cochée ci-dessous = où reprendre. Si du travail non committé a été perdu, regarder
-`git diff HEAD refs/autosave/latest` (instantanés locaux toutes les 10 min, `npm run autosave`).
+Jalon 2 terminé (étapes 12 à 19) : modèles articulés, police fine (deux grilles), bibliothèques (packages/*),
+multijoueur coop Cloudflare (un Worker : assets + Durable Object Room ; autorité par zone ; faits partagés).
+Déploiement : à faire par l'utilisateur (compte Cloudflare + import du dépôt, voir README « Mettre le jeu en ligne »).
+Pistes : projectiles/effets visibles chez tous, échanges d'objets, gardes/réputation partagés, salons publics,
+puis les pistes du jalon 1 (Web Worker, villes denses, caravanes, donjons multi-niveaux…).
+Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest` (`npm run autosave`).
 
 ## Étapes
 - [x] 0. Setup : Vite 8 + TS 7 + Vitest 5, git (identité theol-trying noreply), PROGRESS/CLAUDE.md
@@ -34,7 +34,7 @@ Prochaine étape non cochée ci-dessous = où reprendre. Si du travail non commi
 - [x] 16. Client réseau : salons (créer/rejoindre par code), présence, joueurs distants interpolés, heure commune
 - [x] 17. Autorité par zone : créatures/PNJ simulés par un propriétaire, combats partagés (dégâts, morts, butin)
 - [x] 18. Monde partagé persistant (coffres, camps, morts uniques), quêtes perso, sauvegarde du perso dans le salon
-- [ ] 19. Vérification à 2 clients en local (wrangler dev), docs (README, architecture, guide de déploiement)
+- [x] 19. Vérification à 2 clients en local (wrangler dev), docs (README, architecture, guide de déploiement)
 
 ## Décisions clés (ne pas re-débattre)
 - Dev : `npm run dev` (port 5199). Dépôt : github.com/theol-trying/laughing-enigma (push à chaque checkpoint).
@@ -107,3 +107,6 @@ Prochaine étape non cochée ci-dessous = où reprendre. Si du travail non commi
   Vérifié avec un bot Node (scripts/bot.mjs, npm run bot -- CODE) : entités relayées, PNJ tué à distance + crédit,
   coups de squelettes sur le bot, coffre partagé, chat, marionnettes d'une zone possédée par le bot, perso restauré.
   Astuce test : ?cle=xxx donne une identité de joueur distincte à un onglet.
+- 2026-10-06 : 19 fait. Camp de bandits démantelé en ligne → fait camp:<sid> persistant, retrouvé après reconnexion.
+  Docs : README (jouer en ligne, déploiement Cloudflare pas à pas, limites gratuites), architecture (multijoueur),
+  packages/net/README, CLAUDE.md. test:room 17/17, 21 tests, build OK.

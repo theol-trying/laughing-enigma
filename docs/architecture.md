@@ -29,7 +29,9 @@ packages/core          @ascii-fort/core          déterminisme, bruit, maths, é
 packages/ascii-engine  @ascii-fort/ascii-engine  rendu 3D → caractères (WebGL2), interface texte, entrées
 packages/worldgen      @ascii-fort/worldgen      monde procédural (macro, hydrologie, civilisation, chunks)
 packages/sim           @ascii-fort/sim           entités, IA, gameplay
-src/                   le jeu (boucle Game, écrans, audio, sauvegarde, main.ts)
+packages/net           @ascii-fort/net           protocole multijoueur (jeu ↔ serveur)
+src/                   le jeu (boucle Game, écrans, audio, sauvegarde, client réseau src/net/, main.ts)
+server/                le Worker Cloudflare et le Durable Object « Room » (salons)
 ```
 
 Dépendances à sens unique : core ← ascii-engine ← worldgen ← sim ← jeu. Chaque bibliothèque
@@ -138,6 +140,35 @@ uniquement des différences : joueur, fiche, inventaire, équipement, heure, `Wo
 en bits), PNJ (vie, PV, richesse, mémoires), réputation, amendes, offre économique, quêtes,
 rumeurs, populations des repaires, créatures uniques tuées, camps démantelés. Au chargement, le
 monde est régénéré depuis la seed puis les différences sont appliquées.
+
+## Multijoueur coopératif (`server/`, `src/net/`, `packages/net`)
+
+```
+navigateur ──WebSocket /ws/<CODE>──► Worker ──► Durable Object « Room » (un par code de salon)
+   │  régénère le monde depuis la seed               relaie, arbitre, stocke (SQLite) :
+   │  simule les zones dont il est propriétaire        meta (seed, version du générateur, création)
+   └─ dist/ (jeu) servi par le même Worker            f:<clé> faits du monde partagé
+                                                      c:<clé joueur> sauvegarde de chaque personnage
+```
+
+- **Le serveur ne connaît pas le jeu.** Il relaie l'état des joueurs (`st`, 10 Hz), les entités des
+  zones (`ents`, seules celles dont l'expéditeur est propriétaire), les messages adressés (`to` :
+  dégâts, crédit du coup fatal), les faits persistants (`fact`, avec « premier arrivé » pour les
+  coffres et cadavres), le chat, et garde la sauvegarde de chaque personnage. Il refuse un client dont
+  la version du générateur diffère (le monde ne serait pas le même).
+- **Autorité par zone** (`EntityNet` dans `EntityManager`) : une zone = une implantation (`s<id>`), un
+  repaire (`lair:<id>`) ou un donjon (`d<id>`). En l'activant, un client la réclame ; le premier en
+  devient propriétaire et la simule (IA, combats, morts) ; chez les autres, ses entités sont des
+  *marionnettes* interpolées, créées ou retirées selon ce qu'envoie le propriétaire. Au départ du
+  propriétaire, la zone passe à un autre joueur présent, qui reprend l'IA là où elle en était.
+- **Coups** : `CombatHost.forward` transmet au propriétaire les coups du joueur local sur une
+  marionnette ; les créatures choisissent leurs cibles parmi tous les joueurs (`hurtRemote`).
+- **Faits** (`Coop.applyFact`) : `killed:`, `camp:`, `npc:`, `open:`, `loot:`, `flag:` — publiés à
+  partir des événements locaux, rejoués chez tous et à l'arrivée d'un joueur.
+- **Horloge commune** : heure de jeu = 8 h 30 du jour 1 + temps écoulé depuis la création du salon
+  (horloge du serveur, décalage mesuré par ping).
+- Coût : un joueur seul dans son salon n'envoie que sa sauvegarde ; à plusieurs, ≈ 20 messages par
+  seconde et par joueur.
 
 ## Étendre le jeu
 

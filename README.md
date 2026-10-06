@@ -8,7 +8,8 @@ sur sa hauteur, des montagnes enneigées — et on peut réellement s'y rendre. 
 fonction de sa *seed* : la même seed redonne toujours les mêmes continents, rivières, routes,
 villes, personnages, histoire et donjons.
 
-> **État : premier jalon (vertical slice) jouable.** Avancement détaillé : [`PROGRESS.md`](PROGRESS.md).
+> **État : jalon 2** — modèles procéduraux articulés, rendu plus fin, bibliothèques réutilisables,
+> **multijoueur coopératif en ligne** (Cloudflare, offre gratuite). Avancement détaillé : [`PROGRESS.md`](PROGRESS.md).
 > Architecture : [`docs/architecture.md`](docs/architecture.md).
 
 ## Lancer le jeu
@@ -21,6 +22,52 @@ npm run dev        # http://localhost:5199
 npm run build      # site statique dans dist/ (servir le dossier tel quel)
 npm test           # 21 tests : déterminisme, RNG, monde, chunks, civilisation, PNJ, donjons
 ```
+
+Multijoueur en local (deux terminaux) :
+
+```bash
+npm run dev:server     # serveur de salons Cloudflare simulé en local : http://localhost:8787
+npm run dev            # le jeu : http://localhost:5199 → Multijoueur en ligne
+npm run test:room      # 17 vérifications du serveur de salons (avec dev:server lancé)
+npm run bot -- CODE    # un compagnon scripté rejoint le salon CODE et vous suit
+```
+
+## Jouer en ligne (coopératif)
+
+Écran titre → **Multijoueur en ligne** : choisissez un nom, puis **créez un salon** (une seed, au
+hasard ou choisie) ou **rejoignez** celui d'un ami avec son code à 6 caractères. Le lien
+`…/?salon=CODE` ouvre directement l'invitation. Jusqu'à 8 joueurs, chacun sur son PC.
+
+- Tout le monde explore **le même monde** : il est régénéré par chaque PC à partir de la seed, seules
+  les différences circulent (positions, coups, coffres ouverts…), d'où un trafic minuscule.
+- **Créatures et PNJ partagés** : le premier joueur arrivé dans une zone (village, repaire, donjon)
+  la simule pour tous ; s'il s'en va, un autre prend le relais sans interruption.
+- **Combats partagés** : les coups portés à une créature simulée par un autre joueur lui sont
+  transmis, le coup fatal rapporte l'XP à celui qui l'a porté ; les créatures attaquent n'importe
+  quel joueur.
+- **Monde persistant** : coffres et cadavres reviennent au premier qui les fouille ; camps démantelés,
+  boss tués, PNJ morts, portes ouvertes et pièges désamorcés sont gardés par le salon.
+- **Personnage propre à chacun** (inventaire, niveau, quêtes, réputation), sauvegardé dans le salon
+  toutes les 30 s : on le retrouve en revenant, même depuis un autre jour.
+- **Heure commune** (le temps ne s'arrête pas : dormir soigne sans avancer l'horloge) ; `Entrée` pour
+  discuter ; les noms s'affichent au-dessus des têtes.
+
+## Mettre le jeu en ligne (Cloudflare, gratuit)
+
+Tout tient dans **un seul Worker Cloudflare** : il sert le jeu (fichiers statiques) et les salons
+(un *Durable Object* par salon, stockage SQLite). L'offre gratuite suffit pour jouer entre amis.
+
+1. Créer un compte gratuit sur [dash.cloudflare.com](https://dash.cloudflare.com) (aucune carte bancaire).
+2. **Workers & Pages** → **Créer** → **Importer un dépôt** → connecter GitHub et choisir ce dépôt.
+3. Commande de build : `npm run build` · commande de déploiement : `npx wrangler deploy` → **Déployer**.
+4. Le jeu est en ligne sur `https://ascii-fort.<votre-sous-domaine>.workers.dev` ; chaque `git push`
+   le redéploie.
+
+Variante en ligne de commande : `npx wrangler login` puis `npm run deploy`.
+Limites gratuites utiles : 100 000 requêtes par jour (les messages WebSocket entrants comptent pour
+1/20 de requête : 4 joueurs ensemble en consomment 10 000 à 15 000 par heure, soit environ
+7 h de jeu à quatre par jour) et ≈ 28 h de salon
+actif par jour ; les fichiers du jeu sont servis sans limite. Un salon resté vide 30 jours est effacé.
 
 ## Ce qui est implémenté
 
@@ -60,6 +107,16 @@ de village en village ; dialogues procéduraux ancrés dans le monde ; quêtes s
 attaqués, loups, relique de la crypte, expédition perdue, mine envahie) ; météo régionale ; cycle
 jour/nuit ; sons synthétiques (vent, pluie, feu, pas, impacts, tonnerre).
 
+**Modèles animés** — personnages et créatures sont des squelettes articulés (hanches, genoux,
+épaules, coudes, cou, mâchoire, queue) habillés de volumes arrondis (sphères, troncs de cône,
+cylindres) : barbes, chevelures, capes, tabliers, capuches, casques, armes détaillées, boucliers ;
+gobelins voûtés aux oreilles pointues, troll massif à défenses, squelettes et spectre aux yeux
+luisants, araignées à huit pattes articulées. Les autres joueurs portent leur équipement.
+
+**Finesse** — le monde est dessiné avec une police plus petite que l'interface (deux grilles de
+caractères superposées) : plus de détails à l'écran, des textes toujours lisibles. Réglable dans les
+options (normale, fine, très fine).
+
 **Interface en caractères** — écran titre, nouvelle partie (seed, RANDOMIZE, aperçu du monde avec
 mini-carte), HUD (barres, boussole et repère de quête, heure, météo, lieu, cible, messages),
 inventaire, journal, carte ASCII avec brouillard de guerre, personnage, commerce, dialogues, pause et
@@ -81,24 +138,29 @@ développement (F1).
 | `Tab` inventaire · `M` carte · `J` journal · `C` personnage | |
 | `Échap` | pause (sauvegarder, charger, options) · `F5`/`F9` sauvegarde/chargement rapides |
 | `F3` | informations de débogage · `F1` console (`help`) |
+| `Entrée` | (en ligne) écrire un message aux autres joueurs |
 
-## Volontairement simplifié dans ce jalon
+## Volontairement simplifié
 
-- Les créatures et PNJ sont des modèles en boîtes (lisibles une fois convertis en glyphes).
 - Les PNJ non actifs ne sont pas simulés pas à pas : leur position découle de leur emploi du temps.
 - Un seul niveau par donjon ; portes de bâtiments toujours ouvertes (seule la porte du boss se verrouille).
 - Magie limitée à deux sorts ; artisanat limité à quelques recettes (flèches, potions, cuisson).
 - La création du monde bloque quelques centaines de millisecondes (écran de chargement).
+- En ligne : économie, réputation et rumeurs restent propres à chaque joueur (les camps démantelés,
+  eux, sont communs) ; les gardes ne poursuivent que le joueur qui simule le village ; objets posés au
+  sol, flèches et sorts des autres joueurs ne sont pas montrés ; pas de combat entre joueurs.
 
 ## Pistes suivantes
 
-Monde plus vaste et génération dans un Web Worker ; villes plus denses (quartiers, marchés vivants) ;
+En ligne : projectiles et effets visibles chez tous, échanges d'objets entre joueurs, gardes et
+réputation partagés, liste des salons publics. Monde plus vaste et génération dans un Web Worker ; villes plus denses (quartiers, marchés vivants) ;
 voyageurs et caravanes réellement simulés sur les routes ; donjons multi-niveaux ; plus de types de
 quêtes et de dialogues ; montures ; réflexions d'eau en espace écran ; ombres des torches.
 
 ## Stack
 
-TypeScript, Vite, WebGL2, Vitest. Aucun moteur de jeu ni bibliothèque 3D : rendu, génération et
+TypeScript, Vite, WebGL2, Vitest ; Cloudflare Workers + Durable Objects (wrangler) pour le
+multijoueur. Aucun moteur de jeu ni bibliothèque 3D : rendu, génération et
 systèmes sont implémentés dans le projet. Aucun appel à un LLM ni à une API externe.
 
 ## Bibliothèques réutilisables
@@ -111,5 +173,7 @@ Le code est découpé en workspaces npm, réutilisables dans d'autres projets (c
 | [`@ascii-fort/ascii-engine`](packages/ascii-engine) | rendu 3D → caractères en WebGL2, interface texte, entrées |
 | [`@ascii-fort/worldgen`](packages/worldgen) | monde procédural : relief, rivières, biomes, civilisation, histoire, routes, donjons, chunks |
 | [`@ascii-fort/sim`](packages/sim) | PNJ, créatures et modèles animés, IA, combat, économie, réputation, rumeurs, quêtes |
+| [`@ascii-fort/net`](packages/net) | protocole multijoueur partagé entre le jeu et le serveur (`server/worker.ts`) |
 
-Le jeu lui-même (`src/`) assemble ces bibliothèques : boucle de jeu, écrans, audio, sauvegarde.
+Le jeu lui-même (`src/`) assemble ces bibliothèques : boucle de jeu, écrans, audio, sauvegarde,
+client réseau (`src/net/`). Le serveur de salons est dans `server/`.

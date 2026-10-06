@@ -14,5 +14,8 @@
 - Génération procédurale : uniquement via `WorldSeed.stream()` / `RNG` (jamais `Math.random`).
   Toute modif de génération qui change le monde ⇒ incrémenter `GENERATOR_VERSION` (packages/core/src/version.ts)
   et mettre à jour les tests de déterminisme (`tests/determinism.test.ts`).
+- Multijoueur : `npm run dev:server` (wrangler dev, :8787) + `npm run dev` ; `npm run test:room` ; `npm run bot -- CODE`
+  pour un second joueur scripté ; `?cle=xxx` = identité distincte par onglet. Toute modif du protocole :
+  `packages/net/src/protocol.ts` (incrémenter `PROTOCOL` si incompatible) + `server/worker.ts`.
 - Vérifier après chaque étape : `npm run typecheck`, `npm test`, et le rendu dans le navigateur
   (preview `ascii-fort` dans `.claude/launch.json`) quand c'est pertinent.
