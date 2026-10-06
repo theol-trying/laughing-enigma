@@ -74,6 +74,7 @@ flat in uint vLetter;
 flat in uint vFlags;
 uniform highp usampler2D uMatTable;
 uniform vec3 uCamPos;
+uniform float uWet;
 uniform vec3 uSunDir;
 uniform vec3 uSunColor;
 uniform vec3 uAmbSky;
@@ -156,6 +157,23 @@ void main() {
 
   vec3 col = albedo * light;
   float inten = dot(light, vec3(0.3, 0.5, 0.2));
+  // pluie : les surfaces exposées foncent et luisent, des flaques reflètent le ciel sur le sol plat
+  if (uWet > 0.0 && sky > 0.5 && (flags & 36u) == 0u) {
+    float w = uWet * smoothstep(0.5, 1.0, sky);
+    col *= 1.0 - 0.3 * w;
+    if (n.y > 0.5) {
+      vec3 v = normalize(uCamPos - vWorld), hv = normalize(uSunDir + v);
+      vec2 q = vWorld.xz * 0.32, iq = floor(q), fq = fract(q);
+      fq = fq * fq * (3.0 - 2.0 * fq);
+      float nz = mix(mix(hash13(vec3(iq, 1.0)), hash13(vec3(iq + vec2(1.0, 0.0), 1.0)), fq.x),
+                     mix(hash13(vec3(iq + vec2(0.0, 1.0), 1.0)), hash13(vec3(iq + 1.0, 1.0)), fq.x), fq.y);
+      float puddle = smoothstep(0.62, 0.78, nz) * step(0.95, n.y) * smoothstep(0.3, 0.8, w);
+      float fres = pow(1.0 - max(dot(n, v), 0.0), 4.0);
+      float sheen = pow(max(dot(n, hv), 0.0), 30.0) * (1.0 - uNight * 0.7);
+      col = mix(col, uSkyHorizon * (0.3 + 0.5 * (1.0 - uNight)), w * (puddle * 0.6 + fres * 0.22)) + uSunColor * sheen * w * (0.15 + puddle * 0.8);
+      inten = mix(inten, max(inten, 0.45), puddle * w * 0.5);
+    }
+  }
 
   if ((flags & 1u) != 0u) {               // émissif
     float fl = 0.85 + 0.15 * sin(uTime * 13.0 + phase * 40.0);
@@ -218,6 +236,7 @@ uniform sampler2D uExtra;
 uniform highp sampler2D uDepth;
 uniform highp usampler2D uMatTable;
 uniform ivec2 uGrid;
+uniform vec3 uCamPos;
 uniform float uNear;
 uniform float uFar;
 uniform vec2 uTanHalf;      // tan(fov/2) en x et y
@@ -422,12 +441,38 @@ void main() {
       float colId = float(cell.x);
       float rowTop = float(uGrid.y - 1 - cell.y);
       if (uRain > 0.01) {
-        float sp = 32.0;
-        float y = rowTop - uTime * sp + hash12(vec2(colId, 7.0)) * 300.0;
-        float streak = fract(y / 23.0);
-        if (streak < uRain * 0.16 && hash12(vec2(colId, floor(y / 23.0))) < 0.55) {
-          glyph = tbl(abs(uWind.x) > 0.5 ? (uWind.x > 0.0 ? 2 : 1) : 0, ROW_FX);
-          fg = mix(fg, vec3(0.62, 0.7, 0.82) * (0.5 + 0.5 * (1.0 - uNight)), 0.85);
+        float dS = ld[imin];
+        vec3 rc = vec3(0.62, 0.7, 0.82) * (0.45 + 0.55 * (1.0 - uNight));
+        // éclaboussures sur les surfaces tournées vers le ciel (sol, toits) et ronds dans l'eau
+        int smat = int(dat[imin].r * 255.0 + 0.5);
+        uint sflags = tbl(14, smat);
+        vec3 sn = octDecode(dat[imin].ba);
+        if (!isSky[imin] && dS < 35.0 && sn.y > 0.6 && smat != 22 && (sflags & 32u) == 0u) {
+          vec3 fwd = uInvViewRot * vec3(0.0, 0.0, -1.0);
+          vec3 wp = uCamPos + vd * dS / max(0.15, dot(vd, fwd));
+          vec2 qc = floor(wp.xz / 0.7);
+          float hs = hash12(qc);
+          float ts = fract(uTime * (1.1 + hs) + hs * 7.0);
+          if (hs > 0.3 && ts < 0.05 + 0.12 * uRain) {
+            bool wet = (sflags & 4u) != 0u;
+            glyph = tbl(ts < 0.05 ? 4 : (wet ? (hs > 0.65 ? 9 : 8) : (hs > 0.65 ? 7 : 6)), ROW_FX);
+            fg = mix(fg, rc * 1.15, 0.7);
+          }
+        }
+        // gouttes sur trois profondeurs (2,5 m, 9 m, 26 m) : une surface plus proche les cache
+        for (int L = 0; L < 3; L++) {
+          float depthL = L == 0 ? 2.5 : (L == 1 ? 9.0 : 26.0);
+          if (dS < depthL) continue;
+          float sp = L == 0 ? 46.0 : (L == 1 ? 28.0 : 16.0);
+          float seg = L == 0 ? 17.0 : (L == 1 ? 23.0 : 29.0);
+          float y = rowTop - uTime * sp + hash12(vec2(colId, 7.0 + float(L) * 13.0)) * 300.0;
+          float len = (L == 0 ? 0.22 : (L == 1 ? 0.12 : 0.07)) * (0.5 + uRain * 0.6);
+          if (fract(y / seg) < len && hash12(vec2(colId + float(L) * 0.37, floor(y / seg))) < (L == 0 ? 0.16 : 0.4) * (0.35 + uRain)) {
+            int gi = abs(uWind.x) > 0.5 ? (uWind.x > 0.0 ? 2 : 1) : 0;
+            glyph = tbl(L == 2 ? 7 : gi, ROW_FX);
+            fg = mix(fg, mix(rc, fogCol, L == 2 ? 0.45 : (L == 1 ? 0.2 : 0.0)), L == 0 ? 0.9 : 0.75);
+            break;
+          }
         }
       }
       if (uSnow > 0.01) {

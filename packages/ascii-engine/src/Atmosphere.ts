@@ -26,6 +26,8 @@ export interface AtmosphereState {
   windX: number; windZ: number;
   indoor: number;
   shadows: boolean;
+  /** 0..1 : surfaces mouillées (après la pluie, elles sèchent lentement) */
+  wet?: number;
 }
 
 const hex = (h: number): RGB => [((h >> 16) & 255) / 255, ((h >> 8) & 255) / 255, (h & 255) / 255];

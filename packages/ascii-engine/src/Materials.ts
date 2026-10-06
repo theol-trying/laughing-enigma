@@ -64,7 +64,7 @@ const DEFS: Record<number, MatDef> = {
 export const ROW_QUAD = 60, ROW_SKY = 61, ROW_FX = 62, ROW_DEBUG = 63;
 export const TABLE_W = 16, TABLE_H = 64;
 const SKY_GLYPHS = '█▓▒░○.·*+ .:░▒▓';   // 0 soleil cœur, 1-3 halo, 4 lune, 5-8 étoiles, 9-14 rampe nuages
-const FX_GLYPHS = '|/\\*.·,\'';         // pluie | / \, neige * . ·, éclaboussures , '
+const FX_GLYPHS = '|/\\*.·,\'o°';       // pluie | / \, neige * . ·, éclaboussures , ' (sol) o ° (eau)
 const DEBUG_GLYPHS = '█▓▒░#=+-:. ';
 
 /** Table des matières pour le shader (R16UI, 16 × 64). */

@@ -225,7 +225,7 @@ export class Renderer {
       .v3('uSunDir', a.lightDir).v3('uSunColor', a.sunColor).v3('uAmbSky', a.ambSky).v3('uAmbGround', a.ambGround)
       .v3('uSkyHorizon', a.skyHorizon).f('uNight', a.night)
       .tex('uMatTable', 0, this.matTable).tex('uShadowMap', 1, this.shadowTex)
-      .m4('uShadowMat', this.shadowMat).f('uShadowOn', a.shadows ? 1 : 0);
+      .m4('uShadowMat', this.shadowMat).f('uShadowOn', a.shadows ? 1 : 0).f('uWet', a.wet ?? 0);
     const gl = this.gl;
     gl.uniform1i(sh.u('uNumLights'), Math.min(MAX_LIGHTS, f.lights.length));
     gl.uniform4fv(sh.u('uLightPos'), this.lightPos);
@@ -329,7 +329,7 @@ export class Renderer {
     this.cellSh.use()
       .tex('uColor', 0, this.sceneTex[0]).tex('uData', 1, this.sceneTex[1]).tex('uExtra', 2, this.sceneTex[2])
       .tex('uDepth', 3, this.sceneDepth).tex('uMatTable', 4, this.matTable)
-      .iv2('uGrid', this.wcols, this.wrows).f('uNear', c.near).f('uFar', c.far)
+      .iv2('uGrid', this.wcols, this.wrows).v3('uCamPos', [c.x, c.y, c.z]).f('uNear', c.near).f('uFar', c.far)
       .v2('uTanHalf', th * this.aspect, th).m3('uViewRot', c.viewRot).m3('uInvViewRot', c.invViewRot)
       .v3('uSunDir', a.sunDir).v3('uMoonDir', a.moonDir).v3('uSunColor', a.sunColor)
       .v3('uSkyTop', a.skyTop).v3('uSkyHorizon', a.skyHorizon).v3('uFogColor', a.fogColor).f('uFogDensity', a.fogDensity)

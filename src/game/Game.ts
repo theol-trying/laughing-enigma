@@ -69,6 +69,8 @@ export class Game {
   wx: { mix: WeatherMix; state: WeatherState; flash: number } = { mix: CLEAR_WEATHER, state: 'clair', flash: 0 };
   private stepDist = 0;
   private drownMsgT = -10;
+  /** humidité des surfaces (0..1) : monte sous la pluie, sèche lentement */
+  wetness = 0;
   private swimT = 0;
   private lastHp = 100;
   private lastFlash = 0;
@@ -489,6 +491,8 @@ export class Game {
       this.events.emit('weather:changed', { region: 0, state: this.wx.state });
       this.events.emit('message', { text: msg[this.wx.state], color: 0x9ab0c8 });
     }
+    const wetTarget = this.dungeon ? 0 : Math.min(1, this.rain() * 1.4);
+    this.wetness += (wetTarget - this.wetness) * Math.min(1, dt * (wetTarget > this.wetness ? 0.08 : 0.015));
     this.questT -= dt;
     if (this.questT <= 0) { this.questT = 1; this.quests.tick(); }
     const p = this.player;
@@ -689,6 +693,7 @@ export class Game {
     c.x = p.x; c.y = p.eyeY; c.z = p.z; c.heading = p.heading; c.pitch = p.pitch;
     const atmo = computeAtmosphere(dg ? 0 : this.time.hour, dg ? CLEAR_WEATHER : this.wx.mix, dg ? 1 : 0, dg ? 0 : this.wx.flash);
     if (p.underRoof) { atmo.rain = 0; atmo.snow = 0; }
+    atmo.wet = dg ? 0 : this.wetness;
     this.atmoNight = dg ? 0.5 : atmo.night;
     if (dg) {
       atmo.sunColor = [0, 0, 0]; atmo.ambSky = [0.13, 0.115, 0.1]; atmo.ambGround = [0.08, 0.07, 0.06];

@@ -9,6 +9,9 @@ export class AudioEngine {
   private noise!: AudioBuffer;
   private wind!: { gain: GainNode; filter: BiquadFilterNode };
   private rain!: GainNode;
+  private patter!: GainNode;
+  private brown!: AudioBuffer;
+  private rainLevel = 0;
   private fire!: GainNode;
   volume = 0.6;
 
@@ -32,8 +35,20 @@ export class AudioEngine {
     };
     const wf = ctx.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 500; wf.Q.value = 0.8;
     this.wind = { gain: loop(wf, 0), filter: wf };
-    const rf = ctx.createBiquadFilter(); rf.type = 'highpass'; rf.frequency.value = 1800;
-    this.rain = loop(rf, 0);
+    // pluie : bruit brun (grave, doux) filtré + léger crépitement filtré en douceur
+    this.brown = ctx.createBuffer(1, len, ctx.sampleRate);
+    const bd = this.brown.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < len; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; bd[i] = last * 3.5; }
+    const rf = ctx.createBiquadFilter(); rf.type = 'lowpass'; rf.frequency.value = 1100; rf.Q.value = 0.3;
+    const rs = ctx.createBufferSource(); rs.buffer = this.brown; rs.loop = true;
+    this.rain = ctx.createGain(); this.rain.gain.value = 0;
+    rs.connect(rf); rf.connect(this.rain); this.rain.connect(this.master); rs.start();
+    const pf = ctx.createBiquadFilter(); pf.type = 'bandpass'; pf.frequency.value = 2400; pf.Q.value = 0.35;
+    const pl = ctx.createBiquadFilter(); pl.type = 'lowpass'; pl.frequency.value = 3800;
+    const ps = ctx.createBufferSource(); ps.buffer = this.noise; ps.loop = true;
+    this.patter = ctx.createGain(); this.patter.gain.value = 0;
+    ps.connect(pf); pf.connect(pl); pl.connect(this.patter); this.patter.connect(this.master); ps.start();
     const ff = ctx.createBiquadFilter(); ff.type = 'bandpass'; ff.frequency.value = 1400; ff.Q.value = 2;
     this.fire = loop(ff, 0);
   }
@@ -47,7 +62,11 @@ export class AudioEngine {
     const now = c.currentTime;
     this.wind.gain.gain.setTargetAtTime(0.04 + wind * 0.12, now, 0.5);
     this.wind.filter.frequency.setTargetAtTime(380 + Math.sin(t * 0.3) * 120 + wind * 300, now, 0.8);
-    this.rain.gain.setTargetAtTime(rain * 0.22, now, 0.6);
+    this.rainLevel = rain;
+    this.rain.gain.setTargetAtTime(rain * 0.55, now, 0.8);
+    this.patter.gain.setTargetAtTime(rain * 0.025, now, 0.8);
+    // quelques grosses gouttes qui tombent près de soi
+    if (rain > 0.05 && Math.random() < rain * 0.12) this.drop();
     // crépitements : petites impulsions aléatoires quand un feu est proche
     const crackle = fireNear > 0 && Math.random() < 0.25 ? 0.25 : 0.05;
     this.fire.gain.setTargetAtTime(fireNear * crackle, now, 0.02);
@@ -83,6 +102,7 @@ export class AudioEngine {
     else if (s === 'neige') this.burst(900, 'lowpass', 0.1, 0.18);
     else this.burst(700, 'lowpass', 0.07, 0.16);
   }
+  private drop(): void { this.tone(1400 + Math.random() * 1600, 0.05, 0.012 + Math.random() * 0.012, 'sine', 0.6); }
   /** clapotis (nage, entrée dans l'eau) */
   splash(gain = 1): void { this.burst(500, 'lowpass', 0.35, 0.22 * gain); this.burst(1600, 'bandpass', 0.18, 0.06 * gain, 0.7); }
   hit(): void { this.tone(140, 0.12, 0.35, 'sine', 0.5); this.burst(1200, 'bandpass', 0.07, 0.25); }
