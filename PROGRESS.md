@@ -41,7 +41,7 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 20. Murs : pas d'interaction ni de détection à travers les murs ; indicateurs discrétion (accroupi) et vol ; C = accroupi (bascule), fiche sur P ; fin de dialogue qui se ferme
 - [x] 21. PNJ : garde qui court allongé (pose de sommeil), villageois qui fuient vite ou se défendent quand on les attaque
 - [x] 22. Déplacements : pentes trop raides infranchissables, saut plus haut, eau (ralentit, nage, teinte sous l'eau, éclaboussures)
-- [ ] 23. Génération : sol de maison qui clignote, coffre et tonneau superposés (GENERATOR_VERSION 0.2.0)
+- [x] 23. Génération : sol de maison qui clignote, coffre et tonneau superposés (version du générateur inchangée : correction visuelle)
 - [ ] 24. Pluie : visible dans le décor (gouttes en profondeur, éclaboussures, sol mouillé), son plus doux
 - [ ] 25. Progression : montée de niveau claire, points à dépenser, monstres plus forts au loin, bonus temporaires (prière…), affichage du butin ramassé
 - [ ] 26. Vérification (local + en ligne), docs, propositions d'améliorations

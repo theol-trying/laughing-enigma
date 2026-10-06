@@ -58,7 +58,8 @@ export function buildBuilding(mb: MeshBuilder, sampler: TerrainSampler, ch: Chun
   // fondation jusqu'au sol le plus bas
   let lo = Infinity;
   for (const [lx, lz] of [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]]) lo = Math.min(lo, sampler.height(f.wx(lx, lz), f.wz(lx, lz)));
-  mb.box(b.x, lo - 0.8, b.z, b.w + 0.2, y - lo + 0.8, b.d + 0.2, b.yaw, 0x6e675c, M.STONE);
+  // (son sommet reste sous le plancher : deux faces à la même hauteur scintilleraient)
+  mb.box(b.x, lo - 0.8, b.z, b.w + 0.2, y - lo + 0.8 - 0.14, b.d + 0.2, b.yaw, 0x6e675c, M.STONE);
   // plancher
   mb.sky = INSIDE;
   mb.box(b.x, y - 0.12, b.z, b.w - 0.1, 0.12, b.d - 0.1, b.yaw, 0x7a5a3a, M.PLANKS);

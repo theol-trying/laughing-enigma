@@ -12,8 +12,10 @@
   qu'aucun fichier ne contient de donnée personnelle (chemin utilisateur, email pro, token).
 - Langue du jeu et des textes : français.
 - Génération procédurale : uniquement via `WorldSeed.stream()` / `RNG` (jamais `Math.random`).
-  Toute modif de génération qui change le monde ⇒ incrémenter `GENERATOR_VERSION` (packages/core/src/version.ts)
-  et mettre à jour les tests de déterminisme (`tests/determinism.test.ts`).
+  Toute modif de génération qui change le contenu du monde (relief, villes, PNJ, routes, histoire…) ⇒ incrémenter
+  `GENERATOR_VERSION` (packages/core/src/version.ts) et mettre à jour les tests de déterminisme. Attention : la version
+  entre dans le hachage des seeds, la changer change TOUS les mondes et invalide les salons en ligne. Une correction
+  purement visuelle (meuble décalé, face qui scintille) ne l'exige pas.
 - Multijoueur : `npm run dev:server` (wrangler dev, :8787) + `npm run dev` ; `npm run test:room` ; `npm run bot -- CODE`
   pour un second joueur scripté ; `?cle=xxx` = identité distincte par onglet. Toute modif du protocole :
   `packages/net/src/protocol.ts` (incrémenter `PROTOCOL` si incompatible) + `server/worker.ts`.

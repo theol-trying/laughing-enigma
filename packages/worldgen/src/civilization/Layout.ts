@@ -91,7 +91,7 @@ function furnish(kind: BuildingKind, w: number, d: number, rng: RNG): Furniture[
       add('âtre', -hw + 0.3, 0.5, Math.PI / 2);
       add('table', -1.8, 1.4); add('banc', -1.8, 2.2); add('table', 1.8, 1.4); add('banc', 1.8, 2.2);
       add('lit', hw - 0.3, 0.2, Math.PI / 2); add('lit', hw - 0.3, 1.6, Math.PI / 2);
-      add('coffre', hw - 0.4, -hd + 0.4);
+      add('coffre', hw - 1.4, -hd + 0.4);
       break;
     case 'forge':
       add('foyer de forge', -hw + 0.6, -hd + 0.6); add('enclume', -0.5, -0.5); add('établi', hw - 0.6, -hd + 0.4);
@@ -116,7 +116,31 @@ function furnish(kind: BuildingKind, w: number, d: number, rng: RNG): Furniture[
     case 'mausolée': add('escalier', 0, -0.5); break;
     default: break;
   }
+  separate(F, hw + 0.9, hd + 0.9);
   return F;
+}
+
+/** Encombrement approximatif des meubles (rayon, m). */
+const FOOT: Partial<Record<FurnitureKind, number>> = {
+  lit: 1.0, table: 1.0, banc: 0.9, coffre: 0.55, tonneau: 0.42, âtre: 0.8, comptoir: 1.3, enclume: 0.5,
+  'foyer de forge': 0.9, établi: 1.0, râtelier: 0.6, étagère: 0.7, foin: 0.8, autel: 0.8, meule: 1.0, trône: 0.7,
+};
+
+/** Coffres et tonneaux qui chevauchent un autre meuble : on les fait glisser le long du mur jusqu'à une place libre. */
+function separate(F: Furniture[], halfW: number, halfD: number) {
+  const r = (f: Furniture) => FOOT[f.kind] ?? 0.6;
+  const free = (f: Furniture, x: number, z: number) => Math.abs(x) <= halfW - 0.5 && Math.abs(z) <= halfD - 0.5
+    && F.every((o) => o === f || Math.hypot(o.lx - x, o.lz - z) >= r(o) + r(f) - 0.1);
+  for (const f of F) {
+    if (f.kind !== 'coffre' && f.kind !== 'tonneau') continue;
+    if (free(f, f.lx, f.lz)) continue;
+    const alongZ = Math.abs(Math.abs(f.lx) - (halfW - 0.9)) < Math.abs(Math.abs(f.lz) - (halfD - 0.9));
+    for (let k = 1; k <= 12; k++) {
+      const off = Math.ceil(k / 2) * 0.35 * (k % 2 ? 1 : -1);
+      const x = alongZ ? f.lx : f.lx + off, z = alongZ ? f.lz + off : f.lz;
+      if (free(f, x, z)) { f.lx = x; f.lz = z; break; }
+    }
+  }
 }
 
 const NAMES_INN = ['du Sanglier Gris', 'du Pot d\'Étain', 'de la Chèvre Borgne', 'du Gué Tranquille', 'des Trois Corbeaux', 'du Chêne Creux', 'de la Lanterne', 'du Cerf Blanc'];
