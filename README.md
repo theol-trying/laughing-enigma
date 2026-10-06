@@ -51,6 +51,9 @@ hasard ou choisie) ou **rejoignez** celui d'un ami avec son code à 6 caractère
   toutes les 30 s : on le retrouve en revenant, même depuis un autre jour.
 - **Heure commune** (le temps ne s'arrête pas : dormir soigne sans avancer l'horloge) ; `Entrée` pour
   discuter ; les noms s'affichent au-dessus des têtes.
+- **Tirs et sorts visibles chez tous** (flèches, traits de feu, soins) et **échanges d'objets** : regardez
+  un autre joueur et appuyez sur `E` ; chacun compose son offre (objets, or), l'échange se fait quand les
+  deux ont validé les mêmes offres.
 
 ## Mettre le jeu en ligne (Cloudflare, gratuit)
 
@@ -117,7 +120,16 @@ des PNJ ; amendes et gardes hostiles ; économie régionale (une route tenue par
 pénurie et fait monter les prix, qui reviennent une fois la route libérée) ; rumeurs qui circulent
 de village en village ; dialogues procéduraux ancrés dans le monde ; quêtes systémiques (convois
 attaqués, loups, relique de la crypte, expédition perdue, mine envahie) ; météo régionale ; cycle
-jour/nuit ; sons synthétiques (vent, pluie, feu, pas, impacts, tonnerre).
+jour/nuit.
+
+**Musique et son (tout synthétisé, aucun fichier audio)** — musique procédurale adaptative jouée par un
+petit ensemble médiéval (luth en cordes pincées Karplus-Strong, flûte avec souffle et vibrato, bourdon
+de vielle, tambour sur cadre, tambourin) : thèmes d'exploration (dorien), de village (mixolydien, plus
+enjoué), de nuit, de donjon et de combat (qui démarre dès qu'une créature vous prend en chasse), accords
+et mélodies tirés au fil du jeu, fondus et silences. Ambiances : vent, pluie, oiseaux le jour, grillons
+la nuit, rumeur du village, marteau du forgeron, rivière, lac ou mer. Son spatialisé : cris des
+créatures (alerte, attaque, mort), hurlements de loups la nuit, coups et tirs des autres joueurs ; tout
+est assourdi sous l'eau. Volume de la musique réglable dans les options.
 
 **Modèles animés** — personnages et créatures sont des squelettes articulés (hanches, genoux,
 épaules, coudes, cou, mâchoire, queue) habillés de volumes arrondis (sphères, troncs de cône,
@@ -150,7 +162,7 @@ développement (F1).
 | `Tab` inventaire · `M` carte · `J` journal · `P` personnage (dépenser ses points) | |
 | `Échap` | pause (sauvegarder, charger, options) · `F5`/`F9` sauvegarde/chargement rapides |
 | `F3` | informations de débogage · `F1` console (`help`) |
-| `Entrée` | (en ligne) écrire un message aux autres joueurs |
+| `Entrée` | (en ligne) écrire un message aux autres joueurs · `E` face à un joueur : proposer un échange |
 
 ## Volontairement simplifié
 
@@ -160,12 +172,11 @@ développement (F1).
 - La création du monde bloque quelques centaines de millisecondes (écran de chargement).
 - En ligne : économie, réputation et rumeurs restent propres à chaque joueur (les camps démantelés,
   eux, sont communs) ; les gardes ne poursuivent que le joueur qui simule le village ; objets posés au
-  sol, flèches et sorts des autres joueurs ne sont pas montrés ; pas de combat entre joueurs.
+  sol non partagés ; pas de combat entre joueurs.
 
 ## Pistes suivantes
 
-En ligne : projectiles et effets visibles chez tous, échanges d'objets entre joueurs, gardes et
-réputation partagés, liste des salons publics. Monde plus vaste et génération dans un Web Worker ; villes plus denses (quartiers, marchés vivants) ;
+En ligne : gardes et réputation partagés, groupe et quêtes partagées, liste des salons publics. Monde plus vaste et génération dans un Web Worker ; villes plus denses (quartiers, marchés vivants) ;
 voyageurs et caravanes réellement simulés sur les routes ; donjons multi-niveaux ; plus de types de
 quêtes et de dialogues ; montures ; réflexions d'eau en espace écran ; ombres des torches.
 

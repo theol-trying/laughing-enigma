@@ -6,7 +6,7 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Jalon 4 en cours : musique, ambiances, son spatial, projectiles et échanges en multi (liste « Jalon 4 », première case vide).
+Jalon 4 terminé (musique procédurale, ambiances, son spatialisé, tirs/sorts et échanges en multi). Suite : selon l'utilisateur.
 Jalon 2 terminé (étapes 12 à 19) : modèles articulés, police fine (deux grilles), bibliothèques (packages/*),
 multijoueur coop Cloudflare (un Worker : assets + Durable Object Room ; autorité par zone ; faits partagés).
 Déployé le 2026-10-06 par l'utilisateur : Worker Cloudflare « ascii-fort » relié au dépôt (build réussi, redéploiement à chaque push sur main).
@@ -51,7 +51,7 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 28. Ambiances (oiseaux, grillons, rumeur du village, marteau du forgeron, rivière) + son spatialisé (créatures, coups) + son assourdi sous l'eau
 - [x] 29. Multi : flèches et sorts des autres joueurs visibles (et audibles)
 - [x] 30. Multi : échanges d'objets entre joueurs
-- [ ] 31. Vérification (local + en ligne), docs, déploiement
+- [x] 31. Vérification (local + en ligne), docs, déploiement
 
 ## Décisions clés (ne pas re-débattre)
 - Dev : `npm run dev` (port 5199). Dépôt : github.com/theol-trying/laughing-enigma (push à chaque checkpoint).
@@ -137,3 +137,9 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
   Pluie : 3 couches de gouttes avec profondeur, éclaboussures, sol mouillé/flaques (uWet), son en bruit brun.
   Progression : niveau des créatures = danger (distance au départ /650 m, +profondeur en donjon), gains par niveau,
   bandeau, bonus temporaires (béni, désaltéré, rassasié, reposé), fil du butin. Glyphes hors atlas corrigés.
+- 2026-10-06 : jalon 4 (27-31) fait. src/audio/Music.ts (luth Karplus-Strong précalculé par note, flûte, bourdon, tambour,
+  tambourin, réverb ; thèmes exploration/village/nuit/donjon/combat ; sections jeu/silence ; fondus), Ambience.ts
+  (oiseaux, grillons, rumeur, eau spatialisée), AudioEngine (bus, PannerNode, auditeur = caméra, filtre sous l'eau,
+  cris de créatures, hurlements, enclume). Game.musicMood/worldSounds. Rendu hors ligne vérifié (5 thèmes : son, pas
+  de NaN ni saturation). Multi : PlayerCombat.onCast → fx (tirs rejoués, étincelles de soin, sons) ; échanges :
+  Coop.trade (offres versionnées, validation croisée), écrans TradeAskScreen/PlayerTradeScreen. Testé avec un bot.
