@@ -153,7 +153,7 @@ export class MacroWorld {
       const ci = c % N, cj = (c / N) | 0;
       if (seeds.every((s) => Math.hypot((s % N) - ci, ((s / N) | 0) - cj) > 38)) seeds.push(c);
     }
-    const cost = new Float32Array(N * N).fill(Infinity);
+    const cost = new Float64Array(N * N).fill(Infinity);
     const heap = new MinHeap(8192);
     seeds.forEach((s, k) => { cost[s] = 0; this.region[s] = k; heap.push(0, s); });
     while (heap.size) {

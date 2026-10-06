@@ -5,15 +5,18 @@ import { ChunkManager, type GpuBridge } from './ChunkManager';
 import { MACRO, CELL } from './constants';
 import { B } from './terrain/Biomes';
 import { W_NONE } from './terrain/Hydrology';
+import { Civilization } from './civilization/Civilization';
 
 /** Façade du monde : macro + relief détaillé + chunks chargés. */
 export class World<T = unknown> {
   readonly macro: MacroWorld;
   readonly sampler: TerrainSampler;
   readonly chunks: ChunkManager<T>;
+  readonly civ: Civilization;
 
   constructor(readonly seed: WorldSeed, gpu: GpuBridge<T> | null) {
     this.macro = MacroWorld.generate(seed);
+    this.civ = Civilization.generate(this.macro);
     this.sampler = new TerrainSampler(this.macro);
     this.chunks = new ChunkManager<T>(this.sampler, gpu);
   }

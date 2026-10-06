@@ -1,0 +1,110 @@
+Terres de Maromières — an 1246 — civilisation générée en 548 ms (macro compris)
+Départ : Gué-Marain (village, 177 hab.) — terres cultivables ; au bord de la Garne ; sur une route commerciale ; lieu de départ du voyageur
+
+FACTIONS
+- Royaume de Belmorne [royaume] la Guerre des Deux Couronnes n'est pas oubliée
+- Royaume de Lanaux [royaume] la Guerre des Deux Couronnes n'est pas oubliée
+- Royaume de Combe-Loup [royaume] le schisme de Créières a brouillé l'ordre et le Royaume de Combe-Loup
+- Ordre du Gué [ordre] l'ordre traque les adorateurs du culte ; le schisme de Créières a brouillé l'ordre et le Royaume de Combe-Loup
+- Guilde des Marchands de Guéac [guilde] les bandits pillent les convois de la guilde
+- Les Écorcheurs d'Olouille [bandits] les bandits pillent les convois de la guilde ; anciens révoltés de Val-Marecourt
+- La Confrérie de l'Œil Clos [culte] l'ordre traque les adorateurs du culte ; le culte cherche les trésors des rois de Val-Rosis
+
+IMPLANTATIONS
+- Belmorne : capitale, 3675 hab., Royaume de Belmorne · produit grain, laine, poisson, outils, étoffe · siège du Royaume de Belmorne ; terres cultivables ; au bord de la Morze ; carrefour de routes
+- Lanaux : capitale, 3131 hab., Royaume de Lanaux · produit grain, laine, bois, gibier, poisson, sel, outils, étoffe · siège du Royaume de Lanaux ; terres cultivables ; au bord de la Nerve ; carrefour de routes
+- Combe-Loup : capitale, 4436 hab., Royaume de Combe-Loup · produit grain, laine, bois, gibier, poisson, minerai, pierre, outils, étoffe · siège du Royaume de Combe-Loup ; terres cultivables ; au bord de la Vaue ; carrefour de routes
+- Garaux : château, 52 hab., Royaume de Belmorne · produit grain, laine, minerai, pierre · domine Belmorne depuis la hauteur ; terres cultivables
+- Croixrive : château, 94 hab., Royaume de Lanaux · produit grain, laine · domine Lanaux depuis la hauteur ; terres cultivables
+- Croixroc : château, 102 hab., Royaume de Combe-Loup · produit grain, laine, bois, gibier, minerai, pierre · domine Combe-Loup depuis la hauteur ; terres cultivables ; carrefour de routes
+- Clairlac : ville, 1169 hab., Royaume de Lanaux · produit grain, laine, bois, gibier, poisson, sel, outils, étoffe · terres cultivables ; au bord de la Garnde ; carrefour de routes
+- Ronce-Talay : ville, 1263 hab., Royaume de Belmorne · produit grain, laine, bois, gibier, poisson, outils, étoffe · terres cultivables ; au bord de la Rande ; carrefour de routes
+- Sauecourt : bourg, 654 hab., Royaume de Belmorne · produit grain, laine, bois, gibier, poisson, outils, étoffe · terres cultivables ; au bord de la Talze ; sur une route commerciale
+- Ronce-Breeil : bourg, 798 hab., Royaume de Lanaux · produit grain, laine, poisson, outils, étoffe · terres cultivables ; au bord de la Vaunde ; carrefour de routes
+- Guéecourt : bourg, 562 hab., Royaume de Belmorne · produit grain, laine, poisson, outils, étoffe · terres cultivables ; au bord de l'Aude ; sur une route commerciale
+- Val-Marecourt : bourg, 439 hab., Royaume de Belmorne · produit grain, laine, bois, gibier, poisson, minerai, pierre, outils, étoffe · terres cultivables ; au bord de la Sauve ; carrefour de routes
+- Noirgarde : village, 100 hab., Royaume de Belmorne · produit grain, laine, bois, gibier, poisson · terres cultivables ; au bord de la Dorne ; carrefour de routes
+- Noirfer : village, 136 hab., Royaume de Belmorne · produit grain, laine, poisson · terres cultivables ; au bord de la Talze ; carrefour de routes
+- Givre-Olenne : village minier, 147 hab., Royaume de Belmorne · produit grain, laine, bois, gibier, poisson, minerai, pierre, fer · au pied des montagnes et de leurs filons ; terres cultivables ; au bord de l'Aude ; carrefour de routes
+- Breagay : village minier, 121 hab., Royaume de Combe-Loup · produit grain, laine, bois, gibier, poisson, minerai, pierre, fer · au pied des montagnes et de leurs filons ; terres cultivables ; au bord de l'Ollle
+- Mur-Torenne : village, 112 hab., Royaume de Lanaux · produit grain, laine, poisson · terres cultivables ; au bord de la Vauve ; carrefour de routes
+- Audeval : village, 103 hab., Royaume de Lanaux · produit grain, laine, bois, gibier, poisson · terres cultivables ; au bord de la Créze ; sur une route commerciale
+- Moranières : village, 175 hab., Royaume de Belmorne · produit grain, laine, bois, gibier, poisson, minerai, pierre · terres cultivables ; au bord de la Verse ; sur une route commerciale
+- Malouay : village, 130 hab., Royaume de Belmorne · produit grain, laine, bois, gibier, poisson · terres cultivables ; au bord de la Dorlle ; carrefour de routes
+- Breais : village, 60 hab., Royaume de Lanaux · produit grain, laine, bois, gibier, poisson · terres cultivables ; au bord de la Nerve ; carrefour de routes
+- Vauenne : village, 132 hab., Royaume de Belmorne · produit bois, gibier, poisson · au bord de la Berire ; sur une route commerciale
+- Ronce-Corain : village, 158 hab., Royaume de Combe-Loup · produit grain, laine, poisson · terres cultivables ; au bord de l'Arire ; carrefour de routes
+- Dorulay : port, 179 hab., Royaume de Belmorne · produit grain, laine, bois, gibier, poisson, sel · port sur la côte ; terres cultivables ; au bord de la Rande ; sur une route commerciale
+- Salais : village, 149 hab., Royaume de Combe-Loup · produit grain, laine, poisson, minerai, pierre · terres cultivables ; au bord de la Vaunde ; carrefour de routes
+- Gué-Marain : village, 177 hab., Royaume de Belmorne · produit grain, laine, bois, gibier, poisson · terres cultivables ; au bord de la Garne ; sur une route commerciale ; lieu de départ du voyageur
+- Garac : village, 107 hab., Royaume de Belmorne · produit grain, laine, poisson, minerai, pierre · terres cultivables ; au bord de la Torze ; sur une route commerciale
+- Brume-Sombre : ruines (abandonné), 0 hab., Royaume de Belmorne · produit grain, laine, bois, gibier, poisson · terres cultivables ; au bord de la Talze ; abandonné après la peste de 1211
+- Givre-Garain : hameau, 15 hab., Royaume de Belmorne · produit grain, laine, bois, gibier, poisson, minerai, pierre · terres cultivables ; au bord de la Talze
+- Fortpierre : hameau, 39 hab., Royaume de Lanaux · produit grain, laine, bois, gibier, poisson · terres cultivables ; au bord de la Vauze
+- Hautmont : ruines (abandonné), 0 hab., Royaume de Belmorne · produit grain, laine, bois, gibier, poisson, minerai, pierre · terres cultivables ; au bord de la Calnde ; détruit par un troll en 1209
+- Aremont : hameau, 33 hab., Royaume de Belmorne · produit grain, laine, bois, gibier, poisson · terres cultivables ; au bord de la Crése
+- Pont-Marais : hameau, 32 hab., Royaume de Lanaux · produit grain, laine, bois, gibier, poisson · terres cultivables ; au bord de la Nerze
+- Morulières : hameau, 23 hab., Royaume de Belmorne · produit grain, laine, bois, gibier, poisson · terres cultivables ; au bord de la Fenve
+- Doréons : hameau, 37 hab., Royaume de Lanaux · produit grain, laine, bois, gibier, poisson, minerai, pierre · terres cultivables ; au bord de la Charze
+- Combe-Brune : hameau, 20 hab., Royaume de Combe-Loup · produit grain, laine, poisson, sel · terres cultivables ; au bord de l'Arire
+- Talemont : hameau, 27 hab., Royaume de Lanaux · produit grain, laine, bois, gibier, poisson · terres cultivables ; au bord de la Vaunde
+- Aube-Neremont : hameau, 27 hab., Royaume de Lanaux · produit grain, laine, bois, gibier, poisson · terres cultivables ; au bord de la Mornde
+- Bois-Marain : hameau, 40 hab., Royaume de Belmorne · produit grain, laine, bois, gibier, poisson · terres cultivables ; au bord de la Torlle
+- Créières : monastère, 24 hab., Ordre du Gué · produit bois, gibier, poisson, minerai, pierre, vin, herbes · lieu reculé propice au recueillement ; au bord de la Garnde ; carrefour de routes
+- Ruines de Val-Rosis : ruines (abandonné), 0 hab., — · produit  · vestiges de l'ancien royaume de Val-Rosis
+- Camp des Écorcheurs d'Olouille : camp, 6 hab., Les Écorcheurs d'Olouille · produit  · attaque les convois entre Guéecourt et Gué-Marain
+- Camp des Écorcheurs d'Olouille : camp, 6 hab., Les Écorcheurs d'Olouille · produit  · attaque les convois entre Belmorne et Val-Marecourt
+- Camp des Écorcheurs d'Olouille : camp, 6 hab., Les Écorcheurs d'Olouille · produit  · attaque les convois entre Lanaux et Mur-Torenne
+- Camp des Écorcheurs d'Olouille : camp, 6 hab., Les Écorcheurs d'Olouille · produit  · attaque les convois entre Lanaux et Breais
+
+HISTOIRE
+- 755 : Chute de l'ancien royaume de Val-Rosis — Le royaume de Val-Rosis s'effondra dans le sang ; sa forteresse ne fut jamais reprise. On dit que ses rois reposent encore sous les pierres.
+- 937 : Fondation du Royaume de Combe-Loup — Combe-Loup devint le siège d'un royaume qui soumit les seigneurs voisins.
+- 973 : Fondation du Royaume de Belmorne — Belmorne devint le siège d'un royaume qui soumit les seigneurs voisins.
+- 981 : Fondation du Royaume de Lanaux — Lanaux devint le siège d'un royaume qui soumit les seigneurs voisins.
+- 1108 : Le Schisme de Créières — Des moines refusèrent l'autorité du Royaume de Combe-Loup sur l'Église et fondèrent Créières, loin des cours.
+- 1182 : La Guerre des Deux Couronnes — Le Royaume de Belmorne et le Royaume de Lanaux se disputèrent les terres frontalières pendant onze ans. Le Royaume de Lanaux l'emporta, mais la rancune demeure.
+- 1188 : La bataille de la Frontière — Des milliers d'hommes tombèrent près de la route. Les paysans retrouvent encore des pointes de lances en labourant.
+- 1198 : Ouverture des mines de Givre-Olenne — On trouva du fer dans la montagne au-dessus de Givre-Olenne. Depuis peu, des gobelins ont envahi les galeries basses.
+- 1203 : Ouverture des mines de Breagay — On trouva du fer dans la montagne au-dessus de Breagay. Depuis peu, des gobelins ont envahi les galeries basses.
+- 1209 : Le saccage de Hautmont — Une bête descendue des montagnes, haute comme deux hommes, détruisit Hautmont. Personne n'a osé la poursuivre.
+- 1211 : La Peste de Brume-Sombre — Une fièvre noire vida Brume-Sombre en un été. Les survivants partirent ; les morts furent enterrés à l'écart.
+- 1238 : La révolte de Val-Marecourt — Écrasés d'impôts, les paysans autour de Val-Marecourt se soulevèrent. La révolte fut noyée dans le sang ; les survivants prirent le maquis et devinrent Les Écorcheurs d'Olouille.
+- 1243 : L'expédition de Liesse Brun — Liesse Brun partit de Val-Marecourt explorer Forteresse de Val-Rosis avec quatre compagnons. Aucun n'est revenu.
+
+POINTS D'INTÉRÊT
+- Forteresse de Val-Rosis [ruines] — capitale déchue de l'ancien royaume de Val-Rosis · donjon : Cachots de Val-Rosis
+- Cimetière des pestiférés [cimetière] — les morts de la peste de Brume-Sombre y reposent
+- Antre du troll [antre du troll] — la bête qui a rasé Hautmont y a fait son repaire
+- Mines de Givre-Olenne [mine] — filon de fer exploité par Givre-Olenne · donjon : Galeries de Givre-Olenne
+- Mines de Breagay [mine] — filon de fer exploité par Breagay · donjon : Galeries de Breagay
+- Champ de la Frontière [champ de bataille] — bataille décisive de la Guerre des Deux Couronnes
+- Statue du roi vainqueur [statue] — célèbre la victoire de la Guerre des Deux Couronnes
+- Camp des Écorcheurs d'Olouille [camp de bandits] — les bandits guettent la route de Guéecourt à Gué-Marain
+- Camp des Écorcheurs d'Olouille [camp de bandits] — les bandits guettent la route de Belmorne à Val-Marecourt
+- Camp des Écorcheurs d'Olouille [camp de bandits] — les bandits guettent la route de Lanaux à Mur-Torenne
+- Camp des Écorcheurs d'Olouille [camp de bandits] — les bandits guettent la route de Lanaux à Breais
+- Tanière du bois [tanière de loups] — les loups chassent le gibier et les troupeaux des alentours
+- Tanière de loups [tanière de loups] — les loups chassent le gibier et les troupeaux des alentours
+- Tanière de loups [tanière de loups] — les loups chassent le gibier et les troupeaux des alentours
+- Tanière de loups [tanière de loups] — les loups chassent le gibier et les troupeaux des alentours
+- Grotte aux Gobelins [repaire de gobelins] — des gobelins pillent les fermes isolées depuis cette grotte · donjon : Grotte aux Gobelins
+- Grotte Noire [repaire de gobelins] — des gobelins pillent les fermes isolées depuis cette grotte · donjon : Grotte Noire
+- Nid d'araignées [nid d'araignées] — l'humidité et l'obscurité attirent les araignées géantes
+- Crypte de Ronce-Olerre [crypte] — tombeau des anciens seigneurs de Ronce-Olerre, que l'ordre bénit jadis · donjon : Crypte de Ronce-Olerre
+- Tour de guet [tour de guet] — surveille la route de Belmorne à Val-Marecourt
+- Tour de guet [tour de guet] — surveille la route de Belmorne à Garac
+- Tour de guet [tour de guet] — surveille la route de Lanaux à Mur-Torenne
+- Sanctuaire [sanctuaire] — les voyageurs y prient pour une route sûre
+- Sanctuaire [sanctuaire] — les voyageurs y prient pour une route sûre
+- Sanctuaire [sanctuaire] — les voyageurs y prient pour une route sûre
+- Sanctuaire [sanctuaire] — les voyageurs y prient pour une route sûre
+- Sanctuaire [sanctuaire] — les voyageurs y prient pour une route sûre
+- Cercle de pierres [menhirs] — dressées par un peuple oublié bien avant les royaumes
+- Cercle de pierres [menhirs] — dressées par un peuple oublié bien avant les royaumes
+- Cercle de pierres [menhirs] — dressées par un peuple oublié bien avant les royaumes
+- Le Chêne aux Pendus [arbre remarquable] — un arbre plusieurs fois centenaire, repère de tous les voyageurs
+- Le Vieux Tilleul [arbre remarquable] — un arbre plusieurs fois centenaire, repère de tous les voyageurs
+- 88 ponts
+
+ROUTES : 47 (24 routes, 23 chemins)

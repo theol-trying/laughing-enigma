@@ -23,7 +23,7 @@ Petits points connus : création du monde synchrone (~2,6 s avec 137 chunks) →
 - [x] 2. Renderer : GL utils, atlas de glyphes, TextGrid (UI), passe scène MRT 2×2, passe cellule (rampes par matière, quadrants, arêtes, brouillard, ciel, pluie), passe présentation, caméra pointer-lock
 - [x] 3. Monde macro : élévation, hydrologie (priority-flood, D8, rivières polylignes, lacs, vallées), climat, biomes, régions, noms + tests déterminisme
 - [x] 4. Chunks : TerrainSampler (h(x,z) pur), maillage chunk, eau, végétation, streaming, terrain lointain ; joueur + collisions
-- [ ] 5. Civilisation : factions, histoire, implantations, routes A*, ponts, plans de village (bâtiments + intérieurs), POI, donjons
+- [~] 5. Civilisation (5a fait : factions, implantations, histoire, routes, POI, donjons-données ; 5b : plans de village + géométrie ; 5c : donjons 3D) : factions, histoire, implantations, routes A*, ponts, plans de village (bâtiments + intérieurs), POI, donjons
 - [ ] 6. Entités & IA : PNJ (identité, emploi du temps), monstres, utility AI, perception, pathfinding local
 - [ ] 7. Gameplay : objets, inventaire, équipement, combat (léger/lourd/blocage/esquive/arc), loot, XP/compétences, réputation/mémoire, économie, dialogues, rumeurs, quêtes systémiques
 - [ ] 8. UI terminal : titre/nouvelle partie, HUD, inventaire, journal, stats, carte, dialogue, commerce, pause/options
@@ -57,3 +57,4 @@ Petits points connus : création du monde synchrone (~2,6 s avec 137 chunks) →
 - 2026-10-05 : étape 3 faite. Macro TEST-001 en ~200 ms, aperçu ASCII dans docs/map-TEST-001.txt (régénéré par les tests).
 - 2026-10-05 : étape 4 faite (12 tests verts). Exploration à pied d'un monde TEST-001 à ~58 fps, chunks 2 ms.
   Pause demandée par l'utilisateur après cette étape.
+- 2026-10-06 : 5a fait (15 tests). Bug corrigé : Dijkstra en Float32 (régions + vallées) → Float64. Rapport : docs/civ-TEST-001.txt.

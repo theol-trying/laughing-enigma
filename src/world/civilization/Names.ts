@@ -13,6 +13,9 @@ const MALE = ['Aubin', 'Bertrand', 'Clément', 'Denis', 'Évrard', 'Fulbert', 'G
 const FEMALE = ['Aude', 'Béatrice', 'Clémence', 'Douce', 'Ermengarde', 'Flore', 'Gisèle', 'Héloïse', 'Isabeau', 'Jeanne', 'Mahaut', 'Marguerite', 'Nicolette', 'Odile', 'Perrine', 'Roselyne', 'Sibylle', 'Tiphaine', 'Ysolde', 'Agnès', 'Blanche', 'Catherine', 'Guenièvre', 'Liesse', 'Mélisende', 'Pétronille', 'Ade', 'Berthe', 'Colette', 'Emmeline', 'Alix', 'Bérengère', 'Constance', 'Edmée', 'Gillette', 'Jacquette', 'Margot', 'Philippa', 'Sancie', 'Yolande'];
 const FAMILY = ['Lefèvre', 'Dumoulin', 'Laforge', 'Boucher', 'Charpentier', 'Meunier', 'Tisserand', 'Berger', 'Fournier', 'Marchand', 'Bonnet', 'Rousseau', 'Leblanc', 'Moreau', 'Garnier', 'Fontaine', 'Duval', 'Dubois', 'Delarue', 'Morel', 'Lenoir', 'Brun', 'Girard', 'Mercier', 'Roux', 'Vasseur', 'Courtois', 'Perrin', 'Chauvin', 'Barbier', 'Pelletier', 'Tonnelier', 'Vigneron', 'Potier', 'Lechat', 'Corbin', 'Malet', 'Sauvage', 'Hardy', 'Gaillard'];
 
+/** « de X » ou « d'X » selon l'initiale. */
+export function de(name: string): string { return /^[AEIOUYÉÈÊÂÎÔŒ]/i.test(name) ? `d'${name}` : `de ${name}`; }
+
 export class NameGen {
   constructor(private rng: RNG, private used = new Set<string>()) {}
 
@@ -62,8 +65,8 @@ export class NameGen {
   region(kind: 'val' | 'comté' | 'marches' | 'hautes' | 'forêt' | 'marais'): string {
     const p = this.rawPlace();
     const name = {
-      val: `Val de ${p}`, comté: `Comté de ${p}`, marches: `Marches de ${p}`,
-      hautes: `Hautes-Terres de ${p}`, forêt: `Forêt de ${p}`, marais: `Marais de ${p}`,
+      val: `Val ${de(p)}`, comté: `Comté ${de(p)}`, marches: `Marches ${de(p)}`,
+      hautes: `Hautes-Terres ${de(p)}`, forêt: `Forêt ${de(p)}`, marais: `Marais ${de(p)}`,
     }[kind];
     return this.unique(() => name);
   }
@@ -82,12 +85,12 @@ export class NameGen {
     const r = this.rng;
     const p = place ?? this.rawPlace();
     switch (kind) {
-      case 'royaume': return this.unique(() => `Royaume de ${p}`);
-      case 'maison': return this.unique(() => `Maison de ${p}`);
+      case 'royaume': return this.unique(() => `Royaume ${de(p)}`);
+      case 'maison': return this.unique(() => `Maison ${de(p)}`);
       case 'ordre': return this.unique(() => `Ordre ${r.pick(['de la Flamme', 'du Gué', "de l'Aube", 'des Cendres', 'du Saint-Puits'])}`);
-      case 'bandits': return this.unique(() => `${r.pick(['Les Loups', 'Les Corbeaux', 'Les Écorcheurs', 'La Bande', 'Les Fils'])} ${r.pick(['de ' + p, 'Gris', 'Rouges', 'du Fossé', 'Sans-Nom'])}`);
+      case 'bandits': return this.unique(() => `${r.pick(['Les Loups', 'Les Corbeaux', 'Les Écorcheurs', 'La Bande', 'Les Fils'])} ${r.pick([de(p), 'Gris', 'Rouges', 'du Fossé', 'Sans-Nom'])}`);
       case 'culte': return this.unique(() => `${r.pick(['Le Culte', 'Les Fidèles', 'La Confrérie'])} ${r.pick(['du Ver', 'de la Lune Noire', 'des Os', "de l'Œil Clos"])}`);
-      case 'guilde': return this.unique(() => `Guilde des ${r.pick(['Marchands', 'Mineurs', 'Bateliers'])} de ${p}`);
+      case 'guilde': return this.unique(() => `Guilde des ${r.pick(['Marchands', 'Mineurs', 'Bateliers'])} ${de(p)}`);
     }
   }
 }

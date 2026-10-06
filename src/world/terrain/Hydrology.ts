@@ -173,7 +173,7 @@ export function computeHydrology(elev: Float32Array, rng: RNG): HydroResult {
 
   // creusement : lit des rivières puis vallées (distance à la rivière la plus proche)
   const nearLevel = new Float32Array(size).fill(Infinity);
-  const dist = new Float32Array(size).fill(Infinity);
+  const dist = new Float64Array(size).fill(Infinity);
   const reach = new Float32Array(size);
   const dheap = new MinHeap(4096);
   for (let c = 0; c < size; c++) {
