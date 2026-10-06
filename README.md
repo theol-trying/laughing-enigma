@@ -97,6 +97,18 @@ pluie, fuient ou combattent les créatures. Créatures (loups, bandits et leur c
 squelettes, spectre, araignées, troll…) avec perception, territoire, nocturnes, meutes qui
 s'appellent ; écologie agrégée hors champ ; simulation par niveaux de détail.
 
+**Corps et environnement** — pentes trop raides infranchissables (on glisse), saut au-dessus des
+obstacles bas, eau qui ralentit, nage qui fatigue, plongée (image bleutée et ondulante), noyade ;
+pluie visible dans le décor (gouttes à plusieurs profondeurs, éclaboussures, sol mouillé et flaques
+qui sèchent ensuite). Les murs bloquent la vue, l'ouïe (en partie) et les interactions ; accroupi, un
+indicateur dit si l'on est caché ou repéré, et chaque vol annonce s'il a des témoins.
+
+**Progression** — les créatures sont plus fortes loin du village de départ (niveau affiché, ≈ +1 tous
+les 650 m, plus encore dans les donjons profonds) et rapportent plus d'expérience ; chaque niveau
+apporte PV, endurance, mana, dégâts et un point de caractéristique (touche `P`) ; bonus temporaires :
+prière (béni), puits (désaltéré), repas chaud (rassasié), nuit à l'auberge (reposé). Le butin ramassé
+s'affiche à l'écran.
+
 **Gameplay** — combat temps réel (attaque légère, lourde en maintenant, blocage, esquive, arc et
 flèches, sorts, feu/givre/poison), caractéristiques et compétences qui progressent à l'usage,
 niveaux, inventaire et équipement, butin contextuel, coffres (le vol devant témoins est un délit),
@@ -129,13 +141,13 @@ développement (F1).
 |---|---|
 | `Z Q S D` / `W A S D` | se déplacer (selon le clavier) |
 | Souris | regarder (clic pour capturer) |
-| `Maj` | sprinter · `Espace` sauter · `C` s'accroupir (discrétion) |
+| `Maj` | sprinter · `Espace` sauter (≈ 1,2 m) · `C` s'accroupir / se relever (discrétion ; en nageant : plonger) |
 | `E` | interagir / parler / fouiller |
 | Clic gauche | attaquer (maintenir : attaque lourde ; arc : bander) |
 | Clic droit | bloquer |
 | `V` ou double appui | esquiver |
 | `B` | arc ↔ arme de mêlée · `R` trait de feu · `F` soin · `H` potion |
-| `Tab` inventaire · `M` carte · `J` journal · `C` personnage | |
+| `Tab` inventaire · `M` carte · `J` journal · `P` personnage (dépenser ses points) | |
 | `Échap` | pause (sauvegarder, charger, options) · `F5`/`F9` sauvegarde/chargement rapides |
 | `F3` | informations de débogage · `F1` console (`help`) |
 | `Entrée` | (en ligne) écrire un message aux autres joueurs |
