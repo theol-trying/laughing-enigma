@@ -8,7 +8,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "checkpoint": "node scripts/checkpoint.mjs"
+    "checkpoint": "node scripts/checkpoint.mjs",
+    "autosave": "node scripts/autosave.mjs"
   },
   "type": "module",
   "devDependencies": {

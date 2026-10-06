@@ -10,7 +10,8 @@ Jalon 2 (demandé le 2026-10-06) : modèles plus fins, police plus fine, bibliot
 Décisions validées par l'utilisateur : **un seul Worker Cloudflare** (assets statiques = build Vite + Durable Object
 par salon), **autorité par zone chez les joueurs** (le DO relaie + garde l'état persistant du monde), **coop complet**
 (créatures/combats partagés, coffres/camps/morts partagés et persistants, quêtes et inventaire propres à chacun).
-Prochaine étape non cochée ci-dessous = où reprendre.
+Prochaine étape non cochée ci-dessous = où reprendre. Si du travail non committé a été perdu, regarder
+`git diff HEAD refs/autosave/latest` (instantanés locaux toutes les 10 min, `npm run autosave`).
 
 ## Étapes
 - [x] 0. Setup : Vite 8 + TS 7 + Vitest 5, git (identité theol-trying noreply), PROGRESS/CLAUDE.md
