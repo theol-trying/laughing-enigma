@@ -28,7 +28,7 @@ Prochaine étape non cochée ci-dessous = où reprendre. Si du travail non commi
 - [x] 11. Vérification du vertical slice (18 étapes) dans le navigateur
 ### Jalon 2
 - [x] 12. Modèles procéduraux plus fins (formes effilées/arrondies, membres articulés, équipements visibles)
-- [ ] 13. Finesse d'affichage : police plus petite pour le monde (option), interface lisible
+- [x] 13. Finesse d'affichage : police plus petite pour le monde (option), interface lisible
 - [ ] 14. Découpage en bibliothèques (workspaces npm : core, worldgen, render-ascii, sim, net ; apps client/serveur)
 - [ ] 15. Serveur Cloudflare : Worker (assets + /ws) + Durable Object « Room » (salon, relais, état persistant SQLite), wrangler
 - [ ] 16. Client réseau : salons (créer/rejoindre par code), présence, joueurs distants interpolés, heure commune
@@ -88,3 +88,6 @@ Prochaine étape non cochée ci-dessous = où reprendre. Si du travail non commi
 - 2026-10-06 : 12 fait. Formes instanciées (boîte, cylindre, sphère, tronc de cône, cône ; tri par forme, normales
   correctes sous échelle), modèles à squelette (genoux, coudes, cou, mâchoire, queue), barbes, capes, tabliers, capuches,
   armes détaillées, yeux lumineux (squelettes, spectre, araignée, gobelins), araignée à pattes articulées.
+- 2026-10-06 : 13 fait. Deux grilles superposées : monde en police plus petite (option « Finesse du monde » :
+  normale / fine ×0,75 par défaut / très fine ×0,6, jamais sous 8 px), interface à la taille de lecture ; composition
+  dans la passe de présentation (la passe cellule ne fusionne plus l’UI). shaders.ts repassé en fins de ligne LF.

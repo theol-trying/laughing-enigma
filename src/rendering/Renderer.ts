@@ -72,14 +72,18 @@ const SHADOW_SIZE = 2048, SHADOW_RANGE = 110;
 export class Renderer {
   readonly gl: WebGL2RenderingContext;
   readonly ui = new TextGrid();
+  /** grille de l'interface (taille de lecture) */
   cols = 0; rows = 0; cellW = 8; cellH = 16; originX = 0; originY = 0;
   cssCellH = 16;
+  /** grille du monde, plus fine : cellule = interface × detail (police plus petite → plus de finesse) */
+  wcols = 0; wrows = 0; wcellW = 8; wcellH = 16; worigX = 0; worigY = 0;
+  detail = 0.75;
   drawCalls = 0;
 
   private staticSh: Shader; private instSh: Shader; private cellSh: Shader; private presentSh: Shader;
   private shadowSh: Shader; private shadowInstSh: Shader;
   private matTable: WebGLTexture;
-  private atlasTex: WebGLTexture | null = null;
+  private atlasTex: WebGLTexture | null = null; private uiAtlasTex: WebGLTexture | null = null;
   private sceneTex: WebGLTexture[] = []; private sceneDepth: WebGLTexture | null = null; private sceneFbo: WebGLFramebuffer | null = null;
   private cellTex: WebGLTexture[] = []; private cellFbo: WebGLFramebuffer | null = null;
   private uiGlyphTex: WebGLTexture | null = null; private uiFgTex: WebGLTexture | null = null; private uiBgTex: WebGLTexture | null = null;
@@ -159,9 +163,9 @@ export class Renderer {
   }
 
   /** Recalcule la grille de caractères (taille de cellule en px CSS). */
-  resize(cssCellH = this.cssCellH): void {
+  resize(cssCellH = this.cssCellH, detail = this.detail): void {
     const gl = this.gl;
-    this.cssCellH = cssCellH;
+    this.cssCellH = cssCellH; this.detail = detail;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const W = Math.max(64, Math.round(window.innerWidth * dpr)), H = Math.max(64, Math.round(window.innerHeight * dpr));
     this.canvas.width = W; this.canvas.height = H;
@@ -173,18 +177,29 @@ export class Renderer {
     this.originX = Math.floor((W - this.cols * this.cellW) / 2);
     this.originY = Math.floor((H - this.rows * this.cellH) / 2);
 
-    const atlas = buildAtlas(this.cellW, this.cellH, fontPx);
-    if (this.atlasTex) gl.deleteTexture(this.atlasTex);
-    this.atlasTex = makeTexture(gl, atlas.width, atlas.height, gl.R8, gl.RED, gl.UNSIGNED_BYTE, atlas.data);
+    const uiAtlas = buildAtlas(this.cellW, this.cellH, fontPx);
+    if (this.uiAtlasTex) gl.deleteTexture(this.uiAtlasTex);
+    this.uiAtlasTex = makeTexture(gl, uiAtlas.width, uiAtlas.height, gl.R8, gl.RED, gl.UNSIGNED_BYTE, uiAtlas.data);
+    // monde : même police en plus petit (jamais sous 8 px, pour que les glyphes restent des glyphes)
+    this.wcellH = Math.max(8, Math.round(this.cellH * Math.min(1, Math.max(0.5, detail))));
+    const wm = measureCell(this.wcellH);
+    this.wcellW = wm.cellW;
+    this.wcols = Math.max(20, Math.floor(W / this.wcellW));
+    this.wrows = Math.max(10, Math.floor(H / this.wcellH));
+    this.worigX = Math.floor((W - this.wcols * this.wcellW) / 2);
+    this.worigY = Math.floor((H - this.wrows * this.wcellH) / 2);
+    const atlas = this.wcellH === this.cellH ? uiAtlas : buildAtlas(this.wcellW, this.wcellH, wm.fontPx);
+    if (this.atlasTex && this.atlasTex !== this.uiAtlasTex) gl.deleteTexture(this.atlasTex);
+    this.atlasTex = atlas === uiAtlas ? this.uiAtlasTex : makeTexture(gl, atlas.width, atlas.height, gl.R8, gl.RED, gl.UNSIGNED_BYTE, atlas.data);
 
     for (const t of [...this.sceneTex, ...this.cellTex, this.sceneDepth, this.uiGlyphTex, this.uiFgTex, this.uiBgTex]) if (t) gl.deleteTexture(t);
     if (this.sceneFbo) gl.deleteFramebuffer(this.sceneFbo);
     if (this.cellFbo) gl.deleteFramebuffer(this.cellFbo);
-    const sw = this.cols * 2, sh = this.rows * 2;
+    const sw = this.wcols * 2, sh = this.wrows * 2;
     this.sceneTex = [0, 1, 2].map(() => makeTexture(gl, sw, sh, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE));
     this.sceneDepth = makeTexture(gl, sw, sh, gl.DEPTH_COMPONENT24, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT);
     this.sceneFbo = makeFramebuffer(gl, this.sceneTex, this.sceneDepth);
-    this.cellTex = [0, 1].map(() => makeTexture(gl, this.cols, this.rows, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE));
+    this.cellTex = [0, 1].map(() => makeTexture(gl, this.wcols, this.wrows, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE));
     this.cellFbo = makeFramebuffer(gl, this.cellTex, null);
     this.ui.resize(this.cols, this.rows);
     this.uiGlyphTex = makeTexture(gl, this.cols, this.rows, gl.R16UI, gl.RED_INTEGER, gl.UNSIGNED_SHORT, this.ui.glyph);
@@ -193,7 +208,7 @@ export class Renderer {
   }
 
   /** Rapport largeur/hauteur de la zone de grille (pour la projection). */
-  get aspect(): number { return (this.cols * this.cellW) / (this.rows * this.cellH); }
+  get aspect(): number { return (this.wcols * this.wcellW) / (this.wrows * this.wcellH); }
 
   /** Cellule sous la souris (coordonnées écran device). */
   cellAt(px: number, py: number): { x: number; y: number } {
@@ -276,7 +291,7 @@ export class Renderer {
       if (f.atmo.shadows) this.shadowPass(f);
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFbo);
-      gl.viewport(0, 0, this.cols * 2, this.rows * 2);
+      gl.viewport(0, 0, this.wcols * 2, this.wrows * 2);
       gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
       gl.clearBufferfv(gl.COLOR, 0, [0, 0, 0, 0]);
       gl.clearBufferfv(gl.COLOR, 1, [0, 0, 0, 0]);
@@ -303,22 +318,14 @@ export class Renderer {
 
     // passe cellule
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.cellFbo);
-    gl.viewport(0, 0, this.cols, this.rows);
+    gl.viewport(0, 0, this.wcols, this.wrows);
     gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
-    const ui = this.ui;
-    gl.bindTexture(gl.TEXTURE_2D, this.uiGlyphTex);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.cols, this.rows, gl.RED_INTEGER, gl.UNSIGNED_SHORT, ui.glyph);
-    gl.bindTexture(gl.TEXTURE_2D, this.uiFgTex);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.cols, this.rows, gl.RGBA, gl.UNSIGNED_BYTE, ui.fg);
-    gl.bindTexture(gl.TEXTURE_2D, this.uiBgTex);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.cols, this.rows, gl.RGBA, gl.UNSIGNED_BYTE, ui.bg);
     const a = f.atmo;
     const th = Math.tan(c.fovY / 2);
     this.cellSh.use()
       .tex('uColor', 0, this.sceneTex[0]).tex('uData', 1, this.sceneTex[1]).tex('uExtra', 2, this.sceneTex[2])
       .tex('uDepth', 3, this.sceneDepth).tex('uMatTable', 4, this.matTable)
-      .tex('uUiGlyph', 5, this.uiGlyphTex).tex('uUiFg', 6, this.uiFgTex).tex('uUiBg', 7, this.uiBgTex)
-      .iv2('uGrid', this.cols, this.rows).f('uNear', c.near).f('uFar', c.far)
+      .iv2('uGrid', this.wcols, this.wrows).f('uNear', c.near).f('uFar', c.far)
       .v2('uTanHalf', th * this.aspect, th).m3('uViewRot', c.viewRot).m3('uInvViewRot', c.invViewRot)
       .v3('uSunDir', a.sunDir).v3('uMoonDir', a.moonDir).v3('uSunColor', a.sunColor)
       .v3('uSkyTop', a.skyTop).v3('uSkyHorizon', a.skyHorizon).v3('uFogColor', a.fogColor).f('uFogDensity', a.fogDensity)
@@ -331,10 +338,20 @@ export class Renderer {
     // présentation
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    const bottom = this.canvas.height - this.rows * this.cellH - this.originY;
+    const ui = this.ui;
+    gl.bindTexture(gl.TEXTURE_2D, this.uiGlyphTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.cols, this.rows, gl.RED_INTEGER, gl.UNSIGNED_SHORT, ui.glyph);
+    gl.bindTexture(gl.TEXTURE_2D, this.uiFgTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.cols, this.rows, gl.RGBA, gl.UNSIGNED_BYTE, ui.fg);
+    gl.bindTexture(gl.TEXTURE_2D, this.uiBgTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.cols, this.rows, gl.RGBA, gl.UNSIGNED_BYTE, ui.bg);
+    const bottom = this.canvas.height - this.wrows * this.wcellH - this.worigY;
+    const uiBottom = this.canvas.height - this.rows * this.cellH - this.originY;
     this.presentSh.use()
       .tex('uCellFg', 0, this.cellTex[0]).tex('uCellBg', 1, this.cellTex[1]).tex('uAtlas', 2, this.atlasTex)
-      .iv2('uCellPx', this.cellW, this.cellH).iv2('uOrigin', this.originX, bottom).iv2('uGrid', this.cols, this.rows)
+      .iv2('uCellPx', this.wcellW, this.wcellH).iv2('uOrigin', this.worigX, bottom).iv2('uGrid', this.wcols, this.wrows)
+      .tex('uUiGlyph', 3, this.uiGlyphTex).tex('uUiFg', 4, this.uiFgTex).tex('uUiBg', 5, this.uiBgTex).tex('uUiAtlas', 6, this.uiAtlasTex)
+      .iv2('uUiCellPx', this.cellW, this.cellH).iv2('uUiOrigin', this.originX, uiBottom).iv2('uUiGrid', this.cols, this.rows)
       .i('uAtlasCols', ATLAS_COLS).f('uVignette', f.sceneOn ? 0.35 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindVertexArray(null);

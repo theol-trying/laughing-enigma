@@ -201,7 +201,8 @@ export class StatsScreen implements Screen {
 }
 
 // ------------------------------------------------------------------ pause et options
-export interface Options { cellSize: number; sensitivity: number; fov: number; volume: number; timeScale: number }
+export interface Options { cellSize: number; detail: number; sensitivity: number; fov: number; volume: number; timeScale: number }
+const DETAILS: [number, string][] = [[1, 'normale'], [0.75, 'fine'], [0.6, 'très fine']];
 
 export class PauseScreen implements Screen {
   modal = true;
@@ -212,7 +213,7 @@ export class PauseScreen implements Screen {
     const { x, y, w } = frame(g, this.options ? 'Options' : 'Pause', 60, 16);
     g.text(x + 2, y + 1, `World: ${this.game.seed.text} · Generator: ${GENERATOR_VERSION}`.slice(0, w - 4), C.dim);
     const labels = this.options
-      ? [`Taille des caractères : ${this.opts.cellSize} px`, `Sensibilité souris : ${this.opts.sensitivity.toFixed(1)}`, `Champ de vision : ${this.opts.fov}°`, `Volume : ${Math.round(this.opts.volume * 100)} %`, `Vitesse du temps : ×${this.opts.timeScale}`, 'Retour']
+      ? [`Taille de l'interface : ${this.opts.cellSize} px`, `Finesse du monde : ${(DETAILS.find((d) => d[0] === this.opts.detail) ?? DETAILS[1])[1]}`, `Sensibilité souris : ${this.opts.sensitivity.toFixed(1)}`, `Champ de vision : ${this.opts.fov}°`, `Volume : ${Math.round(this.opts.volume * 100)} %`, `Vitesse du temps : ×${this.opts.timeScale}`, 'Retour']
       : ['Reprendre', 'Sauvegarder', 'Charger la dernière sauvegarde', 'Options', 'Quitter vers le titre'];
     const k = optionList(ctx, x + 3, y + 3, w - 6, labels, C.text, C.sel);
     if (k >= 0) this.choose(k, ctx);
@@ -221,11 +222,12 @@ export class PauseScreen implements Screen {
     const o = this.opts;
     if (this.options) {
       if (k === 0) o.cellSize = o.cellSize >= 22 ? 10 : o.cellSize + 2;
-      if (k === 1) o.sensitivity = o.sensitivity >= 3 ? 0.4 : +(o.sensitivity + 0.2).toFixed(1);
-      if (k === 2) o.fov = o.fov >= 90 ? 55 : o.fov + 5;
-      if (k === 3) o.volume = o.volume >= 1 ? 0 : +(o.volume + 0.25).toFixed(2);
-      if (k === 4) o.timeScale = o.timeScale >= 8 ? 1 : o.timeScale * 2;
-      if (k === 5) this.options = false;
+      if (k === 1) { const i = DETAILS.findIndex((d) => d[0] === o.detail); o.detail = DETAILS[(i + 1) % DETAILS.length][0]; }
+      if (k === 2) o.sensitivity = o.sensitivity >= 3 ? 0.4 : +(o.sensitivity + 0.2).toFixed(1);
+      if (k === 3) o.fov = o.fov >= 90 ? 55 : o.fov + 5;
+      if (k === 4) o.volume = o.volume >= 1 ? 0 : +(o.volume + 0.25).toFixed(2);
+      if (k === 5) o.timeScale = o.timeScale >= 8 ? 1 : o.timeScale * 2;
+      if (k === 6) this.options = false;
       this.actions.applyOptions();
       return;
     }

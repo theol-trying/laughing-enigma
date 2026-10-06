@@ -217,9 +217,6 @@ uniform sampler2D uData;
 uniform sampler2D uExtra;
 uniform highp sampler2D uDepth;
 uniform highp usampler2D uMatTable;
-uniform highp usampler2D uUiGlyph;
-uniform sampler2D uUiFg;
-uniform sampler2D uUiBg;
 uniform ivec2 uGrid;
 uniform float uNear;
 uniform float uFar;
@@ -443,13 +440,6 @@ void main() {
     }
   }
 
-  // interface (prioritaire)
-  ivec2 uiP = ivec2(cell.x, uGrid.y - 1 - cell.y);
-  uint ug = texelFetch(uUiGlyph, uiP, 0).r;
-  vec4 ubg = texelFetch(uUiBg, uiP, 0);
-  if (ug != 0u) { glyph = ug; fg = texelFetch(uUiFg, uiP, 0).rgb; }
-  bg = mix(bg, ubg.rgb, ubg.a);
-
   oFg = vec4(clamp(fg, 0.0, 1.0), float(glyph & 255u) / 255.0);
   oBg = vec4(clamp(bg, 0.0, 1.0), float(glyph >> 8u) / 255.0);
 }`;
@@ -464,21 +454,51 @@ uniform sampler2D uAtlas;
 uniform ivec2 uCellPx;
 uniform ivec2 uOrigin;
 uniform ivec2 uGrid;
+uniform highp usampler2D uUiGlyph;
+uniform sampler2D uUiFg;
+uniform sampler2D uUiBg;
+uniform sampler2D uUiAtlas;
+uniform ivec2 uUiCellPx;
+uniform ivec2 uUiOrigin;
+uniform ivec2 uUiGrid;
 uniform int uAtlasCols;
 uniform float uVignette;
 out vec4 o;
+// Deux grilles superposées : le monde (police fine) et l'interface (police de lecture).
+// Une case d'interface avec un glyphe remplace les glyphes du monde qu'elle recouvre ; son fond
+// (avec transparence) teinte le fond du monde.
 void main() {
-  ivec2 p = ivec2(gl_FragCoord.xy) - uOrigin;
+  ivec2 fc = ivec2(gl_FragCoord.xy);
+  ivec2 p = fc - uOrigin;
   ivec2 cell = p / uCellPx;
-  if (p.x < 0 || p.y < 0 || cell.x >= uGrid.x || cell.y >= uGrid.y) { o = vec4(0, 0, 0, 1); return; }
-  ivec2 local = p - cell * uCellPx;
-  vec4 f = texelFetch(uCellFg, cell, 0);
-  vec4 b = texelFetch(uCellBg, cell, 0);
-  int g = int(f.a * 255.0 + 0.5) + int(b.a * 255.0 + 0.5) * 256;
-  ivec2 ga = ivec2(g % uAtlasCols, g / uAtlasCols);
-  float m = texelFetch(uAtlas, ga * uCellPx + ivec2(local.x, uCellPx.y - 1 - local.y), 0).r;
-  vec3 c = mix(b.rgb, f.rgb, m);
-  vec2 uv = vec2(cell) / vec2(uGrid) - 0.5;
+  vec3 fg = vec3(0.0), bg = vec3(0.0);
+  float m = 0.0;
+  if (p.x >= 0 && p.y >= 0 && cell.x < uGrid.x && cell.y < uGrid.y) {
+    ivec2 local = p - cell * uCellPx;
+    vec4 f = texelFetch(uCellFg, cell, 0);
+    vec4 b = texelFetch(uCellBg, cell, 0);
+    int g = int(f.a * 255.0 + 0.5) + int(b.a * 255.0 + 0.5) * 256;
+    ivec2 ga = ivec2(g % uAtlasCols, g / uAtlasCols);
+    m = texelFetch(uAtlas, ga * uCellPx + ivec2(local.x, uCellPx.y - 1 - local.y), 0).r;
+    fg = f.rgb; bg = b.rgb;
+  }
+  ivec2 q = fc - uUiOrigin;
+  ivec2 uc = q / uUiCellPx;
+  if (q.x >= 0 && q.y >= 0 && uc.x < uUiGrid.x && uc.y < uUiGrid.y) {
+    ivec2 uiP = ivec2(uc.x, uUiGrid.y - 1 - uc.y);
+    uint ug = texelFetch(uUiGlyph, uiP, 0).r;
+    vec4 ubg = texelFetch(uUiBg, uiP, 0);
+    bg = mix(bg, ubg.rgb, ubg.a);
+    if (ug != 0u) {
+      int g = int(ug);
+      ivec2 local = q - uc * uUiCellPx;
+      ivec2 ga = ivec2(g % uAtlasCols, g / uAtlasCols);
+      m = texelFetch(uUiAtlas, ga * uUiCellPx + ivec2(local.x, uUiCellPx.y - 1 - local.y), 0).r;
+      fg = texelFetch(uUiFg, uiP, 0).rgb;
+    }
+  }
+  vec3 c = mix(bg, fg, m);
+  vec2 uv = vec2(p) / vec2(uGrid * uCellPx) - 0.5;
   c *= 1.0 - uVignette * dot(uv, uv) * 1.4;
   o = vec4(c, 1.0);
 }`;
