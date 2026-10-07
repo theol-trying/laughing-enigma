@@ -17,6 +17,8 @@ const MIX: Record<WeatherState, WeatherMix> = {
   neige: { cloud: 0.9, rain: 0, snow: 0.8, fog: 0.25, storm: 0, windX: 0.4, windZ: 0.2 },
 };
 const PERIOD = 480, BLEND = 60;
+/** points échantillonnés autour du joueur : [rayon (m), nombre, poids] */
+const RINGS: [number, number, number][] = [[0, 1, 0.6], [90, 6, 0.5], [200, 8, 0.45], [340, 10, 0.35]];
 
 export class Weather {
   private salt: number;
@@ -51,8 +53,34 @@ export class Weather {
     return { mix: MIX[s], state: s, flash };
   }
 
-  /** Mélange météo au point et à l'instant donnés (transition douce entre périodes). */
+/** Mélange météo autour d'un point : on moyenne la météo de points voisins (≈ 300 m) pour que les
+   * fronts de pluie, de neige ou de brouillard se fondent au lieu de changer d'un pas à l'autre. */
   at(x: number, z: number, minutes: number): { mix: WeatherMix; state: WeatherState; flash: number } {
+    const acc: WeatherMix = { cloud: 0, rain: 0, snow: 0, fog: 0, storm: 0, windX: 0, windZ: 0 };
+    const votes = new Map<WeatherState, number>();
+    let wsum = 0;
+    for (const [r, n, w] of RINGS) {
+      for (let i = 0; i < n; i++) {
+        const an = (i / n) * Math.PI * 2 + r * 0.01;
+        const l = this.local(x + Math.cos(an) * r, z + Math.sin(an) * r, minutes);
+        for (const k of Object.keys(acc) as (keyof WeatherMix)[]) acc[k] += l.mix[k] * w;
+        votes.set(l.state, (votes.get(l.state) ?? 0) + w);
+        wsum += w;
+      }
+    }
+    for (const k of Object.keys(acc) as (keyof WeatherMix)[]) acc[k] /= wsum;
+    let state: WeatherState = 'clair', best = -1;
+    for (const [st, v] of votes) if (v > best) { best = v; state = st; }
+    let flash = 0;
+    if (acc.storm > 0.5) {
+      const slot = Math.floor(minutes * 3);
+      if (hash2i(this.salt, slot, 7) / 4294967296 < 0.035) flash = 1 - (minutes * 3 - slot);
+    }
+    return { mix: acc, state, flash };
+  }
+
+  /** Mélange météo au point et à l'instant donnés (transition douce entre périodes). */
+  private local(x: number, z: number, minutes: number): { mix: WeatherMix; state: WeatherState } {
     const p = Math.floor(minutes / PERIOD), into = minutes - p * PERIOD;
     const a = this.stateFor(x, z, p);
     let mix = MIX[a];
@@ -61,12 +89,6 @@ export class Weather {
       const A = MIX[a], Bm = MIX[b];
       mix = { cloud: A.cloud + (Bm.cloud - A.cloud) * t, rain: A.rain + (Bm.rain - A.rain) * t, snow: A.snow + (Bm.snow - A.snow) * t, fog: A.fog + (Bm.fog - A.fog) * t, storm: A.storm + (Bm.storm - A.storm) * t, windX: A.windX + (Bm.windX - A.windX) * t, windZ: A.windZ + (Bm.windZ - A.windZ) * t };
     }
-    // éclairs pendant l'orage
-    let flash = 0;
-    if (mix.storm > 0.5) {
-      const slot = Math.floor(minutes * 3);
-      if (hash2i(this.salt, slot, 7) / 4294967296 < 0.035) flash = 1 - (minutes * 3 - slot);
-    }
-    return { mix, state: a, flash };
+    return { mix, state: a };
   }
 }
