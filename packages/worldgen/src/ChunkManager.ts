@@ -1,5 +1,5 @@
 import { CHUNK, CHUNKS } from './constants';
-import { ChunkData, buildChunk, type ChunkExtras, type CircleCollider, type SegCollider, type Platform } from './Chunk';
+import { ChunkData, buildChunk, type ChunkExtras, type CircleCollider, type SegCollider, type Platform, type HarvestNode } from './Chunk';
 import type { TerrainSampler } from './terrain/TerrainSampler';
 import type { MeshData } from '@ascii-fort/ascii-engine/Mesh';
 
@@ -18,6 +18,8 @@ export class ChunkManager<T = unknown> {
   dynamic: CircleCollider[] = [];
   extras?: ChunkExtras;
   lastLoadMs = 0;
+  /** arbres abattus et rochers brisés (id de HarvestNode) */
+  readonly removed = new Set<string>();
 
   constructor(private sampler: TerrainSampler, private gpu: GpuBridge<T> | null) {}
 
@@ -25,7 +27,7 @@ export class ChunkManager<T = unknown> {
   get clipRadius(): number { return this.radius * CHUNK - 24; }
 
   private load(cx: number, cz: number): Loaded<T> {
-    const data = buildChunk(this.sampler, cx, cz, this.extras);
+    const data = buildChunk(this.sampler, cx, cz, this.extras, (id) => this.removed.has(id));
     const l: Loaded<T> = { data, gpu: this.gpu && data.mesh ? this.gpu.upload(data.mesh) : null };
     data.mesh = this.gpu ? null : data.mesh; // libère la mémoire CPU une fois envoyé au GPU
     this.chunks.set(this.key(cx, cz), l);
@@ -58,6 +60,29 @@ export class ChunkManager<T = unknown> {
       }
     }
     return todo.length - n;
+  }
+
+  /** Retire un arbre ou un rocher (abattu, miné) et reconstruit son chunk s'il est chargé. */
+  removeNode(id: string): void {
+    if (this.removed.has(id)) return;
+    this.removed.add(id);
+    const [cx, cz] = id.split(':').map(Number);
+    const k = this.key(cx, cz), l = this.chunks.get(k);
+    if (!l) return;
+    if (l.gpu && this.gpu) this.gpu.release(l.gpu);
+    this.chunks.delete(k);
+    this.load(cx, cz);
+  }
+
+  /** Arbres et rochers récoltables autour d'un point. */
+  nodesNear(x: number, z: number, r: number): HarvestNode[] {
+    const out: HarvestNode[] = [];
+    const c0 = Math.floor((x - r) / CHUNK), c1 = Math.floor((x + r) / CHUNK), d0 = Math.floor((z - r) / CHUNK), d1 = Math.floor((z + r) / CHUNK);
+    for (let cz = d0; cz <= d1; cz++) for (let cx = c0; cx <= c1; cx++) {
+      const l = this.chunks.get(this.key(cx, cz));
+      if (l) for (const n of l.data.nodes) if (Math.hypot(n.x - x, n.z - z) <= r) out.push(n);
+    }
+    return out;
   }
 
   chunkAt(x: number, z: number): ChunkData | null {

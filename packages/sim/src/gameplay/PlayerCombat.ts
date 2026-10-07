@@ -18,6 +18,8 @@ export interface Projectile { x: number; y: number; z: number; vx: number; vy: n
 export type CastFx = { k: 'shot'; kind: 'flèche' | 'feu'; x: number; y: number; z: number; vx: number; vy: number; vz: number } | { k: 'heal'; x: number; y: number; z: number };
 
 export interface CombatWorld {
+  /** coup porté dans le vide : peut-être un arbre ou un rocher (récolte) */
+  harvest?(heavy: boolean): void;
   player: Player;
   character: Character;
   events: EventBus;
@@ -122,7 +124,7 @@ export class PlayerCombat {
       if (Math.abs(e.y - p.y) > 2.2) continue;
       if (d < bd) { bd = d; best = e; }
     }
-    if (!best) return;
+    if (!best) { w.harvest?.(heavy); return; }
     let dmg = damage * ch.meleeMult() * (heavy ? 1.8 : 1);
     if (ch.weapon?.weapon?.kind === 'masse' && (best.type === 'squelette' || best.mon?.def === 'roi-squelette')) dmg *= 1.4;
     const done = hitEntity(w.combat, best, dmg, 'player', element);

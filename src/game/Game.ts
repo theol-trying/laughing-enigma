@@ -83,6 +83,9 @@ export class Game {
   private waterT = 0;
   private waterNear: { p: { x: number; y: number; z: number } | null; kind: 'rivière' | 'lac' | 'mer' | null } = { p: null, kind: null };
   private clanged = new WeakSet<Entity>();
+  /** coups déjà portés aux arbres et rochers en cours de récolte */
+  private nodeHits = new Map<string, number>();
+  private harvestMsgT = -10;
   /** bonus temporaires actifs */
   buffs: Buff[] = [];
   /** objets récupérés récemment (affichés à droite de l'écran) */
@@ -257,8 +260,10 @@ export class Game {
       case 'lit': return this.buildingKind(pr) === 'auberge' ? 'Dormir (chambre : 10 or)' : owned ? '' : 'Dormir';
       case 'autel': case 'sanctuaire': return 'Prier';
       case 'puits': return "Boire l'eau du puits";
-      case 'âtre': case 'feu': case 'foyer': return this.character.inv.count('viande crue') ? 'Cuire la viande' : '';
-      case 'enclume': return 'Forger des flèches (1 bûche + 1 lingot)';
+      case 'âtre': case 'feu': case 'foyer':
+        if (pr.kind === 'foyer' && this.buildingKind(pr) === 'forge') return 'Fondre le minerai (2 minerais de fer + 1 charbon)';
+        return this.character.inv.count('viande crue') ? 'Cuire la viande' : '';
+      case 'enclume': return 'Forger des flèches (1 bûche ou des branches + 1 lingot)';
       case 'établi': return 'Préparer une potion (2 herbes)';
       case 'piège': return this.state.flags.get(pr.key) ? '' : 'Désamorcer le piège';
       default: return '';
@@ -423,23 +428,32 @@ export class Game {
         this.events.emit('message', { text: "L'eau est fraîche : vous êtes désaltéré (endurance +50 %, 2 min)." });
         break;
       case 'âtre': case 'feu': case 'foyer': {
+        if (pr.kind === 'foyer' && this.buildingKind(pr) === 'forge' && ch.inv.count('minerai de fer') >= 2 && ch.inv.count('charbon') >= 1) {
+          const n = Math.min(Math.floor(ch.inv.count('minerai de fer') / 2), ch.inv.count('charbon'));
+          ch.inv.remove('minerai de fer', n * 2); ch.inv.remove('charbon', n); ch.inv.add('lingot de fer', n); ch.practice('artisanat', 2 * n);
+          this.lootFeed.push({ text: `+ ${n > 1 ? n + ' ' : ''}Lingot de fer`, color: 0xe8e8e0, t: performance.now() });
+          this.events.emit('message', { text: `Le minerai fond dans le creuset : ${n} lingot${n > 1 ? 's' : ''} de fer.` });
+          this.audio.clang({ x: pr.x, y: pr.y + 1, z: pr.z });
+          break;
+        }
         const n = ch.inv.count('viande crue');
         if (n) { ch.inv.remove('viande crue', n); ch.inv.add('viande grillée', n); ch.practice('artisanat', n); this.events.emit('message', { text: `Vous faites griller ${n} morceau(x) de viande.` }); }
         break;
       }
       case 'enclume':
-        if (ch.inv.count('bois') && ch.inv.count('lingot de fer')) {
-          ch.inv.remove('bois'); ch.inv.remove('lingot de fer');
+        if ((ch.inv.count('bois') || ch.inv.count('branche')) && ch.inv.count('lingot de fer')) {
+          ch.inv.remove(ch.inv.count('branche') ? 'branche' : 'bois'); ch.inv.remove('lingot de fer');
           const n = 8 + Math.floor(ch.skills.artisanat / 10);
           ch.inv.add('flèche', n); ch.practice('artisanat', 3);
           this.events.emit('message', { text: `Vous forgez ${n} pointes et montez autant de flèches.` });
-        } else this.events.emit('message', { text: 'Il faut une bûche et un lingot de fer.' });
+        } else this.events.emit('message', { text: 'Il faut une bûche (ou des branches) et un lingot de fer.' });
         break;
       case 'établi':
-        if (ch.inv.count('herbe médicinale') >= 2) {
-          ch.inv.remove('herbe médicinale', 2); ch.inv.add('potion de soin'); ch.practice('artisanat', 3);
+        if (ch.inv.count('herbe médicinale') >= 2 || (ch.inv.count('herbe médicinale') && ch.inv.count('écorce'))) {
+          if (ch.inv.count('écorce') && ch.inv.count('herbe médicinale') < 2) { ch.inv.remove('écorce'); ch.inv.remove('herbe médicinale'); } else ch.inv.remove('herbe médicinale', 2);
+          ch.inv.add('potion de soin'); ch.practice('artisanat', 3);
           this.events.emit('message', { text: 'Vous broyez les herbes et préparez une potion de soin.' });
-        } else this.events.emit('message', { text: 'Il faut deux herbes médicinales.' });
+        } else this.events.emit('message', { text: 'Il faut deux herbes médicinales (ou une herbe et de l’écorce).' });
         break;
       case 'piège':
         if (ch.skills.furtivité >= 15 || ch.stats.AGI >= 7) { this.setFlag(pr.key, true); ch.practice('furtivité', 3); this.events.emit('message', { text: 'Piège désamorcé.' }); }
@@ -467,6 +481,54 @@ export class Game {
       if (w.length) this.events.emit('message', { text: `${w[0].label} vous a vu voler !`, color: 0xe05040 });
       else ch.practice('furtivité', 2);
     }
+  }
+
+  /** Coup dans le vide : un arbre (hache) ou un rocher (pioche) devant soi se récolte. */
+  private harvest(heavy: boolean): void {
+    const p = this.player, wk = this.character.weapon?.weapon?.kind;
+    const fx = Math.sin(p.heading), fz = -Math.cos(p.heading);
+    let node = null as (ReturnType<typeof this.world.chunks.nodesNear>[number]) | null, bd = Infinity;
+    for (const n of this.world.chunks.nodesNear(p.x, p.z, 4)) {
+      const dx = n.x - p.x, dz = n.z - p.z, d = Math.hypot(dx, dz);
+      const reach = n.kind === 'arbre' ? 2.4 : 1.8 + n.size * 0.8;
+      if (d > reach || (d > 0.5 && (dx * fx + dz * fz) / d < 0.55) || Math.abs(n.y - p.y) > 2.5 || d >= bd) continue;
+      node = n; bd = d;
+    }
+    if (!node || this.dungeon) return;
+    const pos = { x: node.x, y: node.y + 1, z: node.z };
+    const tree = node.kind === 'arbre';
+    if (tree ? wk !== 'hache' : wk !== 'pioche') {
+      if (tree) this.audio.chop(pos); else this.audio.mine(pos);
+      if (this.elapsed - this.harvestMsgT > 4) { this.harvestMsgT = this.elapsed; this.events.emit('message', { text: tree ? 'Il faudrait une hache pour couper ce bois (le forgeron en vend).' : 'Il faudrait une pioche pour briser cette roche (le forgeron en vend).', color: 0x9a9a90 }); }
+      return;
+    }
+    if (tree) this.audio.chop(pos); else this.audio.mine(pos);
+    this.character.practice('artisanat', 0.4);
+    const need = tree ? 4 : 2 + Math.round(node.size * 1.5);
+    const hits = (this.nodeHits.get(node.id) ?? 0) + (heavy ? 2 : 1);
+    const r = Math.random, ri = (a: number, b: number) => a + Math.floor(r() * (b - a + 1));
+    if (hits < need) {
+      this.nodeHits.set(node.id, hits);
+      if (r() < 0.25) this.giveLoot([tree ? { id: r() < 0.6 ? 'branche' : 'écorce', qty: 1 } : { id: 'pierre', qty: 1 }], tree ? 'Copeaux' : 'Éclats');
+      return;
+    }
+    this.nodeHits.delete(node.id);
+    const biome = this.world.sampler.biomeAt(node.x, node.z), high = biome === B.MOUNTAIN || biome === B.SNOW;
+    const lines: { id: string; qty: number }[] = [];
+    if (tree) {
+      lines.push({ id: 'bois', qty: ri(2, 4) }, { id: 'branche', qty: ri(1, 3) });
+      if (r() < 0.7) lines.push({ id: 'écorce', qty: ri(1, 2) });
+      this.audio.timber(pos);
+    } else {
+      lines.push({ id: 'pierre', qty: ri(1, 3) + Math.round(node.size) });
+      if (r() < (high ? 0.6 : 0.35)) lines.push({ id: 'minerai de fer', qty: ri(1, 2) });
+      if (r() < 0.3) lines.push({ id: 'charbon', qty: ri(1, 2) });
+      if (r() < (high ? 0.08 : 0.04)) lines.push({ id: 'pépite d’or', qty: 1 });
+      if (r() < (high ? 0.06 : 0.02)) lines.push({ id: 'gemme brute', qty: 1 });
+    }
+    this.giveLoot(lines, tree ? 'L’arbre s’abat' : 'La roche se fend');
+    this.world.chunks.removeNode(node.id);
+    this.coop?.fact('node:' + node.id, 1);
   }
 
   /** Ajoute (ou renouvelle) un bonus temporaire. */
@@ -609,7 +671,7 @@ export class Game {
       }
       this.fight.update(dt, input, {
         player: p, character: this.character, events: this.events, combat: this.combat, entities: this.entities.entities,
-        heightAt: (x, z) => (this.dungeon ? 0 : this.world.heightAt(x, z)), onHit: (e) => this.onHit(e),
+        heightAt: (x, z) => (this.dungeon ? 0 : this.world.heightAt(x, z)), onHit: (e) => this.onHit(e), harvest: (heavy) => this.harvest(heavy),
       });
       // nage : l'endurance s'épuise (plus vite en plongée) ; à bout de souffle, on se noie
       if (p.swimming) p.stamina = Math.max(0, p.stamina - 2.5 * dt);
@@ -819,6 +881,7 @@ export class Game {
       rumors: this.rumors.list.map((r) => ({ text: r.text, origin: r.origin, day: r.day, reach: [...r.reach], tag: r.tag })),
       lairs: this.entities.lairs.map((l) => ({ key: l.key, alive: l.alive, leaderAlive: l.leaderAlive })),
       killed: [...this.entities.killed], clearedCamps: [...this.entities.clearedCamps],
+      removed: [...this.world.chunks.removed],
     };
   }
 
@@ -844,6 +907,7 @@ export class Game {
     this.entities.killed.clear(); for (const k of d.killed) this.entities.killed.add(k);
     this.entities.clearedCamps.clear(); for (const k of d.clearedCamps) this.entities.clearedCamps.add(k);
     this.economy.refreshBlocked();
+    for (const id of d.removed ?? []) this.world.chunks.removeNode(id);
     for (const q of d.quests) this.quests.restore(q.id, q.status as 'active', q.stage, q.killed);
     this.rumors.list.length = 0;
     for (const r of d.rumors) this.rumors.list.push({ id: this.rumors.list.length, text: r.text, origin: r.origin, day: r.day, reach: new Set(r.reach), tag: r.tag });

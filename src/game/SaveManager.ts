@@ -2,6 +2,8 @@
 // + différences avec le monde généré (le reste se régénère à l'identique depuis la seed).
 
 export interface SaveData {
+  /** arbres abattus, rochers brisés */
+  removed?: string[];
   format: 1;
   game: string; generator: string; seed: string; savedAt: number; label: string;
   time: number;

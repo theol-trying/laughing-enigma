@@ -24,6 +24,9 @@ export interface ChunkExtras {
 
 const V = CHUNK_RES + 1;
 
+/** Arbre ou rocher que l'on peut abattre / miner ; id stable : « cx:cz:gx:gz » (case de végétation). */
+export interface HarvestNode { id: string; kind: 'arbre' | 'rocher'; x: number; y: number; z: number; size: number }
+
 export class ChunkData {
   readonly x0: number; readonly z0: number;
   heights = new Float32Array(V * V);
@@ -32,6 +35,7 @@ export class ChunkData {
   segs: SegCollider[] = [];
   platforms: Platform[] = [];
   props: Prop[] = [];
+  nodes: HarvestNode[] = [];
   lights: { x: number; y: number; z: number; radius: number; r: number; g: number; b: number; kind: 'torch' | 'fire' | 'window' | 'candle' }[] = [];
   mesh: MeshData | null = null;
   buildMs = 0;
@@ -54,7 +58,7 @@ export class ChunkData {
 let vegNoise: Noise2D | null = null;
 let vegNoiseKey = '';
 
-export function buildChunk(sampler: TerrainSampler, cx: number, cz: number, extras?: ChunkExtras): ChunkData {
+export function buildChunk(sampler: TerrainSampler, cx: number, cz: number, extras?: ChunkExtras, removed?: (id: string) => boolean): ChunkData {
   const t0 = performance.now();
   const ch = new ChunkData(cx, cz);
   const seed = sampler.macro.seed;
@@ -113,9 +117,18 @@ export function buildChunk(sampler: TerrainSampler, cx: number, cz: number, extr
     const hl = ch.heights[vj * V + Math.max(0, vi - 1)], hr = ch.heights[vj * V + Math.min(CHUNK_RES, vi + 1)];
     const steep = Math.abs(hr - hl) / (2 * STEP);
     if (steep > 0.9) continue;
+    const id = `${cx}:${cz}:${gx}:${gz}`;
     if (r3 < bd.trees * 0.3 * clump) {
-      addTree(mb, rng, x, y, z, r4 < bd.pine, s.biome);
-      ch.circles.push({ x, z, r: 0.45, bottom: y - 1, top: y + 6 });
+      if (removed?.(id)) {
+        // abattu : il reste une souche (les tirages de l'arbre sont consommés pour ne rien décaler)
+        addTree(new MeshBuilder(64), rng, x, y, z, r4 < bd.pine, s.biome);
+        mb.cylinder(x, y - 0.1, z, 0.34, 0.55, 7, 0x6a4a2e, M.TRUNK);
+        ch.circles.push({ x, z, r: 0.38, bottom: y - 1, top: y + 0.45 });
+      } else {
+        addTree(mb, rng, x, y, z, r4 < bd.pine, s.biome);
+        ch.circles.push({ x, z, r: 0.45, bottom: y - 1, top: y + 6 });
+        ch.nodes.push({ id, kind: 'arbre', x, y, z, size: 1 });
+      }
     } else if (r3 < bd.trees * 0.3 * clump + bd.bushes * 0.12) {
       mb.vflags = 1;
       const bc = shade(mixColor(0x3e6a2c, 0x5a7a34, r5), 0.9 + r4 * 0.2);
@@ -124,8 +137,14 @@ export function buildChunk(sampler: TerrainSampler, cx: number, cz: number, extr
     } else if (r3 > 1 - bd.rocks * 0.06) {
       const sz = 0.5 + r4 * r4 * 2.5;
       const rc = s.biome === B.SNOW ? 0x9a9aa0 : shade(0x7a766c, 0.85 + r5 * 0.3);
-      mb.blob(x, y + sz * 0.2, z, sz, sz * (0.5 + r5 * 0.4), sz * (0.8 + r4 * 0.4), rc, M.ROCK, 5, 3);
-      if (sz > 0.9) ch.circles.push({ x, z, r: sz * 0.8, bottom: y - 1, top: y + sz * 0.9 });
+      if (removed?.(id)) {
+        // brisé : quelques gravats au sol
+        mb.blob(x, y + 0.04, z, sz * 0.55, 0.14, sz * 0.5, shade(rc, 0.85), M.RUBBLE, 5, 2);
+      } else {
+        mb.blob(x, y + sz * 0.2, z, sz, sz * (0.5 + r5 * 0.4), sz * (0.8 + r4 * 0.4), rc, M.ROCK, 5, 3);
+        if (sz > 0.9) ch.circles.push({ x, z, r: sz * 0.8, bottom: y - 1, top: y + sz * 0.9 });
+        if (sz > 0.7) ch.nodes.push({ id, kind: 'rocher', x, y, z, size: sz });
+      }
     }
   }
 

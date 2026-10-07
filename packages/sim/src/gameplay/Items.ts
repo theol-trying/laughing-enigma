@@ -4,7 +4,7 @@ import type { Good } from '@ascii-fort/worldgen/civilization/types';
 // (« clé:3 », « quête:relique:7 »…) mais partagent la même interface.
 
 export type ItemCat = 'arme' | 'armure' | 'bouclier' | 'munition' | 'nourriture' | 'potion' | 'matériau' | 'clé' | 'quête' | 'valeur';
-export type WeaponKind = 'épée' | 'hache' | 'masse' | 'lance' | 'arc' | 'dague' | 'bâton';
+export type WeaponKind = 'épée' | 'hache' | 'masse' | 'lance' | 'arc' | 'dague' | 'bâton' | 'pioche';
 export type Element = 'feu' | 'givre' | 'poison';
 
 export interface ItemDef {
@@ -62,7 +62,17 @@ const D: ItemDef[] = [
   { id: 'croc de loup', name: 'Croc de loup', cat: 'matériau', value: 4, weight: 0.05, desc: '', good: 'gibier' },
   { id: 'minerai de fer', name: 'Minerai de fer', cat: 'matériau', value: 6, weight: 2, desc: '', good: 'minerai' },
   { id: 'lingot de fer', name: 'Lingot de fer', cat: 'matériau', value: 18, weight: 1.5, desc: '', good: 'fer' },
-  { id: 'bois', name: 'Bûches', cat: 'matériau', value: 2, weight: 2, desc: '', good: 'bois' },
+  { id: 'bois', name: 'Bûches', cat: 'matériau', value: 2, weight: 2, desc: 'Bois de chauffe et de construction.', good: 'bois' },
+  // outils et ressources récoltées
+  { id: 'hache de bûcheron', name: 'Hache de bûcheron', cat: 'arme', value: 25, weight: 2.2, desc: 'Abat les arbres : bûches, branches, écorce. Se manie aussi au combat.', weapon: { kind: 'hache', damage: 8, speed: 0.95, reach: 1.9, stamina: 9 }, good: 'outils' },
+  { id: 'pioche', name: 'Pioche', cat: 'arme', value: 28, weight: 2.8, desc: 'Brise la roche : pierre, minerai de fer, charbon, parfois de l’or ou une gemme.', weapon: { kind: 'pioche', damage: 8, speed: 0.85, reach: 1.9, stamina: 10 }, good: 'outils' },
+  { id: 'branche', name: 'Branches', cat: 'matériau', value: 1, weight: 0.4, desc: 'Hampes de flèches (enclume), petit bois.', good: 'bois' },
+  { id: 'écorce', name: 'Écorce', cat: 'matériau', value: 3, weight: 0.2, desc: 'Tanin et remèdes (établi : écorce + herbe = potion).', good: 'herbes' },
+  { id: 'pierre', name: 'Pierres', cat: 'matériau', value: 2, weight: 3, desc: 'Moellons de construction.', good: 'pierre' },
+  { id: 'minerai de fer', name: 'Minerai de fer', cat: 'matériau', value: 8, weight: 2.5, desc: 'Se fond au foyer d’une forge : 2 minerais + 1 charbon = 1 lingot.', good: 'minerai' },
+  { id: 'charbon', name: 'Charbon', cat: 'matériau', value: 4, weight: 1, desc: 'Combustible de forge.', good: 'minerai' },
+  { id: 'pépite d’or', name: 'Pépite d’or', cat: 'valeur', value: 45, weight: 0.1, desc: 'Se revend bien.', good: 'minerai' },
+  { id: 'gemme brute', name: 'Gemme brute', cat: 'valeur', value: 70, weight: 0.1, desc: 'Une pierre précieuse à polir.', good: 'minerai' },
   { id: 'herbe médicinale', name: 'Herbe médicinale', cat: 'matériau', value: 5, weight: 0.1, desc: 'Base des potions.', good: 'herbes' },
   { id: 'soie d’araignée', name: 'Soie d’araignée', cat: 'matériau', value: 14, weight: 0.2, desc: '', good: 'étoffe' },
   { id: 'glande à venin', name: 'Glande à venin', cat: 'matériau', value: 20, weight: 0.1, desc: '', good: 'herbes' },

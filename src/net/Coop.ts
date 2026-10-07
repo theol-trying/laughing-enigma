@@ -63,7 +63,7 @@ export function playerModel(name: string, look: string): ModelDef {
   let h = 2166136261;
   for (const c of name) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
   const [wk, shield, helm, metal] = look.split('|');
-  const weapons: Record<string, Weapon> = { épée: 'épée', hache: 'hache', masse: 'massue', lance: 'lance', dague: 'dague', bâton: 'bâton' };
+  const weapons: Record<string, Weapon> = { épée: 'épée', hache: 'hache', masse: 'massue', lance: 'lance', dague: 'dague', bâton: 'bâton', pioche: 'pioche' };
   return humanoid({
     skin: SKINS[h % SKINS.length], hair: HAIRS[(h >>> 5) % HAIRS.length],
     shirt: metal === '1' ? 0x8a8a94 : SHIRTS[(h >>> 9) % SHIRTS.length], pants: 0x3a3228,
@@ -344,6 +344,7 @@ export class Coop implements EntityNet {
       }
     } else if (kind === 'npc') { const n = ents.findNpc(key); if (n) { n.alive = false; n.hp = 0; } }
     else if (kind === 'open') g.state.opened.add(key);
+    else if (kind === 'node') g.world.chunks.removeNode(key);
     else if (kind === 'flag') { g.state.flags.set(key, v as boolean); if (key.startsWith('door:')) g.applyDoor(); }
   }
 

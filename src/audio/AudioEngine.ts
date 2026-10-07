@@ -237,6 +237,11 @@ export class AudioEngine {
     this.burst(4000, 'highpass', 0.04, 0.2, 1, p);
   }
 
+  /** Coup de hache dans le bois, coup de pioche dans la roche, arbre qui tombe. */
+  chop(p: Pos): void { this.burst(320, 'lowpass', 0.14, 0.45, 1, p); this.tone(150, 0.12, 0.25, 'triangle', 0.6, p); }
+  mine(p: Pos): void { this.tone(1700 + Math.random() * 400, 0.18, 0.14, 'square', 0.9, p); this.burst(3200, 'highpass', 0.06, 0.25, 1, p); this.burst(260, 'lowpass', 0.1, 0.25, 1, p); }
+  timber(p: Pos): void { this.tone(90, 1.2, 0.2, 'sawtooth', 0.45, p); this.burst(180, 'lowpass', 0.6, 0.5, 1, p, 1.0); }
+
   /** Projectile tiré par un autre joueur (multijoueur). */
   shot(kind: string, p: Pos): void {
     if (kind === 'feu') { this.burst(900, 'lowpass', 0.5, 0.3, 1, p); this.tone(220, 0.4, 0.12, 'sawtooth', 0.5, p); }
