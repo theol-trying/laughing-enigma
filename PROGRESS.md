@@ -6,7 +6,7 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Jalon 6 terminé (retours de jeu n°3, étapes 39-42). Lancer `npm run autosave` en arrière-plan au début de chaque session.
+Jalon 7 en cours (liste « Jalon 7 », première case vide). Lancer `node scripts/autosave.mjs 2` en arrière-plan (2 min).
 Jalon 2 terminé (étapes 12 à 19) : modèles articulés, police fine (deux grilles), bibliothèques (packages/*),
 multijoueur coop Cloudflare (un Worker : assets + Durable Object Room ; autorité par zone ; faits partagés).
 Déployé le 2026-10-06 par l'utilisateur : Worker Cloudflare « ascii-fort » relié au dépôt (build réussi, redéploiement à chaque push sur main).
@@ -67,6 +67,24 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 40. Attaque sournoise (accroupi, cible qui ne vous a pas repéré : dégâts ×3) et vol à la tire
 - [x] 41. Outil visible en main (hache, pioche…), arc sans flèches, PNJ qui fuyaient à travers les murs, parchemins expliqués
 - [x] 42. Vérification, docs, déploiement
+
+### Jalon 7 — toutes les propositions restantes (2026-10-07) — autosave toutes les 2 min (`node scripts/autosave.mjs 2`)
+- [ ] 43. Interface : suivi de la quête à l'écran ; palettes (ambre, vert terminal) ; mode photo ; multi : bulles de chat et émotes
+- [ ] 44. Discrétion : crochetage (coffres verrouillés, crochets, mini-jeu) ; sort d'invisibilité
+- [ ] 45. Particules en caractères : étincelles de forge, sang, poussière, fumée des cheminées, lucioles
+- [ ] 46. Vent (arbres, herbe), reflets dans l'eau, ombres portées des torches
+- [ ] 47. Visages et tenues variés, bannières des factions, intérieurs plus riches
+- [ ] 48. Faune chassable (cerfs, sangliers, oiseaux), troupeaux visibles, pêche
+- [ ] 49. Artisanat élargi (forge d'armes et d'armures, alchimie, cuisine) avec usure et réparation
+- [ ] 50. Arbres de talents (tous les 3 niveaux)
+- [ ] 51. Cheval, mercenaire à engager, maison à acheter et coffre personnel
+- [ ] 52. Chaînes de quêtes avec boss uniques, tableau des primes, persuasion et intimidation
+- [ ] 53. Caravanes et voyageurs sur les routes, attaqués par les bandits
+- [ ] 54. Événements vivants : raids, fêtes, épidémie, guerre entre factions (frontières qui bougent)
+- [ ] 55. Villes plus denses (quartiers, marché animé, tavernes), donjons sur plusieurs niveaux, réseaux de grottes
+- [ ] 56. Saisons (neige l'hiver, récoltes l'automne) ; génération en arrière-plan, monde plus grand
+- [ ] 57. Multi : groupe et quêtes partagées, liste des salons publics
+- [ ] 58. Vérification, docs, déploiement
 
 ## Décisions clés (ne pas re-débattre)
 - Dev : `npm run dev` (port 5199). Dépôt : github.com/theol-trying/laughing-enigma (push à chaque checkpoint).

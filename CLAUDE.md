@@ -4,7 +4,7 @@
   fichier et faire `npm run checkpoint -- "message"` après chaque étape : l'utilisateur veut
   pouvoir reprendre sans rien refaire en cas de coupure ou de limite de crédits.
 - **Sauvegardes continues** (règle permanente) : lancer `npm run autosave` en arrière-plan au début de chaque
-  session (instantané local toutes les 10 min sur `refs/autosave/latest`, restaurable par
+  session (instantané local toutes les 2 min — `node scripts/autosave.mjs 2` — sur `refs/autosave/latest`, restaurable par
   `git checkout refs/autosave/latest -- .`), et checkpoint + push après chaque étape ou sous-étape.
 - Être économe : pas d'agents en parallèle, pas de relecture inutile, pas de captures superflues.
 - Identité git locale : `theol-trying` / `290863944+theol-trying@users.noreply.github.com`.
