@@ -6,7 +6,7 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Jalon 5 terminé (retours de jeu n°2, étapes 32-38). Lancer `npm run autosave` en arrière-plan au début de chaque session.
+Jalon 6 en cours : retours de jeu n°3 (liste « Jalon 6 », première case vide). Lancer `npm run autosave` en arrière-plan.
 Jalon 2 terminé (étapes 12 à 19) : modèles articulés, police fine (deux grilles), bibliothèques (packages/*),
 multijoueur coop Cloudflare (un Worker : assets + Durable Object Room ; autorité par zone ; faits partagés).
 Déployé le 2026-10-06 par l'utilisateur : Worker Cloudflare « ascii-fort » relié au dépôt (build réussi, redéploiement à chaque push sur main).
@@ -61,6 +61,12 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 36. Commerce visible : marchandises selon le métier (armes et outils chez le forgeron…), touche T pour commercer, prêtres qui vendent des sorts
 - [x] 37. TAB : gestion de l'équipement (emplacements, catégories, comparaison) et onglet Sorts (choisir R/F, nouveaux sorts)
 - [x] 38. Vérification (local + en ligne), docs, déploiement
+
+### Jalon 6 — retours de jeu n°3 (2026-10-07)
+- [ ] 39. Dialogues : options visibles ; commerce : sélection puis achat confirmé, quantité, comparaison avec l'équipement ; Échap/Tab/E ferment sans ouvrir la pause
+- [ ] 40. Attaque sournoise (accroupi, cible qui ne vous a pas repéré : dégâts ×3) et vol à la tire
+- [ ] 41. Outil visible en main (hache, pioche…), arc sans flèches, PNJ qui fuyaient à travers les murs, parchemins expliqués
+- [ ] 42. Vérification, docs, déploiement
 
 ## Décisions clés (ne pas re-débattre)
 - Dev : `npm run dev` (port 5199). Dépôt : github.com/theol-trying/laughing-enigma (push à chaque checkpoint).
