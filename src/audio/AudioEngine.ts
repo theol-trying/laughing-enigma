@@ -245,6 +245,8 @@ export class AudioEngine {
   /** Projectile tiré par un autre joueur (multijoueur). */
   shot(kind: string, p: Pos): void {
     if (kind === 'feu') { this.burst(900, 'lowpass', 0.5, 0.3, 1, p); this.tone(220, 0.4, 0.12, 'sawtooth', 0.5, p); }
+    else if (kind === 'givre') { this.tone(1900, 0.35, 0.08, 'sine', 1.6, p); this.burst(5000, 'highpass', 0.3, 0.08, 1, p); }
+    else if (kind === 'éclair') { this.burst(2500, 'bandpass', 0.25, 0.4, 0.4, p); this.burst(140, 'lowpass', 0.6, 0.35, 1, p, 0.05); }
     else { this.tone(180, 0.12, 0.2, 'triangle', 0.5, p); this.burst(2500, 'bandpass', 0.15, 0.08, 1, p); }
   }
 }

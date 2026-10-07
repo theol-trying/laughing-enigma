@@ -17,6 +17,8 @@ export class Player {
   water = NaN; depth = 0;
   /** souffle sous l'eau (0..1) ; dégâts reçus récemment (effet visuel) */
   breath = 1;
+  /** pas feutrés (sort) : presque aucun bruit */
+  quiet = false;
   hitAmount = 0; hitDir: number | null = null; hitT = 0;
   /** plongée : accroupi en nageant */
   get diving(): boolean { return this.swimming && this.crouch; }

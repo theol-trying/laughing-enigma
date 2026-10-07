@@ -8,7 +8,7 @@ export interface SaveData {
   game: string; generator: string; seed: string; savedAt: number; label: string;
   time: number;
   player: { x: number; y: number; z: number; heading: number; pitch: number; hp: number; stamina: number; mana: number; dungeon: number; ret: { x: number; z: number; heading: number } | null };
-  character: { stats: Record<string, number>; skills: Record<string, number>; skillXp: Record<string, number>; level: number; xp: number; statPoints: number; inv: [string, number][]; gold: number; equip: Record<string, string | null> };
+  character: { stats: Record<string, number>; skills: Record<string, number>; skillXp: Record<string, number>; level: number; xp: number; statPoints: number; inv: [string, number][]; gold: number; equip: Record<string, string | null>; spells?: string[]; spellR?: string; spellF?: string };
   state: { opened: string[]; dropped: { key: string; id: string; qty: number; x: number; y: number; z: number }[]; flags: [string, number | string | boolean][]; discovered: string[]; explored: string };
   npcs: { id: string; alive: boolean; hp: number; wealth: number; memories: { kind: string; subject: string; day: number; weight: number; text: string }[] }[];
   rep: { global: number; faction: number[]; local: [number, number][]; bounty: [number, number][] };

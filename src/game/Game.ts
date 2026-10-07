@@ -14,7 +14,7 @@ import type { Entity } from '@ascii-fort/sim/entities/Entity';
 import { MONSTERS } from '@ascii-fort/sim/entities/Monster';
 import { type CombatHost } from '@ascii-fort/sim/gameplay/Combat';
 import { Character } from '@ascii-fort/sim/gameplay/Character';
-import { PlayerCombat } from '@ascii-fort/sim/gameplay/PlayerCombat';
+import { PlayerCombat , projectileLook } from '@ascii-fort/sim/gameplay/PlayerCombat';
 import { WorldState, type Dropped } from '@ascii-fort/sim/gameplay/WorldState';
 import { item } from '@ascii-fort/sim/gameplay/Items';
 import { packBits, unpackBits, type SaveData } from './SaveManager';
@@ -275,7 +275,7 @@ export class Game {
     const e = this.entities.pick(p.x, p.z, p.heading, 3.2, false);
     const see = (x: number, z: number) => lineOfSight(this.world.chunks, p.x, p.z, x, z, p.y);
     if (e && see(e.x, e.z)) {
-      if (e.alive && e.npc) return { t: 'entity', e, label: `Parler à ${e.label}` };
+      if (e.alive && e.npc) return { t: 'entity', e, label: `Parler à ${e.label}${this.stockOf(e).length ? ' · [T] commercer' : ''}` };
       if (!e.alive && !e.looted) return { t: 'entity', e, label: `Fouiller : ${e.npc ? e.label : e.name}` };
     }
     const fx = Math.sin(p.heading), fz = -Math.cos(p.heading);
@@ -531,6 +531,14 @@ export class Game {
     this.coop?.fact('node:' + node.id, 1);
   }
 
+  /** Sorts de bonus. */
+  private castBonus(id: string): void {
+    if (id === 'bouclier de mana') { this.addBuff({ id: 'bouclier', name: 'Bouclier de mana', t: 60, armor: 6 }); this.tintFlash = { c: [0.5, 0.6, 1], t: 0.6 }; this.events.emit('message', { text: 'Une aura bleutée vous enveloppe (armure +6).', color: 0x7a9ae8 }); }
+    else if (id === 'lumière') { this.addBuff({ id: 'lumière', name: 'Lumière', t: 120 }); this.events.emit('message', { text: 'Un globe de lumière s’allume au-dessus de vous.', color: 0xf0e0a0 }); }
+    else if (id === 'pas feutrés') { this.addBuff({ id: 'feutré', name: 'Pas feutrés', t: 45 }); this.events.emit('message', { text: 'Vos pas deviennent silencieux.', color: 0x9a9ab0 }); }
+    this.audio.chime();
+  }
+
   /** Ajoute (ou renouvelle) un bonus temporaire. */
   addBuff(b: Buff): void {
     const i = this.buffs.findIndex((x) => x.id === b.id);
@@ -543,6 +551,7 @@ export class Game {
     for (const b of this.buffs) { b.t -= dt; dmg += b.dmg ?? 0; armor += b.armor ?? 0; regen += b.regen ?? 0; stam += b.stam ?? 0; }
     this.buffs = this.buffs.filter((b) => b.t > 0);
     ch.bonusDmg = dmg; ch.bonusArmor = armor; p.staminaRegen = 1 + stam;
+    p.quiet = this.buffs.some((b) => b.id === 'feutré');
     if (regen > 0 && !p.dead) p.hp = Math.min(p.maxHp, p.hp + regen * dt);
     if (this.tintFlash && (this.tintFlash.t -= dt) <= 0) this.tintFlash = null;
   }
@@ -551,6 +560,15 @@ export class Game {
   setFlag(key: string, v: boolean): void {
     this.state.flags.set(key, v);
     this.coop?.fact('flag:' + key, v);
+  }
+
+  /** T : commerce direct avec le PNJ visé (s'il a des marchandises et accepte de traiter). */
+  tradeWithFocus(): void {
+    const f = this.focus;
+    if (f?.t !== 'entity' || !f.e.alive || !f.e.npc || !this.stockOf(f.e).length) return;
+    if (this.rep.mood(f.e.npc) === 'hostile') { this.events.emit('message', { text: `${f.e.label} refuse de traiter avec vous.`, color: 0xe05040 }); return; }
+    f.e.talkT = 6;
+    this.ui?.openTrade(f.e);
   }
 
   talkTo(e: Entity): void {
@@ -671,7 +689,7 @@ export class Game {
       }
       this.fight.update(dt, input, {
         player: p, character: this.character, events: this.events, combat: this.combat, entities: this.entities.entities,
-        heightAt: (x, z) => (this.dungeon ? 0 : this.world.heightAt(x, z)), onHit: (e) => this.onHit(e), harvest: (heavy) => this.harvest(heavy),
+        heightAt: (x, z) => (this.dungeon ? 0 : this.world.heightAt(x, z)), onHit: (e) => this.onHit(e), harvest: (heavy) => this.harvest(heavy), castBonus: (id) => this.castBonus(id),
       });
       // nage : l'endurance s'épuise (plus vite en plongée) ; à bout de souffle, on se noie
       if (p.swimming) p.stamina = Math.max(0, p.stamina - 2.5 * dt);
@@ -694,6 +712,7 @@ export class Game {
     this.coop?.update(dt);
     this.focus = p.dead ? null : this.findFocus();
     if (input.key('e')) this.interact();
+    if (input.key('t')) this.tradeWithFocus();
     // découverte des lieux et brouillard de la carte
     this.discoverT -= dt;
     if (this.discoverT <= 0 && !this.dungeon) {
@@ -831,6 +850,14 @@ export class Game {
   useItem(id: string): boolean {
     const d = item(id), ch = this.character, p = this.player;
     if (d.weapon || d.armor || d.shield) { ch.equipItem(id); this.events.emit('message', { text: `${ch.isEquipped(id) ? 'Équipé' : 'Rangé'} : ${d.name}` }); return true; }
+    if (d.cat === 'parchemin') {
+      const sid = id.replace('parchemin : ', '');
+      if (ch.spells.includes(sid)) { this.events.emit('message', { text: 'Vous connaissez déjà ce sort.', color: 0x9a9a90 }); return false; }
+      ch.inv.remove(id); ch.spells.push(sid);
+      this.events.emit('message', { text: `Vous apprenez « ${d.name.replace('Parchemin : ', '')} ». Assignez-le à R ou F (Tab → Sorts).`, color: 0x60d0e0 });
+      this.audio.chime();
+      return true;
+    }
     if (!d.use || !ch.inv.remove(id)) return false;
     if (d.use.hp) p.hp = Math.min(p.maxHp, p.hp + d.use.hp);
     if (d.use.stamina) p.stamina = Math.min(p.maxStamina, p.stamina + d.use.stamina);
@@ -872,7 +899,7 @@ export class Game {
     return {
       format: 1, game: GAME_VERSION, generator: GENERATOR_VERSION, seed: this.seed.text, savedAt: Date.now(), label, time: this.time.minutes,
       player: { x: p.x, y: p.y, z: p.z, heading: p.heading, pitch: p.pitch, hp: p.hp, stamina: p.stamina, mana: p.mana, dungeon: this.dungeon ? this.dungeon.layout.id : -1, ret: this.dungeon ? this.dungeon.ret : null },
-      character: { stats: { ...ch.stats }, skills: { ...ch.skills }, skillXp: { ...ch.skillXp }, level: ch.level, xp: ch.xp, statPoints: ch.statPoints, inv: [...ch.inv.items], gold: ch.inv.gold, equip: { ...ch.equip } },
+      character: { stats: { ...ch.stats }, skills: { ...ch.skills }, skillXp: { ...ch.skillXp }, level: ch.level, xp: ch.xp, statPoints: ch.statPoints, inv: [...ch.inv.items], gold: ch.inv.gold, equip: { ...ch.equip }, spells: [...ch.spells], spellR: ch.spellR, spellF: ch.spellF },
       state: { opened: [...st.opened], dropped: st.dropped, flags: [...st.flags], discovered: [...st.discovered], explored: packBits(st.explored) },
       npcs,
       rep: { global: this.rep.global, faction: [...this.rep.faction], local: [...this.rep.local], bounty: [...this.rep.bounty] },
@@ -894,6 +921,7 @@ export class Game {
     ch.level = d.character.level; ch.xp = d.character.xp; ch.statPoints = d.character.statPoints;
     ch.inv.items.clear(); for (const [id, n] of d.character.inv) ch.inv.items.set(id, n);
     ch.inv.gold = d.character.gold; Object.assign(ch.equip, d.character.equip);
+    if (d.character.spells) { ch.spells = [...d.character.spells]; ch.spellR = d.character.spellR ?? 'trait de feu'; ch.spellF = d.character.spellF ?? 'soin'; }
     st.opened.clear(); for (const k of d.state.opened) st.opened.add(k);
     st.dropped = d.state.dropped; st.flags.clear(); for (const [k, v] of d.state.flags) st.flags.set(k, v);
     st.discovered.clear(); for (const k of d.state.discovered) st.discovered.add(k);
@@ -946,8 +974,9 @@ export class Game {
     const torchOn = dg ? 1 : Math.min(1, Math.max(0, (atmo.night - 0.12) / 0.35));
     const near = this.world.chunks.lightsNear(c.x, c.z, 90).map((l) => ({ l, d: Math.hypot(l.x - c.x, l.z - c.z) })).sort((a, b) => a.d - b.d);
     if (!dg) for (const l of this.entities.lanterns(atmo.night)) lights.push(l);
-    for (const pr of this.fight.projectiles) if (pr.kind === 'feu') lights.push({ x: pr.x, y: pr.y, z: pr.z, radius: 8, r: 2, g: 0.9, b: 0.3 });
+    for (const pr of this.fight.projectiles) { const l = projectileLook(pr.kind).light; if (l) lights.push({ x: pr.x, y: pr.y, z: pr.z, radius: 8, r: l[0], g: l[1], b: l[2] }); }
     if (this.coop) lights.push(...this.coop.lights());
+    if (this.buffs.some((b) => b.id === 'lumière')) lights.unshift({ x: p.x, y: p.eyeY + 0.7, z: p.z, radius: 16, r: 1.5, g: 1.35, b: 1.05 });
     for (const { l } of near) {
       const k = (l.kind === 'torch' ? torchOn : 1) * (0.85 + 0.15 * Math.sin(this.elapsed * 11 + l.x * 3) * Math.sin(this.elapsed * 7 + l.z * 5));
       if (k < 0.02) continue;

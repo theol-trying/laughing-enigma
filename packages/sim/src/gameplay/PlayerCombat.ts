@@ -9,15 +9,29 @@ import type { Camera } from '@ascii-fort/ascii-engine/Camera';
 import { M } from '@ascii-fort/ascii-engine/Materials';
 import { trsYawPitch, mat4 } from '@ascii-fort/core/math';
 import type { Element } from './Items';
+import { spell } from './Spells';
 
 // Combat du joueur : attaques légère / lourde (maintenir), blocage, esquive, arc, sorts.
 
-export interface Projectile { x: number; y: number; z: number; vx: number; vy: number; vz: number; dmg: number; element?: Element; kind: 'flèche' | 'feu'; life: number; stuck: boolean; owner: string }
+export type ProjectileKind = 'flèche' | 'feu' | 'givre' | 'éclair';
+export interface Projectile { x: number; y: number; z: number; vx: number; vy: number; vz: number; dmg: number; element?: Element; kind: ProjectileKind; life: number; stuck: boolean; owner: string }
+
+/** Apparence d'un projectile (joueur local et autres joueurs) : taille, couleur, matière, lumière. */
+export function projectileLook(kind: ProjectileKind): { w: number; len: number; color: number; mat: number; light: [number, number, number] | null } {
+  switch (kind) {
+    case 'feu': return { w: 0.35, len: 0.35, color: 0xff7a20, mat: M.FIRE, light: [2, 0.9, 0.3] };
+    case 'givre': return { w: 0.22, len: 0.5, color: 0x9ad8ff, mat: M.GLOW, light: [0.5, 1.1, 1.8] };
+    case 'éclair': return { w: 0.08, len: 1.6, color: 0xf8f4c0, mat: M.GLOW, light: [2.2, 2.1, 1.4] };
+    default: return { w: 0.03, len: 0.8, color: 0xb8a070, mat: M.WOOD, light: null };
+  }
+}
 
 /** Effet d'un tir ou d'un sort, tel qu'il est montré aux autres joueurs. */
-export type CastFx = { k: 'shot'; kind: 'flèche' | 'feu'; x: number; y: number; z: number; vx: number; vy: number; vz: number } | { k: 'heal'; x: number; y: number; z: number };
+export type CastFx = { k: 'shot'; kind: ProjectileKind; x: number; y: number; z: number; vx: number; vy: number; vz: number } | { k: 'heal'; x: number; y: number; z: number };
 
 export interface CombatWorld {
+  /** sorts de bonus (bouclier, lumière, pas feutrés) : appliqués par le jeu */
+  castBonus?(id: string): void;
   /** coup porté dans le vide : peut-être un arbre ou un rocher (récolte) */
   harvest?(heavy: boolean): void;
   player: Player;
@@ -91,20 +105,28 @@ export class PlayerCombat {
       if (this.hitPending <= 0) this.meleeImpact(w, weapon.damage, weapon.reach, this.swingHeavy, (weapon as any).element);
     }
     // sorts
-    if (input.key('r') && p.mana >= 15) {
-      p.mana -= 15;
-      const f = this.aim(p);
-      this.projectiles.push({ x: p.x + f[0] * 0.8, y: p.eyeY - 0.2, z: p.z + f[2] * 0.8, vx: f[0] * 24, vy: f[1] * 24, vz: f[2] * 24, dmg: 16 * ch.spellMult(), element: 'feu', kind: 'feu', life: 3, stuck: false, owner: 'player' });
+    if (input.key('r')) this.castSpell(ch.spellR, w);
+    if (input.key('f')) this.castSpell(ch.spellF, w);
+    this.updateProjectiles(dt, w);
+  }
+
+  /** Lance un sort connu : projectile, soin ou bonus. */
+  castSpell(id: string, w: CombatWorld): void {
+    const p = w.player, ch = w.character, sp = spell(id);
+    if (!sp || !ch.spells.includes(id)) return;
+    if (sp.kind === 'soin' && p.hp >= p.maxHp && p.poison <= 0) return;
+    if (p.mana < sp.mana) { if (this.cooldown <= 0) w.events.emit('message', { text: `Pas assez de mana pour ${sp.name} (${sp.mana}).`, color: 0x7a7ae0 }); this.cooldown = 0.3; return; }
+    p.mana -= sp.mana;
+    if (sp.kind === 'projectile') {
+      const f = this.aim(p), v = sp.speed ?? 24;
+      this.projectiles.push({ x: p.x + f[0] * 0.8, y: p.eyeY - 0.2, z: p.z + f[2] * 0.8, vx: f[0] * v, vy: f[1] * v, vz: f[2] * v, dmg: (sp.dmg ?? 10) * ch.spellMult(), element: sp.element, kind: sp.fx ?? 'feu', life: 3, stuck: false, owner: 'player' });
       this.cast(this.projectiles[this.projectiles.length - 1]);
-      if (ch.practice('magie', 2)) w.events.emit('message', { text: `Magie : ${ch.skills.magie}`, color: 0x9a7ae0 });
-    }
-    if (input.key('f') && p.mana >= 20 && p.hp < p.maxHp) {
-      p.mana -= 20; p.hp = Math.min(p.maxHp, p.hp + 25 * ch.spellMult()); p.poison = 0;
+    } else if (sp.kind === 'soin') {
+      p.hp = Math.min(p.maxHp, p.hp + 25 * ch.spellMult()); p.poison = 0;
       this.onCast?.({ k: 'heal', x: p.x, y: p.y, z: p.z });
       w.events.emit('message', { text: 'Une chaleur douce referme vos plaies.', color: 0x60d070 });
-      ch.practice('magie', 2);
-    }
-    this.updateProjectiles(dt, w);
+    } else w.castBonus?.(id);
+    if (ch.practice('magie', 2)) w.events.emit('message', { text: `Magie : ${ch.skills.magie}`, color: 0x9a7ae0 });
   }
 
   aim(p: Player): [number, number, number] {
@@ -176,7 +198,7 @@ export class PlayerCombat {
       }
       if (pr.life <= 0) continue;
       pr.x = nx; pr.y = ny; pr.z = nz;
-      if (pr.y < w.heightAt(pr.x, pr.z)) { pr.stuck = true; pr.life = Math.min(pr.life, pr.kind === 'feu' ? 0 : 20); }
+      if (pr.y < w.heightAt(pr.x, pr.z)) { pr.stuck = true; pr.life = Math.min(pr.life, pr.kind === 'flèche' ? 20 : 0); }
     }
     this.projectiles = this.projectiles.filter((p) => p.life > 0);
   }
@@ -209,8 +231,9 @@ export class PlayerCombat {
     }
     for (const pr of this.projectiles) {
       const sp = Math.hypot(pr.vx, pr.vz) || 1;
-      trsYawPitch(tmp, pr.x, pr.y, pr.z, -Math.atan2(pr.vx, -pr.vz), Math.atan2(pr.vy, sp), pr.kind === 'feu' ? 0.35 : 0.03, pr.kind === 'feu' ? 0.35 : 0.03, pr.kind === 'feu' ? 0.35 : 0.8);
-      ib.add(tmp, pr.kind === 'feu' ? 0xff7a20 : 0xb8a070, pr.kind === 'feu' ? M.FIRE : M.WOOD, 0, 0, 1);
+      const lk = projectileLook(pr.kind);
+      trsYawPitch(tmp, pr.x, pr.y, pr.z, -Math.atan2(pr.vx, -pr.vz), Math.atan2(pr.vy, sp), lk.w, lk.w, lk.len);
+      ib.add(tmp, lk.color, lk.mat, 0, 0, 1);
     }
   }
 }

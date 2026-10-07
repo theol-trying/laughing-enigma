@@ -29,6 +29,9 @@ export class Character {
   bonusDmg = 0; bonusArmor = 0;
   /** sorts connus */
   spells: string[] = ['trait de feu', 'soin'];
+  /** sorts lancés par R et par F (choisis dans l'inventaire, onglet Sorts) */
+  spellR = 'trait de feu';
+  spellF = 'soin';
 
   // chaque niveau rend plus robuste, endurant et puissant, en plus du point de caractéristique
   get maxHp(): number { return 70 + this.stats.CON * 6 + (this.level - 1) * 8; }

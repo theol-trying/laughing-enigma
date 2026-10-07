@@ -1,4 +1,5 @@
 import { C, TextGrid } from '@ascii-fort/ascii-engine/TextGrid';
+import { SPELLS, spell } from '@ascii-fort/sim/gameplay/Spells';
 import type { Screen, UICtx } from './UI';
 import { optionList } from './UI';
 import type { Game } from '../game/Game';
@@ -20,54 +21,142 @@ function frame(g: TextGrid, title: string, wMax = 110, hMax = 34) {
 export class InventoryScreen implements Screen {
   modal = true;
   private sel = 0;
+  private tab = 0;
   constructor(private game: Game) {}
+
+  private static TABS = ['Tout', 'Armes', 'Armures', 'Consommables', 'Matériaux', 'Divers', 'Sorts'];
+
+  private items() {
+    const all = this.game.character.inv.list();
+    const t = InventoryScreen.TABS[this.tab];
+    const cat = (c: string) => t === 'Tout' || (t === 'Armes' && (c === 'arme' || c === 'munition')) || (t === 'Armures' && (c === 'armure' || c === 'bouclier'))
+      || (t === 'Consommables' && (c === 'nourriture' || c === 'potion')) || (t === 'Matériaux' && c === 'matériau')
+      || (t === 'Divers' && (c === 'clé' || c === 'quête' || c === 'valeur' || c === 'parchemin'));
+    return all.filter((l) => cat(l.def.cat));
+  }
+
+  /** Comparaison avec l'objet équipé au même emplacement. */
+  private compare(d: ReturnType<typeof item>): [string, number][] {
+    const ch = this.game.character, out: [string, number][] = [];
+    const diff = (label: string, a: number, b: number) => out.push([`${label} ${a} → ${b} (${b - a >= 0 ? '+' : ''}${Math.round((b - a) * 100) / 100})`, b - a]);
+    if (d.weapon && ch.weapon?.weapon && ch.weapon.id !== d.id) diff('Dégâts', ch.weapon.weapon.damage, d.weapon.damage);
+    if (d.armor) { const cur = ch.equip[d.armor.slot]; if (cur !== d.id) diff('Armure', cur ? item(cur).armor?.value ?? 0 : 0, d.armor.value); }
+    if (d.shield && ch.shield && ch.shield.id !== d.id) diff('Parade %', Math.round((ch.shield.shield?.block ?? 0) * 100), Math.round(d.shield.block * 100));
+    return out;
+  }
 
   draw(ctx: UICtx): void {
     const g = ctx.grid, ch = this.game.character;
     const { x, y, w, h } = frame(g, 'Inventaire');
-    const list = ch.inv.list();
+    // onglets
+    let tx = x + 2;
+    InventoryScreen.TABS.forEach((t, i) => {
+      const label = ` ${i + 1}.${t} `, on = i === this.tab;
+      const over = ctx.mouseCell.y === y + 1 && ctx.mouseCell.x >= tx && ctx.mouseCell.x < tx + label.length;
+      if (tx + label.length < x + w - 1) g.text(tx, y + 1, label, on ? 0xffffff : over ? C.white : C.dim, on ? C.sel : -1);
+      if (over && ctx.clicked) { this.tab = i; this.sel = 0; }
+      tx += label.length + 1;
+    });
+    const lw = Math.floor(w * 0.52), dx = x + lw + 2, dw = w - lw - 4;
+    if (InventoryScreen.TABS[this.tab] === 'Sorts') { this.drawSpells(ctx, x, y, lw, dx, dw, h); return; }
+    const list = this.items();
     this.sel = Math.max(0, Math.min(this.sel, list.length - 1));
-    const lw = Math.floor(w * 0.55);
-    g.text(x + 2, y + 1, 'Objet'.padEnd(lw - 22) + 'Qté  Poids  Valeur', C.dim);
-    const view = h - 6, start = Math.max(0, Math.min(this.sel - Math.floor(view / 2), list.length - view));
+    g.text(x + 2, y + 3, 'Objet'.padEnd(lw - 22) + 'Qté  Poids  Valeur', C.dim);
+    const view = h - 8, start = Math.max(0, Math.min(this.sel - Math.floor(view / 2), list.length - view));
+    if (!list.length) g.text(x + 2, y + 4, '(rien dans cette catégorie)', C.dim);
     list.slice(start, start + view).forEach((l, i) => {
-      const k = start + i, yy = y + 2 + i;
+      const k = start + i, yy = y + 4 + i;
       const over = ctx.mouseCell.y === yy && ctx.mouseCell.x > x && ctx.mouseCell.x < x + lw;
       if (over) { this.sel = k; if (ctx.clicked) this.use(); }
-      const eq = ch.isEquipped(l.id) ? 'E ' : '  ';
+      const eq = ch.isEquipped(l.id) ? '■ ' : '  ';
       const name = `${eq}${l.def.name}`.slice(0, lw - 22).padEnd(lw - 22);
-      const col = l.def.rarity === 'rare' ? C.magenta : l.def.cat === 'quête' || l.def.cat === 'clé' ? C.gold : C.text;
+      const col = l.def.rarity === 'rare' ? C.magenta : l.def.cat === 'quête' || l.def.cat === 'clé' ? C.gold : l.def.cat === 'parchemin' ? C.cyan : C.text;
       g.text(x + 2, yy, `${name}${String(l.qty).padStart(3)}  ${(l.def.weight * l.qty).toFixed(1).padStart(5)}  ${String(l.def.value).padStart(6)}`, k === this.sel ? 0xffffff : col, k === this.sel ? C.sel : -1);
     });
-    // détails
-    const d = list[this.sel]?.def, dx = x + lw + 2, dw = w - lw - 4;
+    // détails et comparaison
+    const d = list[this.sel]?.def;
+    let yy = y + 3;
     if (d) {
-      g.text(dx, y + 2, d.name, d.rarity === 'rare' ? C.magenta : C.title);
-      g.text(dx, y + 3, `${d.cat}${d.rarity ? ' · ' + d.rarity : ''}`, C.dim);
+      g.text(dx, yy++, d.name.slice(0, dw), d.rarity === 'rare' ? C.magenta : C.title);
+      g.text(dx, yy++, `${d.cat}${d.rarity ? ' · ' + d.rarity : ''}${ch.isEquipped(d.id) ? ' · équipé' : ''}`, C.dim);
       const info: string[] = [];
-      if (d.weapon) info.push(`Dégâts ${d.weapon.damage} · vitesse ${d.weapon.speed} · allonge ${d.weapon.reach} m`, `Endurance ${d.weapon.stamina}${d.weapon.element ? ' · ' + d.weapon.element : ''}`);
+      if (d.weapon) info.push(`Dégâts ${d.weapon.damage} · vitesse ${d.weapon.speed} · allonge ${d.weapon.reach} m`);
       if (d.armor) info.push(`Armure +${d.armor.value} (${d.armor.slot})`);
       if (d.shield) info.push(`Parade ${Math.round(d.shield.block * 100)} %`);
       if (d.use) info.push([d.use.hp ? `+${d.use.hp} PV` : '', d.use.stamina ? `+${d.use.stamina} END` : '', d.use.mana ? `+${d.use.mana} MANA` : '', d.use.cure ? 'soigne le poison' : ''].filter(Boolean).join(' · '));
       info.push(...TextGrid.wrap(d.desc, dw));
-      info.forEach((l, i) => g.text(dx, y + 5 + i, l.slice(0, dw), C.text));
+      for (const l of info.slice(0, 5)) g.text(dx, yy++, l.slice(0, dw), C.text);
+      for (const [l, v] of this.compare(d)) g.text(dx, yy++, l.slice(0, dw), v > 0 ? C.green : v < 0 ? C.red : C.dim);
+      const verb = d.weapon || d.armor || d.shield ? (ch.isEquipped(d.id) ? 'Entrée : retirer' : 'Entrée : équiper') : d.use ? 'Entrée : utiliser' : d.cat === 'parchemin' ? 'Entrée : lire (apprendre le sort)' : '';
+      if (verb) g.text(dx, yy++, verb, C.yellow);
     }
-    const eqY = y + h - 12;
-    g.text(dx, eqY, 'Équipement', C.title);
-    (Object.keys(ch.equip) as (keyof typeof ch.equip)[]).forEach((s, i) => g.text(dx, eqY + 1 + i, `${s.padEnd(9)} ${ch.equip[s] ? item(ch.equip[s]!).name : '—'}`.slice(0, dw), C.text));
-    g.text(dx, eqY + 8, `Armure ${ch.armor} · Poids ${ch.inv.weight().toFixed(1)}/${ch.carryMax()} · ${ch.inv.gold} or`, C.gold);
-    g.text(x + 2, y + h - 2, '↑↓ choisir · Entrée/clic : utiliser/équiper · X : jeter · Tab/Échap : fermer', C.dim);
+    // emplacements d'équipement (clic : retirer)
+    const eqY = Math.max(yy + 1, y + h - 11);
+    g.text(dx, eqY, 'Équipement (clic : retirer)', C.title);
+    const SLOT: Record<string, string> = { arme: 'Arme', bouclier: 'Bouclier', tête: 'Tête', corps: 'Corps', mains: 'Mains', pieds: 'Pieds' };
+    (['arme', 'bouclier', 'tête', 'corps', 'mains', 'pieds'] as (keyof typeof ch.equip)[]).forEach((s, i) => {
+      const yy2 = eqY + 1 + i, id = ch.equip[s];
+      const over = ctx.mouseCell.y === yy2 && ctx.mouseCell.x >= dx && ctx.mouseCell.x < dx + dw;
+      g.text(dx, yy2, `${SLOT[s].padEnd(9)} ${id ? item(id).name : '—'}`.slice(0, dw), id ? C.text : C.faint, over && id ? C.sel : -1);
+      if (over && id && ctx.clicked) this.game.useItem(id);
+    });
+    g.text(dx, eqY + 8, `Armure ${ch.armor} · Poids ${ch.inv.weight().toFixed(1)}/${ch.carryMax()} · ${ch.inv.gold} or`.slice(0, dw), C.gold);
+    g.text(x + 2, y + h - 2, '←→ ou 1-7 onglet · ↑↓ choisir · Entrée/clic : équiper/utiliser · X : jeter · Tab/Échap : fermer'.slice(0, w - 4), C.dim);
   }
 
-  private use() { const l = this.game.character.inv.list()[this.sel]; if (l) this.game.useItem(l.id); }
+  private drawSpells(ctx: UICtx, x: number, y: number, lw: number, dx: number, dw: number, h: number) {
+    const g = ctx.grid, ch = this.game.character;
+    const list = SPELLS;
+    this.sel = Math.max(0, Math.min(this.sel, list.length - 1));
+    g.text(x + 2, y + 3, 'Sort'.padEnd(lw - 14) + 'Mana  Touche', C.dim);
+    list.forEach((s, i) => {
+      const yy = y + 4 + i, known = ch.spells.includes(s.id);
+      const over = ctx.mouseCell.y === yy && ctx.mouseCell.x > x && ctx.mouseCell.x < x + lw;
+      if (over) { this.sel = i; if (ctx.clicked) this.assign(); }
+      const key = ch.spellR === s.id ? 'R' : ch.spellF === s.id ? 'F' : '';
+      g.text(x + 2, yy, `${s.name.padEnd(lw - 14)}${String(s.mana).padStart(4)}  ${key.padStart(4)}`, i === this.sel ? 0xffffff : known ? C.text : C.faint, i === this.sel ? C.sel : -1);
+    });
+    const s = list[this.sel];
+    let yy = y + 3;
+    g.text(dx, yy++, s.name, C.title);
+    g.text(dx, yy++, `${s.mana} mana · ${s.kind === 'projectile' ? `projectile, ${s.dmg} dégâts` : s.kind === 'soin' ? 'soin' : 'bonus temporaire'}`, C.dim);
+    for (const l of TextGrid.wrap(s.desc, dw)) g.text(dx, yy++, l, C.text);
+    yy++;
+    if (ch.spells.includes(s.id)) g.text(dx, yy++, 'R ou F : lancer ce sort avec cette touche', C.yellow);
+    else g.text(dx, yy++, `À apprendre : parchemin (${s.price} or) chez un prêtre ou un moine.`.slice(0, dw), C.dim);
+    g.text(dx, y + h - 5, `R : ${spell(ch.spellR)?.name ?? '—'}`, C.cyan);
+    g.text(dx, y + h - 4, `F : ${spell(ch.spellF)?.name ?? '—'}`, C.cyan);
+    g.text(x + 2, y + h - 2, '←→ onglet · ↑↓ choisir · R / F : assigner à la touche · Tab/Échap : fermer'.slice(0, lw + dw), C.dim);
+  }
+
+  private assign(key?: 'r' | 'f') {
+    const ch = this.game.character, s = SPELLS[this.sel];
+    if (!s || !ch.spells.includes(s.id)) { this.game.events.emit('message', { text: 'Sort inconnu : il faut d’abord lire son parchemin.', color: C.dim }); return; }
+    const k = key ?? (s.kind === 'projectile' ? 'r' : 'f');
+    if (k === 'r') { if (ch.spellF === s.id) ch.spellF = ch.spellR; ch.spellR = s.id; }
+    else { if (ch.spellR === s.id) ch.spellR = ch.spellF; ch.spellF = s.id; }
+    this.game.events.emit('message', { text: `${s.name} → touche ${k.toUpperCase()}`, color: C.cyan });
+  }
+
+  private use() { const l = this.items()[this.sel]; if (l) this.game.useItem(l.id); }
 
   input(ctx: UICtx): void {
-    const i = ctx.input, n = this.game.character.inv.list().length;
+    const i = ctx.input, spells = InventoryScreen.TABS[this.tab] === 'Sorts';
+    const n = spells ? SPELLS.length : this.items().length;
     if (i.key('Escape') || i.key('Tab')) { ctx.close(); return; }
+    if (i.pressed('ArrowLeft')) { this.tab = (this.tab + InventoryScreen.TABS.length - 1) % InventoryScreen.TABS.length; this.sel = 0; }
+    if (i.pressed('ArrowRight')) { this.tab = (this.tab + 1) % InventoryScreen.TABS.length; this.sel = 0; }
+    for (let k = 0; k < InventoryScreen.TABS.length; k++) if (i.pressed('Digit' + (k + 1))) { this.tab = k; this.sel = 0; }
     if (i.pressed('ArrowUp')) this.sel = Math.max(0, this.sel - 1);
     if (i.pressed('ArrowDown')) this.sel = Math.min(n - 1, this.sel + 1);
+    if (spells) {
+      if (i.key('r')) this.assign('r');
+      if (i.key('f')) this.assign('f');
+      if (i.pressed('Enter')) this.assign();
+      return;
+    }
     if (i.pressed('Enter') || i.key('e')) this.use();
-    if (i.key('x')) { const l = this.game.character.inv.list()[this.sel]; if (l) this.game.dropItem(l.id, 1); }
+    if (i.key('x')) { const l = this.items()[this.sel]; if (l) this.game.dropItem(l.id, 1); }
   }
 }
 

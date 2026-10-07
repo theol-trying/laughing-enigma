@@ -74,6 +74,7 @@ export class DialogueSystem {
   private menu(e: Entity): DialogueOption[] {
     const n = e.npc!, h = this.h, back = () => this.again(e);
     const opts: DialogueOption[] = [];
+    if (h.economy.stock(n, h.time.day).length) opts.push({ label: 'Montre-moi tes marchandises (commerce).', go: () => { h.openTrade(e); return null; } });
     const offer = h.quests.offerFor(n.id), active = h.quests.activeFor(n.id);
     if (offer) opts.push({ label: 'Tu as l\'air soucieux…', go: () => this.questOffer(e) });
     if (active) opts.push({ label: h.quests.canTurnIn(active) ? `À propos de « ${active.title} »… c'est réglé.` : `À propos de « ${active.title} »…`, go: () => this.questProgress(e) });

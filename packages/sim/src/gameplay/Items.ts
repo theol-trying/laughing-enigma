@@ -1,9 +1,10 @@
 import type { Good } from '@ascii-fort/worldgen/civilization/types';
+import { SPELLS, scrollId } from './Spells';
 
 // Catalogue des objets. Les clés de donjon et objets de quête sont créés dynamiquement
 // (« clé:3 », « quête:relique:7 »…) mais partagent la même interface.
 
-export type ItemCat = 'arme' | 'armure' | 'bouclier' | 'munition' | 'nourriture' | 'potion' | 'matériau' | 'clé' | 'quête' | 'valeur';
+export type ItemCat = 'arme' | 'armure' | 'bouclier' | 'munition' | 'nourriture' | 'potion' | 'matériau' | 'clé' | 'quête' | 'valeur' | 'parchemin';
 export type WeaponKind = 'épée' | 'hache' | 'masse' | 'lance' | 'arc' | 'dague' | 'bâton' | 'pioche';
 export type Element = 'feu' | 'givre' | 'poison';
 
@@ -88,6 +89,9 @@ const D: ItemDef[] = [
   { id: 'gemme', name: 'Gemme taillée', cat: 'valeur', value: 120, weight: 0.05, desc: '' },
   { id: 'coupe d’argent', name: 'Coupe d’argent', cat: 'valeur', value: 45, weight: 0.5, desc: '' },
 ];
+
+// parchemins : un par sort à apprendre
+for (const s of SPELLS) if (s.price) D.push({ id: scrollId(s.id), name: `Parchemin : ${s.name}`, cat: 'parchemin', value: s.price, weight: 0.1, desc: `${s.desc} Lire le parchemin pour apprendre le sort.` });
 
 export const ITEMS = new Map<string, ItemDef>(D.map((d) => [d.id, d]));
 

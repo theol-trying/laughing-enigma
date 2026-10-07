@@ -8,7 +8,7 @@ import { item } from '@ascii-fort/sim/gameplay/Items';
 import type { InstanceBuffer } from '@ascii-fort/ascii-engine/Renderer';
 import { M } from '@ascii-fort/ascii-engine/Materials';
 import { trsYawPitch, mat4 } from '@ascii-fort/core/math';
-import type { CastFx } from '@ascii-fort/sim/gameplay/PlayerCombat';
+import { projectileLook, type CastFx, type ProjectileKind } from '@ascii-fort/sim/gameplay/PlayerCombat';
 import { C } from '@ascii-fort/ascii-engine/TextGrid';
 import type { Game } from '../game/Game';
 import type { SaveData } from '../game/SaveManager';
@@ -85,7 +85,7 @@ export class Coop implements EntityNet {
   private pending = new Map<string, () => void>();
   private targets: RemoteTarget[] = [];
   /** tirs et sorts des autres joueurs, rejoués pour l'affichage (sans dégâts : ceux-ci passent par le propriétaire des zones) */
-  shots: { kind: 'flèche' | 'feu'; x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; stuck: boolean; dg: number }[] = [];
+  shots: { kind: ProjectileKind; x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; stuck: boolean; dg: number }[] = [];
   private sparkles: { x: number; y: number; z: number; t: number }[] = [];
   private m4 = mat4();
   /** échange en cours, demande envoyée, et écrans ouverts par le jeu */
@@ -183,7 +183,7 @@ export class Coop implements EntityNet {
     const g = this.game, here = g.dungeon ? g.dungeon.layout.id : -1;
     if (f.dg !== here) return;
     if (f.k === 'shot') {
-      this.shots.push({ kind: f.kind, x: f.x, y: f.y, z: f.z, vx: f.vx, vy: f.vy, vz: f.vz, life: f.kind === 'feu' ? 3 : 6, stuck: false, dg: f.dg });
+      this.shots.push({ kind: f.kind, x: f.x, y: f.y, z: f.z, vx: f.vx, vy: f.vy, vz: f.vz, life: f.kind === 'flèche' ? 6 : 3, stuck: false, dg: f.dg });
       if (this.shots.length > 60) this.shots.shift();
       g.audio.shot(f.kind, { x: f.x, y: f.y, z: f.z });
     } else if (f.k === 'heal') {
@@ -413,7 +413,7 @@ export class Coop implements EntityNet {
       const ground = g.dungeon ? 0 : g.world.heightAt(s.x, s.z);
       let hit = s.y < ground;
       for (const e of g.entities.entities) if (e.alive && Math.hypot(e.x - s.x, e.z - s.z) < e.radius + 0.15 && s.y > e.y && s.y < e.y + e.model.height) { hit = true; break; }
-      if (hit) { s.stuck = true; s.life = s.kind === 'feu' ? 0 : Math.min(s.life, 15); }
+      if (hit) { s.stuck = true; s.life = s.kind === 'flèche' ? Math.min(s.life, 15) : 0; }
     }
     this.shots = this.shots.filter((s) => s.life > 0);
     if (this.trade) { const r = this.players.get(this.trade.with); if (r && Math.hypot(r.x - p.x, r.z - p.z) > 15) { this.cancelTrade(); this.msg('Échange annulé : vous vous êtes éloignés.', C.dim); } }
@@ -455,9 +455,9 @@ export class Coop implements EntityNet {
       drawModel(ib, r.model, r.x, r.y, r.z, r.heading, r.pose);
     }
     for (const s of this.shots) {
-      const sp = Math.hypot(s.vx, s.vz) || 1, fire = s.kind === 'feu';
-      trsYawPitch(this.m4, s.x, s.y, s.z, -Math.atan2(s.vx, -s.vz), Math.atan2(s.vy, sp), fire ? 0.35 : 0.03, fire ? 0.35 : 0.03, fire ? 0.35 : 0.8);
-      ib.add(this.m4, fire ? 0xff7a20 : 0xb8a070, fire ? M.FIRE : M.WOOD, 0, 0, 1);
+      const sp = Math.hypot(s.vx, s.vz) || 1, lk = projectileLook(s.kind);
+      trsYawPitch(this.m4, s.x, s.y, s.z, -Math.atan2(s.vx, -s.vz), Math.atan2(s.vy, sp), lk.w, lk.w, lk.len);
+      ib.add(this.m4, lk.color, lk.mat, 0, 0, 1);
     }
     for (const s of this.sparkles) {
       trsYawPitch(this.m4, s.x, s.y, s.z, 0, 0, 0.08, 0.08, 0.08);
@@ -467,7 +467,7 @@ export class Coop implements EntityNet {
 
   /** Lumières des traits de feu des autres joueurs. */
   lights(): { x: number; y: number; z: number; radius: number; r: number; g: number; b: number }[] {
-    return this.shots.filter((s) => s.kind === 'feu' && !s.stuck).map((s) => ({ x: s.x, y: s.y, z: s.z, radius: 8, r: 2, g: 0.9, b: 0.3 }));
+    return this.shots.filter((s) => !s.stuck && projectileLook(s.kind).light).map((s) => { const l = projectileLook(s.kind).light!; return { x: s.x, y: s.y, z: s.z, radius: 8, r: l[0], g: l[1], b: l[2] }; });
   }
 
   private msg(text: string, color = C.text) { this.game.events.emit('message', { text, color }); }
