@@ -40,6 +40,8 @@ export class PlayerCombat {
   /** multijoueur : tir ou sort lancé (pour le montrer aux autres joueurs) */
   onCast: ((fx: CastFx) => void) | null = null;
   lastTarget: Entity | null = null;
+  /** après la fermeture d'un écran : le clic qui l'a fermé ne doit pas frapper */
+  lockUntilRelease = false;
 
   update(dt: number, input: Input, w: CombatWorld): void {
     const p = w.player, ch = w.character;
@@ -63,8 +65,10 @@ export class PlayerCombat {
     if (!input.locked) { this.charge = 0; return; }
 
     const bow = weapon.kind === 'arc';
-    if (input.mouseDown(0)) this.charge += dt;
-    if (input.mouseReleased(0) && this.cooldown <= 0) {
+    if (this.lockUntilRelease && !input.mouseDown(0) && !input.mouseReleased(0)) this.lockUntilRelease = false;
+    const free = !this.lockUntilRelease;
+    if (free && input.mouseDown(0)) this.charge += dt;
+    if (free && input.mouseReleased(0) && this.cooldown <= 0) {
       if (bow) this.fireArrow(w, Math.min(1, this.charge / (0.8 / weapon.speed)));
       else {
         const heavy = this.charge > 0.42;

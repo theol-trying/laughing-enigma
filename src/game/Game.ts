@@ -293,8 +293,8 @@ export class Game {
     }
     // vol : on montre s'il y a des témoins
     if (best?.t === 'prop' && /^(coffre|tonneau|caisse)$/.test(best.prop.kind) && this.isOwned(best.prop)) {
-      const n = this.watchers().npcs.length;
-      best.hint = n ? `${n} témoin${n > 1 ? 's' : ''} vous voi${n > 1 ? 'ent' : 't'} !` : 'personne ne vous voit';
+      const n = this.theftWitnesses();
+      best.hint = n ? `${n} témoin${n > 1 ? 's' : ''} vous verrai${n > 1 ? 'en' : ''}t ou entendrai${n > 1 ? 'en' : ''}t !` : p.crouch ? 'personne ne vous voit ni ne vous entend' : 'personne ne vous voit (accroupi avec C : plus silencieux)';
       best.danger = n > 0;
     }
     for (const dr of this.state.dropped) {
@@ -324,10 +324,18 @@ export class Game {
   }
 
   /** PNJ qui voient le joueur (témoins d'un délit). */
-  witnesses(): Entity[] {
+  witnesses(actNoise = 0): Entity[] {
     const p = this.player, env = { night: this.atmoNight, fog: this.fog() };
     return this.entities.entities.filter((e) => e.npc && e.alive && !e.remote && Math.hypot(e.x - p.x, e.z - p.z) < 22
-      && perceives(this.world.chunks, { x: e.x, z: e.z, y: e.y, heading: e.heading, range: 22, nocturnal: false, asleep: e.action === 'dormir' }, { x: p.x, z: p.z, y: p.y, stealth: p.crouch ? Math.max(0.35, this.character.stealth()) : 0, noise: playerNoise(p) }, env));
+      && perceives(this.world.chunks, { x: e.x, z: e.z, y: e.y, heading: e.heading, range: 22, nocturnal: false, asleep: e.action === 'dormir' }, { x: p.x, z: p.z, y: p.y, stealth: p.crouch ? Math.max(0.35, this.character.stealth()) : 0, noise: Math.max(actNoise, playerNoise(p)) }, env));
+  }
+
+  /** Bruit de la fouille d'un contenant : on ouvre plus discrètement accroupi. */
+  private theftNoise(): number { return this.player.crouch ? 0.12 : 0.5; }
+  private theftT = -1; private theftN = 0;
+  private theftWitnesses(): number {
+    if (this.elapsed - this.theftT >= 0.25) { this.theftT = this.elapsed; this.theftN = this.witnesses(this.theftNoise()).length; }
+    return this.theftN;
   }
 
   private watchT = 0;
@@ -454,7 +462,7 @@ export class Game {
     if (building === 'camp' && !this.state.flags.get(`marchandises:${pr.sid}`)) { questItem = `quête:marchandises:${pr.sid}`; this.state.flags.set(`marchandises:${pr.sid}`, true); }
     this.giveLoot(containerLoot(this.seed, pr.key, { building, depth, questItem }), pr.kind === 'coffre' ? 'Coffre' : pr.kind === 'tonneau' ? 'Tonneau' : 'Caisse');
     if (this.isOwned(pr)) {
-      const w = this.witnesses();
+      const w = this.witnesses(this.theftNoise());
       this.events.emit('player:crime', { type: 'vol', settlementId: pr.sid, factionId: this.world.civ.settlements[pr.sid]?.factionId, witnesses: w.map((x) => x.id), value: 10 });
       if (w.length) this.events.emit('message', { text: `${w[0].label} vous a vu voler !`, color: 0xe05040 });
       else ch.practice('furtivité', 2);

@@ -25,13 +25,14 @@ export class DialogueScreen implements Screen {
     g.text(x + 3 + n.speaker.length + 2, y, ` ${n.sub} `, C.dim, C.panel);
     g.text(x + w - 12, y, ` ${n.mood} `, MOOD_COLOR[n.mood] ?? C.text, C.panel);
     lines.forEach((l, i) => g.text(x + 3, y + 2 + i, l, C.white));
+    g.text(x + 3, y + h - 2, '1-9 ou clic : répondre · E ou Échap : partir'.slice(0, w - 6), C.dim);
     this.optY = y + 3 + lines.length;
     this.optX = x + 3; this.optW = w - 6;
   }
   private optX = 0; private optY = 0; private optW = 0;
 
   input(ctx: UICtx): void {
-    if (ctx.input.key('Escape')) { ctx.close(); this.onClose(); return; }
+    if (ctx.input.key('Escape') || ctx.input.key('e')) { ctx.close(); this.onClose(); return; }
     const k = optionList(ctx, this.optX, this.optY, this.optW, this.node.options.map((o) => o.label), C.yellow, C.sel);
     if (k >= 0) {
       const next = this.node.options[k].go();

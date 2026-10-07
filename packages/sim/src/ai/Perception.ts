@@ -24,9 +24,9 @@ export function lineOfSight(chunks: ChunkManager<any>, ax: number, az: number, b
   return true;
 }
 
-/** Bruit d'un joueur : course 1, marche 0,25, immobile ou accroupi presque rien. */
+/** Bruit d'un joueur : course 1, marche 0,35, immobile 0,05 ; accroupi : 0,06 en avançant, rien à l'arrêt. */
 export function playerNoise(p: { sprinting: boolean; moving: boolean; crouch: boolean }): number {
-  return p.sprinting ? 1 : p.crouch ? 0 : p.moving ? 0.25 : 0.05;
+  return p.sprinting ? 1 : p.crouch ? (p.moving ? 0.06 : 0) : p.moving ? 0.35 : 0.05;
 }
 
 export function perceives(chunks: ChunkManager<any>, o: Observer, s: Stimulus, env: Env): boolean {
@@ -34,7 +34,8 @@ export function perceives(chunks: ChunkManager<any>, o: Observer, s: Stimulus, e
   if (d > Math.max(o.range, 26) * 1.2) return false;
   const walls = !lineOfSight(chunks, o.x, o.z, s.x, s.z, o.y);
   // ouïe : on entend marcher, courir et se battre ; la discrétion et les murs étouffent les bruits
-  const hear = ((o.asleep ? 2 : 5) + s.noise * 16) * (1 - s.stealth * 0.6) * (walls ? 0.4 : 1);
+  // portées : accroupi immobile ≈ 0,6 m, accroupi en marche ≈ 1,5 m, debout ≈ 1,8 m, marche ≈ 8 m, course ≈ 21 m
+  const hear = ((o.asleep ? 0.4 : 0.8) + s.noise * 20) * (1 - s.stealth * 0.5) * (walls ? 0.4 : 1);
   if (d < hear) return true;
   if (walls) return false;
   const light = o.nocturnal ? 1 : 1 - env.night * 0.45;

@@ -19,7 +19,7 @@ interface R3 { pitch?: number; yaw?: number; roll?: number }
 type Fall = 'avant' | 'côté' | 'dos';
 export interface ModelDef { bones: Bone[]; parts: Part[]; letter: string; height: number; radius: number; quad: boolean; fall: Fall }
 
-export type Weapon = 'épée' | 'lance' | 'hache' | 'massue' | 'bâton' | 'dague' | 'marteau';
+export type Weapon = 'épée' | 'lance' | 'hache' | 'massue' | 'bâton' | 'dague' | 'marteau' | 'pioche';
 export interface HumanLook {
   skin: number; shirt: number; pants: number; hair: number;
   helmet?: boolean; robe?: boolean; hood?: boolean; weapon?: Weapon | null; shield?: boolean | number;
@@ -85,6 +85,11 @@ function weapon(R: Rig, hand: number, kind: Weapon, s: number) {
       break;
     case 'massue':
       R.part(g, SHAPE.TAPER, 0, 0.36, 0, 0.13, -0.74, 0.13, WOODC, M.WOOD);
+      break;
+    case 'pioche':
+      R.part(g, SHAPE.CYL, 0, 0.3, 0, 0.04, 0.8, 0.04, WOODC, M.WOOD);
+      R.part(g, SHAPE.CONE, 0, 0.66, -0.14, 0.05, 0.3, 0.05, IRON, M.METAL, { pitch: -PI / 2 });
+      R.part(g, SHAPE.CONE, 0, 0.66, 0.14, 0.05, 0.3, 0.05, IRON, M.METAL, { pitch: PI / 2 });
       break;
     case 'marteau':
       R.part(g, SHAPE.CYL, 0, 0.22, 0, 0.035, 0.5, 0.035, WOODC, M.WOOD);

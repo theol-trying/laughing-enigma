@@ -25,7 +25,7 @@ const canvas = document.getElementById('screen') as HTMLCanvasElement;
 const r = new Renderer(canvas);
 const input = new Input(canvas);
 const screens = new UIManager(r, input);
-screens.onResume = () => { if (game) input.requestLock(); };
+screens.onResume = () => { if (game) { input.requestLock(); game.fight.lockUntilRelease = true; } };
 
 // options (préférences locales du navigateur)
 const DEFAULT_OPTS: Options = { cellSize: Math.max(10, Math.min(20, Math.round(window.innerHeight / 58))), detail: 0.75, sensitivity: 1, fov: 68, volume: 0.6, music: 0.6, timeScale: 1 };

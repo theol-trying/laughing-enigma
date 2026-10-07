@@ -43,6 +43,8 @@ export interface EntityNet {
 }
 
 const NO_OTHERS: RemoteTarget[] = [];
+/** métiers qui travaillent un outil en main (geste de frappe à leur poste) */
+const WORK_TOOLS = new Set(['forgeron', 'artisan', 'mineur']);
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
 interface ActiveZone { sid: number; L: Layout; grid: NavGrid; ents: Entity[]; patrol: { x: number; z: number }[] }
@@ -109,7 +111,7 @@ export class EntityManager {
       m = humanoid({
         skin: c.skin, shirt: garde ? 0x8a8a94 : noble ? 0x6a2a6a : c.shirt, pants: c.pants, hair: n.age > 58 ? 0xb8b4ac : c.hair,
         helmet: garde, robe: moine, hood: moine && h < 4, cape: noble ? 0x3a2a5a : garde && h < 3 ? 0x6a2a2a : undefined,
-        weapon: garde ? 'lance' : n.profession === 'forgeron' ? 'marteau' : null, shield: garde,
+        weapon: garde ? 'lance' : n.profession === 'forgeron' || n.profession === 'artisan' ? 'marteau' : n.profession === 'mineur' ? 'pioche' : null, shield: garde,
         beard: n.sex === 'm' && n.age > 22 && h < 5 && !garde, hairLong: n.sex === 'f',
         apron: n.profession === 'forgeron' ? 0x4a3020 : n.profession === 'aubergiste' ? 0xd8d0c0 : undefined,
         scale: (n.sex === 'f' ? 0.9 : 0.95) + ((n.age * 13) % 17) / 100, letter: '@',
@@ -392,7 +394,9 @@ export class EntityManager {
       }
       const lying = !moving && e.spot?.lying && Math.hypot(e.spot.x - e.x, e.spot.z - e.z) < 0.6 && e.action === 'dormir';
       e.pose.dead += ((lying ? 1 : 0) - e.pose.dead) * Math.min(1, dt * 3);
-      const working = !moving && e.action === 'travailler' && (e.npc?.profession === 'forgeron' || e.npc?.profession === 'meunier' || e.npc?.profession === 'artisan');
+      const atPost = !!e.spot && Math.hypot(e.spot.x - e.x, e.spot.z - e.z) < 0.9;
+      const watched = Math.hypot(p.x - e.x, p.z - e.z) < 3 || e.talkT > 0;
+      const working = !moving && atPost && !watched && e.action === 'travailler' && WORK_TOOLS.has(e.npc?.profession ?? '');
       e.pose.swing = working ? Math.max(0, Math.sin(performance.now() / 160)) * 0.9 : Math.max(0, e.pose.swing - dt * 3);
     }
     const gy = this.ground(e.x, e.z, e.y + 0.3);
