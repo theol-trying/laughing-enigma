@@ -6,7 +6,7 @@ import { C } from '@ascii-fort/ascii-engine/TextGrid';
 import { CLEAR_WEATHER, computeAtmosphere } from '@ascii-fort/ascii-engine/Atmosphere';
 import { Camera } from '@ascii-fort/ascii-engine/Camera';
 import { InstanceBuffer } from '@ascii-fort/ascii-engine/Renderer';
-import { UIManager } from './ui/UI';
+import { UIManager, type Screen } from './ui/UI';
 import { DialogueScreen, TradeScreen } from './ui/DialogueScreen';
 import { InventoryScreen, JournalScreen, MapScreen, StatsScreen, PauseScreen, PALETTES, type Options } from './ui/GameScreens';
 import { TitleScreen, NewGameScreen, drawTitleBackground } from './ui/TitleScreen';
@@ -98,6 +98,7 @@ function startGame(seed: string, macro?: MacroWorld, civ?: Civilization): Game {
   g.ui = {
     openDialogue: (node, onClose) => screens.open(new DialogueScreen(node, onClose)),
     openTrade: (e) => { screens.closeAll(); screens.open(new TradeScreen(e, g)); },
+    openScreen: (s) => screens.open(s as Screen),
   };
   applyOptions();
   g.events.emit('message', { text: `Bienvenue dans les ${g.world.macro.worldName}. Vous arrivez à ${g.world.civ.start.name}.`, color: C.title });

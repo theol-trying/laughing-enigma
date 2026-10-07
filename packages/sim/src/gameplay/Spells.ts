@@ -20,6 +20,7 @@ export const SPELLS: SpellDef[] = [
   { id: 'bouclier de mana', name: 'Bouclier de mana', mana: 25, kind: 'bonus', price: 150, desc: 'Une aura protectrice : armure +6 pendant une minute.' },
   { id: 'lumière', name: 'Lumière', mana: 10, kind: 'bonus', price: 60, desc: 'Un globe lumineux vous suit pendant deux minutes (donjons, nuit).' },
   { id: 'pas feutrés', name: 'Pas feutrés', mana: 20, kind: 'bonus', price: 140, desc: 'Vos pas ne font presque plus de bruit pendant 45 secondes.' },
+  { id: 'invisibilité', name: 'Invisibilité', mana: 35, kind: 'bonus', price: 260, desc: 'Personne ne vous voit pendant 20 secondes (attaquer ou voler y met fin).' },
 ];
 
 export function spell(id: string): SpellDef | undefined { return SPELLS.find((s) => s.id === id); }

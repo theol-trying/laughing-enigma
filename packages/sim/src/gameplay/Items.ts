@@ -67,6 +67,7 @@ const D: ItemDef[] = [
   // outils et ressources récoltées
   { id: 'hache de bûcheron', name: 'Hache de bûcheron', cat: 'arme', value: 25, weight: 2.2, desc: 'Abat les arbres : bûches, branches, écorce. Se manie aussi au combat.', weapon: { kind: 'hache', damage: 8, speed: 0.95, reach: 1.9, stamina: 9 }, good: 'outils' },
   { id: 'pioche', name: 'Pioche', cat: 'arme', value: 28, weight: 2.8, desc: 'Brise la roche : pierre, minerai de fer, charbon, parfois de l’or ou une gemme.', weapon: { kind: 'pioche', damage: 8, speed: 0.85, reach: 1.9, stamina: 10 }, good: 'outils' },
+  { id: 'crochet', name: 'Crochet de serrurier', cat: 'matériau', value: 6, weight: 0.05, desc: 'Pour crocheter les coffres verrouillés (il peut se briser).', good: 'outils' },
   { id: 'branche', name: 'Branches', cat: 'matériau', value: 1, weight: 0.4, desc: 'Hampes de flèches (enclume), petit bois.', good: 'bois' },
   { id: 'écorce', name: 'Écorce', cat: 'matériau', value: 3, weight: 0.2, desc: 'Tanin et remèdes (établi : écorce + herbe = potion).', good: 'herbes' },
   { id: 'pierre', name: 'Pierres', cat: 'matériau', value: 2, weight: 3, desc: 'Moellons de construction.', good: 'pierre' },

@@ -19,6 +19,8 @@ export class Player {
   breath = 1;
   /** pas feutrés (sort) : presque aucun bruit */
   quiet = false;
+  /** invisible (sort) */
+  invisible = false;
   hitAmount = 0; hitDir: number | null = null; hitT = 0;
   /** plongée : accroupi en nageant */
   get diving(): boolean { return this.swimming && this.crouch; }

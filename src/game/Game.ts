@@ -19,6 +19,8 @@ import { WorldState, type Dropped } from '@ascii-fort/sim/gameplay/WorldState';
 import { item } from '@ascii-fort/sim/gameplay/Items';
 import { packBits, unpackBits, type SaveData } from './SaveManager';
 import type { Coop } from '../net/Coop';
+import { hashString } from '@ascii-fort/core/RNG';
+import { LockpickScreen } from '../ui/LockpickScreen';
 import type { Mood } from '../audio/AudioEngine';
 import { B } from '@ascii-fort/worldgen/terrain/Biomes';
 import { W_SEA, W_LAKE } from '@ascii-fort/worldgen/terrain/Hydrology';
@@ -100,7 +102,7 @@ export class Game {
   private lastHp = 100;
   private lastFlash = 0;
   /** branché par l'interface : ouverture des écrans de dialogue et de commerce */
-  ui: { openDialogue(node: DialogueNode, onClose: () => void): void; openTrade(e: Entity): void } | null = null;
+  ui: { openDialogue(node: DialogueNode, onClose: () => void): void; openTrade(e: Entity): void; openScreen?(s: unknown): void } | null = null;
   private stocks = new Map<string, { id: string; qty: number }[]>();
   private questT = 0;
   private far: GpuMesh;
@@ -258,7 +260,9 @@ export class Game {
       case 'sortie': return 'Remonter à la surface';
       case 'porte verrouillée': return this.state.flags.get(`door:dj${pr.dungeonId}`) ? '' : 'Porte verrouillée';
       case 'coffre': case 'tonneau': case 'caisse':
-        return this.state.opened.has(pr.key) ? '' : `${owned ? 'Voler dans' : 'Fouiller'} : ${pr.kind}${owned ? ' (vol)' : ''}`;
+        if (this.state.opened.has(pr.key)) return '';
+        { const lock = this.lockLevel(pr); if (lock && !this.state.flags.get('crocheté:' + pr.key)) return `Crocheter : ${pr.kind} verrouillé (${'♦'.repeat(lock)})${owned ? ' (vol)' : ''}`; }
+        return `${owned ? 'Voler dans' : 'Fouiller'} : ${pr.kind}${owned ? ' (vol)' : ''}`;
       case 'lit': return this.buildingKind(pr) === 'auberge' ? 'Dormir (chambre : 10 or)' : owned ? '' : 'Dormir';
       case 'autel': case 'sanctuaire': return 'Prier';
       case 'puits': return "Boire l'eau du puits";
@@ -338,7 +342,7 @@ export class Game {
   witnesses(actNoise = 0): Entity[] {
     const p = this.player, env = { night: this.atmoNight, fog: this.fog() };
     return this.entities.entities.filter((e) => e.npc && e.alive && !e.remote && Math.hypot(e.x - p.x, e.z - p.z) < 22
-      && perceives(this.world.chunks, { x: e.x, z: e.z, y: e.y, heading: e.heading, range: 22, nocturnal: false, asleep: e.action === 'dormir' }, { x: p.x, z: p.z, y: p.y, stealth: p.crouch ? Math.max(0.35, this.character.stealth()) : 0, noise: Math.max(actNoise, playerNoise(p)) }, env));
+      && perceives(this.world.chunks, { x: e.x, z: e.z, y: e.y, heading: e.heading, range: 22, nocturnal: false, asleep: e.action === 'dormir' }, { x: p.x, z: p.z, y: p.y, stealth: p.crouch ? Math.max(0.35, this.character.stealth()) : 0, noise: Math.max(actNoise, playerNoise(p)), invisible: p.invisible }, env));
   }
 
   /** Bruit de la fouille d'un contenant : on ouvre plus discrètement accroupi. */
@@ -395,11 +399,18 @@ export class Game {
           this.setFlag(`door:dj${dg.layout.id}`, true);
           this.applyDoor();
           this.events.emit('message', { text: 'La clé tourne dans la serrure. La porte s’ouvre en grinçant.', color: 0xf0d060 });
-        } else this.events.emit('message', { text: 'Verrouillée. Il doit y avoir une clé quelque part dans ces souterrains.' });
+        } else if (ch.inv.count('crochet')) {
+          this.lockpick('porte du gardien', 3, () => { this.setFlag(`door:dj${dg.layout.id}`, true); this.applyDoor(); this.events.emit('message', { text: 'Le pêne cède. La porte s’ouvre en grinçant.', color: 0xf0d060 }); });
+        } else this.events.emit('message', { text: 'Verrouillée. Il doit y avoir une clé quelque part dans ces souterrains (ou un crochet…).' });
         break;
       }
       case 'coffre': case 'tonneau': case 'caisse': {
         if (this.state.opened.has(pr.key)) break;
+        const lock = this.lockLevel(pr);
+        if (lock && !this.state.flags.get('crocheté:' + pr.key)) {
+          this.lockpick(`${pr.kind} verrouillé`, lock, () => { this.setFlag('crocheté:' + pr.key, true); this.interact(); });
+          break;
+        }
         if (this.coop) { this.coop.claimOnce('open:' + pr.key, () => this.openContainer(pr)); break; }
         this.openContainer(pr);
         break;
@@ -541,6 +552,7 @@ export class Game {
   private castBonus(id: string): void {
     if (id === 'bouclier de mana') { this.addBuff({ id: 'bouclier', name: 'Bouclier de mana', t: 60, armor: 6 }); this.tintFlash = { c: [0.5, 0.6, 1], t: 0.6 }; this.events.emit('message', { text: 'Une aura bleutée vous enveloppe (armure +6).', color: 0x7a9ae8 }); }
     else if (id === 'lumière') { this.addBuff({ id: 'lumière', name: 'Lumière', t: 120 }); this.events.emit('message', { text: 'Un globe de lumière s’allume au-dessus de vous.', color: 0xf0e0a0 }); }
+    else if (id === 'invisibilité') { this.addBuff({ id: 'invisible', name: 'Invisible', t: 20 }); this.events.emit('message', { text: 'Votre corps s’efface… Personne ne vous voit (attaquer ou voler y met fin).', color: 0xb0c0d8 }); }
     else if (id === 'pas feutrés') { this.addBuff({ id: 'feutré', name: 'Pas feutrés', t: 45 }); this.events.emit('message', { text: 'Vos pas deviennent silencieux.', color: 0x9a9ab0 }); }
     this.audio.chime();
   }
@@ -563,6 +575,7 @@ export class Game {
   /** Vol à la tire : réussite selon la furtivité et l'agilité ; un échec est un délit. */
   private pickpocket(e: Entity): void {
     const n = e.npc!, ch = this.character, key = `poche:${n.id}`;
+    this.reveal();
     if (this.state.flags.get(key) as unknown === this.time.day) { this.events.emit('message', { text: `Les poches de ${n.first} sont vides pour aujourd'hui.`, color: 0x9a9a90 }); return; }
     this.state.flags.set(key, this.time.day as unknown as boolean);
     const chance = Math.min(0.9, 0.45 + ch.skills.furtivité * 0.006 + (ch.stats.AGI - 5) * 0.03);
@@ -589,6 +602,33 @@ export class Game {
     this.alertGuards(n.sid);
   }
 
+  /** Rompt l'invisibilité (attaque, tir, sort offensif, vol). */
+  reveal(): void {
+    if (!this.buffs.some((b) => b.id === 'invisible')) return;
+    this.buffs = this.buffs.filter((b) => b.id !== 'invisible');
+    this.player.invisible = false;
+    this.events.emit('message', { text: 'Vous redevenez visible.', color: 0xb0c0d8 });
+  }
+
+  /** Difficulté de la serrure d'un contenant (0 : ouvert) — stable pour un même coffre. */
+  lockLevel(pr: Prop): number {
+    if (pr.kind !== 'coffre') return 0;
+    const h = hashString(pr.key) % 100;
+    if (pr.key.startsWith('dj')) { const c = this.dungeon?.layout.chests.find((x) => x.key === pr.key); return c && c.tier >= 2 && h < 60 ? Math.min(3, c.tier) : 0; }
+    return this.isOwned(pr) && h < 40 ? 1 + (h % 2) : 0;
+  }
+
+  /** Mini-jeu de crochetage ; il faut au moins un crochet. */
+  private lockpick(label: string, difficulty: number, onOpen: () => void): void {
+    const ch = this.character;
+    if (!ch.inv.count('crochet')) { this.events.emit('message', { text: 'Verrouillé. Il vous faudrait un crochet (les marchands en vendent).', color: 0x9a9a90 }); return; }
+    this.ui?.openScreen?.(new LockpickScreen(label, difficulty, ch.skills.furtivité, {
+      picks: () => ch.inv.count('crochet'),
+      breakPick: () => { ch.inv.remove('crochet'); },
+      practice: (n) => { ch.practice('furtivité', n); },
+    }, (ok) => { if (ok) { this.events.emit('message', { text: 'Le verrou cède.', color: 0x60d070 }); onOpen(); } }));
+  }
+
   /** Ajoute (ou renouvelle) un bonus temporaire. */
   addBuff(b: Buff): void {
     const i = this.buffs.findIndex((x) => x.id === b.id);
@@ -602,6 +642,7 @@ export class Game {
     this.buffs = this.buffs.filter((b) => b.t > 0);
     ch.bonusDmg = dmg; ch.bonusArmor = armor; p.staminaRegen = 1 + stam;
     p.quiet = this.buffs.some((b) => b.id === 'feutré');
+    p.invisible = this.buffs.some((b) => b.id === 'invisible');
     if (regen > 0 && !p.dead) p.hp = Math.min(p.maxHp, p.hp + regen * dt);
     if (this.tintFlash && (this.tintFlash.t -= dt) <= 0) this.tintFlash = null;
   }
@@ -739,7 +780,7 @@ export class Game {
       }
       this.fight.update(dt, input, {
         player: p, character: this.character, events: this.events, combat: this.combat, entities: this.entities.entities,
-        heightAt: (x, z) => (this.dungeon ? 0 : this.world.heightAt(x, z)), onHit: (e) => this.onHit(e), harvest: (heavy) => this.harvest(heavy), castBonus: (id) => this.castBonus(id), sneak: (e, ranged) => this.sneakMult(e, ranged),
+        heightAt: (x, z) => (this.dungeon ? 0 : this.world.heightAt(x, z)), onHit: (e) => this.onHit(e), harvest: (heavy) => this.harvest(heavy), castBonus: (id) => this.castBonus(id), sneak: (e, ranged) => this.sneakMult(e, ranged), reveal: () => this.reveal(),
       });
       // nage : l'endurance s'épuise (plus vite en plongée) ; à bout de souffle, on se noie
       if (p.swimming) p.stamina = Math.max(0, p.stamina - 2.5 * dt);
@@ -1059,6 +1100,7 @@ export class Game {
       atmo.fogColor = [0.04, 0.16, 0.24]; atmo.fogDensity = 0.09; atmo.rain = 0; atmo.snow = 0;
     } else if (p.swimming) tint = [0.2, 0.5, 0.7, 0.16];
     else if (p.hurt > 0) tint = [0.9, 0.08, 0.05, Math.min(0.3, p.hurt * 0.4)];
+    else if (p.invisible) tint = [0.55, 0.62, 0.75, 0.3];
     else if (this.tintFlash) tint = [...this.tintFlash.c, Math.min(0.35, this.tintFlash.t * 0.35)] as [number, number, number, number];
     this.renderer.render({ camera: c, atmo, time: this.elapsed, items, clipRadius: this.world.chunks.clipRadius, instances: this.instances, lights, viewMode, sceneOn: true, hurt: Math.max(0, p.hurt) * 2, tint, wobble });
   }

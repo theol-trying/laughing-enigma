@@ -30,6 +30,8 @@ export function projectileLook(kind: ProjectileKind): { w: number; len: number; 
 export type CastFx = { k: 'shot'; kind: ProjectileKind; x: number; y: number; z: number; vx: number; vy: number; vz: number } | { k: 'heal'; x: number; y: number; z: number };
 
 export interface CombatWorld {
+  /** une action offensive rompt l'invisibilité */
+  reveal?(): void;
   /** multiplicateur d'attaque sournoise (cible qui ne vous a pas repéré, vous accroupi) */
   sneak?(e: Entity, ranged: boolean): number;
   /** sorts de bonus (bouclier, lumière, pas feutrés) : appliqués par le jeu */
@@ -96,6 +98,7 @@ export class PlayerCombat {
         if (p.stamina >= cost * 0.5) {
           p.stamina = Math.max(0, p.stamina - cost);
           this.swing = 1; this.swingHeavy = heavy;
+          w.reveal?.();
           this.hitPending = 0.16 / weapon.speed;
           this.cooldown = (heavy ? 0.85 : 0.5) / weapon.speed;
         }
@@ -121,6 +124,7 @@ export class PlayerCombat {
     if (sp.kind === 'soin' && p.hp >= p.maxHp && p.poison <= 0) return;
     if (p.mana < sp.mana) { if (this.cooldown <= 0) w.events.emit('message', { text: `Pas assez de mana pour ${sp.name} (${sp.mana}).`, color: 0x7a7ae0 }); this.cooldown = 0.3; return; }
     p.mana -= sp.mana;
+    if (sp.kind === 'projectile') w.reveal?.();
     if (sp.kind === 'projectile') {
       const f = this.aim(p), v = sp.speed ?? 24;
       this.projectiles.push({ x: p.x + f[0] * 0.8, y: p.eyeY - 0.2, z: p.z + f[2] * 0.8, vx: f[0] * v, vy: f[1] * v, vz: f[2] * v, dmg: (sp.dmg ?? 10) * ch.spellMult(), element: sp.element, kind: sp.fx ?? 'feu', life: 3, stuck: false, owner: 'player' });
@@ -170,6 +174,7 @@ export class PlayerCombat {
     if (!ch.inv.remove('flèche', 1)) { w.events.emit('message', { text: 'Plus de flèches !', color: 0xe05040 }); return; }
     const f = this.aim(p), v = 22 + 38 * draw;
     p.stamina = Math.max(0, p.stamina - wd.stamina);
+    w.reveal?.();
     this.projectiles.push({ x: p.x + f[0] * 0.6, y: p.eyeY - 0.1, z: p.z + f[2] * 0.6, vx: f[0] * v, vy: f[1] * v, vz: f[2] * v, dmg: wd.damage * ch.bowMult() * (0.3 + 0.7 * draw), element: wd.element, kind: 'flèche', life: 6, stuck: false, owner: 'player' });
     this.cast(this.projectiles[this.projectiles.length - 1]);
     this.cooldown = 0.35;

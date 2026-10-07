@@ -22,7 +22,7 @@ import type { NetClient, Welcome } from './NetClient';
 const START = 1 * MIN_PER_DAY + 8 * 60 + 30;
 
 /** État d'un joueur tel qu'il circule sur le réseau. */
-interface PlayerState { x: number; y: number; z: number; h: number; sw: number; bl: number; d: number; hp: number; mhp: number; lk: string; dg: number; cr: number; sp: number }
+interface PlayerState { x: number; y: number; z: number; h: number; sw: number; bl: number; d: number; hp: number; mhp: number; lk: string; dg: number; cr: number; sp: number; iv?: number }
 
 /** Message adressé d'un client à un autre (champ « d » du message « to »). */
 type Direct =
@@ -49,7 +49,7 @@ export class RemotePlayer {
   x = 0; y = 0; z = 0; heading = 0;
   tx = 0; ty = 0; tz = 0; th = 0;
   pose: Pose = { walk: 0, swing: 0, dead: 0, hover: 0, block: 0 };
-  hp = 100; maxHp = 100; dungeon = -1; crouch = false; sprint = false;
+  hp = 100; maxHp = 100; dungeon = -1; crouch = false; sprint = false; invisible = false;
   look = '';
   model: ModelDef;
   seen = 0;
@@ -182,6 +182,7 @@ export class Coop implements EntityNet {
     p.prevSwing = s.sw;
     if (s.lk !== p.look) { p.look = s.lk; p.model = playerModel(p.name, s.lk); }
     p.pose.dead = s.d;
+    p.invisible = !!s.iv;
   }
 
   private onFx(from: string, f: CastFx & { dg: number }) {
@@ -422,7 +423,7 @@ export class Coop implements EntityNet {
         else if (r.emote.k === 'rire' || r.emote.k === 'oui') r.pose.hover = Math.abs(Math.sin(t * 12)) * 0.05;
         if (t <= 0) { r.emote = null; r.pose.hover = 0; r.pose.dead = 0; r.pose.swing = 0; }
       }
-      this.targets.push({ id: 'p:' + r.id, x: r.x, y: r.y, z: r.z, dead: r.pose.dead > 0.5, crouch: r.crouch, sprint: r.sprint });
+      if (!r.invisible) this.targets.push({ id: 'p:' + r.id, x: r.x, y: r.y, z: r.z, dead: r.pose.dead > 0.5, crouch: r.crouch, sprint: r.sprint });
     }
     // tirs des autres joueurs : même trajectoire que chez eux (gravité pour les flèches)
     for (const s of this.shots) {
@@ -448,7 +449,7 @@ export class Coop implements EntityNet {
       const r2 = (v: number) => Math.round(v * 100) / 100;
       const s: PlayerState = {
         x: r2(p.x), y: r2(p.y), z: r2(p.z), h: r2(p.heading), sw: r2(g.fight.swing), bl: p.blocking ? 1 : 0, d: p.dead ? 1 : 0,
-        hp: Math.round(p.hp), mhp: p.maxHp, lk, dg: g.dungeon ? g.dungeon.layout.id : -1, cr: p.crouch ? 1 : 0, sp: p.sprinting ? 1 : 0,
+        hp: Math.round(p.hp), mhp: p.maxHp, lk, dg: g.dungeon ? g.dungeon.layout.id : -1, cr: p.crouch ? 1 : 0, sp: p.sprinting ? 1 : 0, iv: p.invisible ? 1 : 0,
       };
       this.net.send({ t: 'st', s });
       const zs: ZoneEnts[] = g.entities.snapshot();
@@ -476,7 +477,7 @@ export class Coop implements EntityNet {
   render(ib: InstanceBuffer, cx: number, cz: number): void {
     const dg = this.game.dungeon ? this.game.dungeon.layout.id : -1;
     for (const r of this.players.values()) {
-      if (!r.seen || r.dungeon !== dg || Math.hypot(r.x - cx, r.z - cz) > 170) continue;
+      if (!r.seen || r.dungeon !== dg || r.invisible || Math.hypot(r.x - cx, r.z - cz) > 170) continue;
       drawModel(ib, r.model, r.x, r.y, r.z, r.heading, r.pose);
     }
     for (const s of this.shots) {

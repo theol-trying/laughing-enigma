@@ -70,7 +70,7 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 
 ### Jalon 7 — toutes les propositions restantes (2026-10-07) — autosave toutes les 2 min (`node scripts/autosave.mjs 2`)
 - [x] 43. Interface : suivi de la quête à l'écran ; palettes (ambre, vert terminal) ; mode photo ; multi : bulles de chat et émotes
-- [ ] 44. Discrétion : crochetage (coffres verrouillés, crochets, mini-jeu) ; sort d'invisibilité
+- [x] 44. Discrétion : crochetage (coffres verrouillés, crochets, mini-jeu) ; sort d'invisibilité
 - [ ] 45. Particules en caractères : étincelles de forge, sang, poussière, fumée des cheminées, lucioles
 - [ ] 46. Vent (arbres, herbe), reflets dans l'eau, ombres portées des torches
 - [ ] 47. Visages et tenues variés, bannières des factions, intérieurs plus riches

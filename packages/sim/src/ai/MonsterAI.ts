@@ -45,12 +45,12 @@ export function thinkMonster(e: Entity, ctx: MonsterCtx): void {
   // cible actuelle encore valable ?
   if (m.targetId) {
     const t = targetPos(m.targetId, ctx);
-    if (!t || !t.alive || Math.hypot(t.x - e.x, t.z - e.z) > m.perception * 1.8) { m.targetId = null; m.alerted = false; }
+    if (!t || !t.alive || Math.hypot(t.x - e.x, t.z - e.z) > m.perception * 1.8 || (m.targetId === 'player' && p.invisible && Math.hypot(t.x - e.x, t.z - e.z) > 2.5)) { m.targetId = null; m.alerted = false; }
   }
   if (!m.targetId) {
     // candidats : le joueur, et les villageois pour les créatures hostiles
-    const cands: { id: string; x: number; z: number; y: number; stealth: number; noise: number }[] = [];
-    if (!p.dead) cands.push({ id: 'player', x: p.x, z: p.z, y: p.y, stealth: p.crouch ? 0.75 : 0, noise: playerNoise(p) });
+    const cands: { id: string; x: number; z: number; y: number; stealth: number; noise: number; invisible?: boolean }[] = [];
+    if (!p.dead) cands.push({ id: 'player', x: p.x, z: p.z, y: p.y, stealth: p.crouch ? 0.75 : 0, noise: playerNoise(p), invisible: p.invisible });
     for (const o of ctx.others) if (!o.dead) cands.push({ id: o.id, x: o.x, z: o.z, y: o.y, stealth: o.crouch ? 0.75 : 0, noise: o.sprint ? 1 : o.crouch ? 0 : 0.25 });
     if (HOSTILE_TO_VILLAGERS.has(m.def)) for (const o of ctx.ents) if (o.npc && o.alive && Math.hypot(o.x - e.x, o.z - e.z) < m.perception) cands.push({ id: o.id, x: o.x, z: o.z, y: o.y, stealth: 0, noise: 0.2 });
     cands.sort((a, b) => Math.hypot(a.x - e.x, a.z - e.z) - Math.hypot(b.x - e.x, b.z - e.z));
