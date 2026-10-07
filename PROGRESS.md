@@ -63,7 +63,7 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 38. Vérification (local + en ligne), docs, déploiement
 
 ### Jalon 6 — retours de jeu n°3 (2026-10-07)
-- [ ] 39. Dialogues : options visibles ; commerce : sélection puis achat confirmé, quantité, comparaison avec l'équipement ; Échap/Tab/E ferment sans ouvrir la pause
+- [x] 39. Dialogues : options visibles ; commerce : sélection puis achat confirmé, quantité, comparaison avec l'équipement ; Échap/Tab/E ferment sans ouvrir la pause
 - [ ] 40. Attaque sournoise (accroupi, cible qui ne vous a pas repéré : dégâts ×3) et vol à la tire
 - [ ] 41. Outil visible en main (hache, pioche…), arc sans flèches, PNJ qui fuyaient à travers les murs, parchemins expliqués
 - [ ] 42. Vérification, docs, déploiement

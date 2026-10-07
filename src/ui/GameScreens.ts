@@ -1,4 +1,5 @@
 import { C, TextGrid } from '@ascii-fort/ascii-engine/TextGrid';
+import { compareWithEquipped } from './DialogueScreen';
 import { SPELLS, spell } from '@ascii-fort/sim/gameplay/Spells';
 import type { Screen, UICtx } from './UI';
 import { optionList } from './UI';
@@ -33,16 +34,6 @@ export class InventoryScreen implements Screen {
       || (t === 'Consommables' && (c === 'nourriture' || c === 'potion')) || (t === 'Matériaux' && c === 'matériau')
       || (t === 'Divers' && (c === 'clé' || c === 'quête' || c === 'valeur' || c === 'parchemin'));
     return all.filter((l) => cat(l.def.cat));
-  }
-
-  /** Comparaison avec l'objet équipé au même emplacement. */
-  private compare(d: ReturnType<typeof item>): [string, number][] {
-    const ch = this.game.character, out: [string, number][] = [];
-    const diff = (label: string, a: number, b: number) => out.push([`${label} ${a} → ${b} (${b - a >= 0 ? '+' : ''}${Math.round((b - a) * 100) / 100})`, b - a]);
-    if (d.weapon && ch.weapon?.weapon && ch.weapon.id !== d.id) diff('Dégâts', ch.weapon.weapon.damage, d.weapon.damage);
-    if (d.armor) { const cur = ch.equip[d.armor.slot]; if (cur !== d.id) diff('Armure', cur ? item(cur).armor?.value ?? 0 : 0, d.armor.value); }
-    if (d.shield && ch.shield && ch.shield.id !== d.id) diff('Parade %', Math.round((ch.shield.shield?.block ?? 0) * 100), Math.round(d.shield.block * 100));
-    return out;
   }
 
   draw(ctx: UICtx): void {
@@ -86,7 +77,7 @@ export class InventoryScreen implements Screen {
       if (d.use) info.push([d.use.hp ? `+${d.use.hp} PV` : '', d.use.stamina ? `+${d.use.stamina} END` : '', d.use.mana ? `+${d.use.mana} MANA` : '', d.use.cure ? 'soigne le poison' : ''].filter(Boolean).join(' · '));
       info.push(...TextGrid.wrap(d.desc, dw));
       for (const l of info.slice(0, 5)) g.text(dx, yy++, l.slice(0, dw), C.text);
-      for (const [l, v] of this.compare(d)) g.text(dx, yy++, l.slice(0, dw), v > 0 ? C.green : v < 0 ? C.red : C.dim);
+      for (const [l, v] of compareWithEquipped(ch, d)) g.text(dx, yy++, l.slice(0, dw), v > 0 ? C.green : v < 0 ? C.red : C.dim);
       const verb = d.weapon || d.armor || d.shield ? (ch.isEquipped(d.id) ? 'Entrée : retirer' : 'Entrée : équiper') : d.use ? 'Entrée : utiliser' : d.cat === 'parchemin' ? 'Entrée : lire (apprendre le sort)' : '';
       if (verb) g.text(dx, yy++, verb, C.yellow);
     }

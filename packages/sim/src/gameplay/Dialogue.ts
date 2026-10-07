@@ -83,7 +83,6 @@ export class DialogueSystem {
     opts.push({ label: 'Quelles nouvelles ?', go: () => this.node(e, this.news(n), back) });
     opts.push({ label: 'Que sais-tu des environs ?', go: () => this.node(e, this.surroundings(n), back) });
     if (n.knowledge.some((k) => k.startsWith('event:'))) opts.push({ label: 'Raconte-moi le passé de la région.', go: () => this.node(e, this.past(n), back) });
-    if (h.economy.stock(n, h.time.day).length) opts.push({ label: 'Montre-moi tes marchandises.', go: () => { h.openTrade(e); return null; } });
     opts.push({ label: 'Au revoir.', go: () => null });
     return opts;
   }

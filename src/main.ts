@@ -25,7 +25,9 @@ const canvas = document.getElementById('screen') as HTMLCanvasElement;
 const r = new Renderer(canvas);
 const input = new Input(canvas);
 const screens = new UIManager(r, input);
-screens.onResume = () => { if (game) { input.requestLock(); game.fight.lockUntilRelease = true; } };
+/** fermeture récente d'un écran : la perte de capture de la souris qui suit n'ouvre pas la pause */
+let closedAt = 0;
+screens.onResume = () => { closedAt = performance.now(); if (game) { input.requestLock(); game.fight.lockUntilRelease = true; } };
 
 // options (préférences locales du navigateur)
 const DEFAULT_OPTS: Options = { cellSize: Math.max(10, Math.min(20, Math.round(window.innerHeight / 58))), detail: 0.75, sensitivity: 1, fov: 68, volume: 0.6, music: 0.6, timeScale: 1 };
@@ -138,7 +140,7 @@ function pause() {
 }
 
 canvas.addEventListener('click', () => { if (game) game.audio.start(); if (game && !screens.modal) input.requestLock(); });
-document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement && game && !screens.modal) pause(); });
+document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement && game && !screens.modal && performance.now() - closedAt > 600) pause(); });
 
 const idle = (now: number) => r.render({ camera: idleCam, atmo: computeAtmosphere(12, CLEAR_WEATHER), time: now / 1000, items: [], clipRadius: 0, instances: idleInst, lights: [], viewMode: 0, sceneOn: false });
 
@@ -206,7 +208,7 @@ function tick(now: number) {
     if (!screens.modal) g.update(dt, input);
   }
   hud.drawCalls = r.drawCalls;
-  hud.locked = input.locked;
+  hud.locked = input.locked || screens.modal;
   if (!screens.modal || screens.top instanceof DialogueScreen || screens.top instanceof ChatScreen) drawHud(ui, g, hud);
   screens.draw();
   if (game) g.render(0); else idle(now);
