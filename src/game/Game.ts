@@ -21,6 +21,7 @@ import { packBits, unpackBits, type SaveData } from './SaveManager';
 import type { Coop } from '../net/Coop';
 import { hashString } from '@ascii-fort/core/RNG';
 import { LockpickScreen } from '../ui/LockpickScreen';
+import { Particles } from './Particles';
 import type { Mood } from '../audio/AudioEngine';
 import { B } from '@ascii-fort/worldgen/terrain/Biomes';
 import { W_SEA, W_LAKE } from '@ascii-fort/worldgen/terrain/Hydrology';
@@ -123,6 +124,10 @@ export class Game {
   /** sensibilité de la souris (options) */
   sensitivity = 1;
   /** libère les ressources GPU (retour au titre) */
+  /** particules (étincelles, sang, poussière, fumée, lucioles…) */
+  readonly particles = new Particles();
+  private smokeT = 0;
+  private wasGround = true; private prevVy = 0;
   /** mode photo : caméra libre (null en jeu normal) */
   photoCam: { x: number; y: number; z: number; heading: number; pitch: number } | null = null;
   /** mode coopératif en ligne (null en solo) */
@@ -149,7 +154,13 @@ export class Game {
     this.quests = new QuestSystem(this);
     this.dialogue = new DialogueSystem(this);
     this.weatherSys = new Weather(this.world.macro);
-    this.events.on('entity:damaged', (d) => { if (d.sourceId === 'player') this.audio.hit(); });
+    this.events.on('entity:damaged', (d) => {
+      if (d.sourceId === 'player') this.audio.hit();
+      const e = this.entities.entities.find((x) => x.id === d.targetId);
+      if (!e) return;
+      const kind = e.type.includes('squelette') || e.type === 'gardien des tombes' ? 'os' : e.type === 'spectre' ? 'brume' : 'sang';
+      this.particles.emit(kind, e.x, e.y + e.model.height * 0.6, e.z, Math.min(14, 4 + Math.round(d.amount / 4)));
+    });
     this.events.on('quest:completed', () => this.audio.chime());
     this.events.on('quest:started', () => this.audio.chime());
     this.events.on('camp:cleared', () => this.economy.refreshBlocked());
@@ -520,6 +531,7 @@ export class Game {
       return;
     }
     if (tree) this.audio.chop(pos); else this.audio.mine(pos);
+    this.particles.emit(tree ? 'copeau' : 'éclat', node.x - Math.sin(p.heading) * 0.4, p.y + (tree ? 1.1 : 0.6), node.z + Math.cos(p.heading) * 0.4, 4);
     this.character.practice('artisanat', 0.4);
     const need = tree ? 4 : 2 + Math.round(node.size * 1.5);
     const hits = (this.nodeHits.get(node.id) ?? 0) + (heavy ? 2 : 1);
@@ -544,6 +556,7 @@ export class Game {
       if (r() < (high ? 0.06 : 0.02)) lines.push({ id: 'gemme brute', qty: 1 });
     }
     this.giveLoot(lines, tree ? 'L’arbre s’abat' : 'La roche se fend');
+    this.particles.emit(tree ? 'copeau' : 'éclat', node.x, node.y + 0.8, node.z, 14); this.particles.emit('poussière', node.x, node.y + 0.2, node.z, 10);
     this.world.chunks.removeNode(node.id);
     this.coop?.fact('node:' + node.id, 1);
   }
@@ -627,6 +640,30 @@ export class Game {
       breakPick: () => { ch.inv.remove('crochet'); },
       practice: (n) => { ch.practice('furtivité', n); },
     }, (ok) => { if (ok) { this.events.emit('message', { text: 'Le verrou cède.', color: 0x60d070 }); onOpen(); } }));
+  }
+
+  private chimneyCache: { sid: number; list: { x: number; y: number; z: number }[] }[] = [];
+  /** Cheminées des maisons avec un âtre, dans les villages proches (fumée). */
+  private chimneys(): { x: number; y: number; z: number }[] {
+    const p = this.player, out: { x: number; y: number; z: number }[] = [];
+    for (const s of this.world.civ.settlements) {
+      if (s.abandoned || Math.hypot(s.x - p.x, s.z - p.z) > s.radius + 90) continue;
+      let c = this.chimneyCache.find((x) => x.sid === s.id);
+      if (!c) {
+        const L = this.world.civWorld.layouts.find((l) => l.sid === s.id), list: { x: number; y: number; z: number }[] = [];
+        for (const b of L?.buildings ?? []) {
+          if (b.ruined || Number.isNaN(b.floorY)) continue;
+          const fu = b.furniture.find((f) => f.kind === 'âtre' || f.kind === 'foyer de forge');
+          if (!fu) continue;
+          const cs = Math.cos(b.yaw), sn = Math.sin(b.yaw);
+          list.push({ x: b.x + fu.lx * cs + fu.lz * sn, y: b.floorY + b.wallH + 0.8 + b.roofH * 0.35, z: b.z - fu.lx * sn + fu.lz * cs });
+        }
+        c = { sid: s.id, list };
+        if (list.length) this.chimneyCache.push(c);
+      }
+      for (const q of c.list) if (Math.hypot(q.x - p.x, q.z - p.z) < 80) out.push(q);
+    }
+    return out;
   }
 
   /** Ajoute (ou renouvelle) un bonus temporaire. */
@@ -801,6 +838,12 @@ export class Game {
     if (!this.dungeon) this.world.chunks.update(p.x, p.z, 5);
     this.entities.update(dt);
     this.coop?.update(dt);
+    if (!this.wasGround && p.onGround && this.prevVy < -7 && !this.dungeon) this.particles.emit('poussière', p.x, p.y + 0.05, p.z, 10);
+    this.wasGround = p.onGround; this.prevVy = p.vy;
+    if ((this.smokeT -= dt) <= 0 && !this.dungeon) { this.smokeT = 0.45; for (const c of this.chimneys()) this.particles.emit('fumée', c.x, c.y, c.z, 1); }
+    const bio = this.world.sampler.biomeAt(p.x, p.z);
+    this.particles.fireflies(!this.dungeon && this.atmoNight > 0.6 && this.rain() < 0.2 && (bio === B.FOREST || bio === B.PLAINS || bio === B.SWAMP || bio === B.HEATH), p.x, p.z, (x, z) => this.world.heightAt(x, z));
+    this.particles.update(dt, this.wx.mix.windX, this.wx.mix.windZ);
     this.focus = p.dead ? null : this.findFocus();
     if (input.key('e')) this.interact();
     if (input.key('t')) this.tradeWithFocus();
@@ -869,7 +912,7 @@ export class Game {
         prev.target = target;
       } else if (e.npc?.profession === 'forgeron' && e.action === 'travailler' && e.alive && d < 45) {
         // marteau sur l'enclume, au sommet du geste
-        if (e.pose.swing > 0.85 && !this.clanged.has(e)) { this.clanged.add(e); a.clang(pos); }
+        if (e.pose.swing > 0.85 && !this.clanged.has(e)) { this.clanged.add(e); a.clang(pos); this.particles.emit('étincelle', e.x + Math.sin(e.heading) * 0.8, e.y + 0.9, e.z - Math.cos(e.heading) * 0.8, 8); }
         if (e.pose.swing < 0.3) this.clanged.delete(e);
       } else if (e.npc && e.alive && e.pose.swing > 0.55 && prev.swing <= 0.55 && e.action === 'combattre') a.swing(pos);
       prev.swing = e.pose.swing; prev.alive = e.alive;
@@ -911,7 +954,10 @@ export class Game {
     if (p.swimming && p.moving) { this.swimT -= dt; if (this.swimT <= 0) { this.swimT = 0.75; a.splash(0.6); } }
     if (p.onGround && p.moving) {
       this.stepDist += Math.hypot(p.vx, p.vz) * dt;
-      if (this.stepDist > (p.sprinting ? 2.2 : 1.6)) { this.stepDist = 0; a.step(this.surfaceUnder()); }
+      if (this.stepDist > (p.sprinting ? 2.2 : 1.6)) {
+        this.stepDist = 0; const surf = this.surfaceUnder(); a.step(surf);
+        if (p.sprinting && (surf === 'herbe' || surf === 'neige') && !this.dungeon) this.particles.emit('poussière', p.x - p.vx * 0.12, p.y + 0.1, p.z - p.vz * 0.12, 3);
+      }
     }
     if (p.hp < this.lastHp - 0.5) a.hurt();
     this.lastHp = p.hp;
@@ -1068,6 +1114,7 @@ export class Game {
     if (!dg) for (const l of this.entities.lanterns(atmo.night)) lights.push(l);
     for (const pr of this.fight.projectiles) { const l = projectileLook(pr.kind).light; if (l) lights.push({ x: pr.x, y: pr.y, z: pr.z, radius: 8, r: l[0], g: l[1], b: l[2] }); }
     if (this.coop) lights.push(...this.coop.lights());
+    lights.push(...this.particles.lights());
     if (this.buffs.some((b) => b.id === 'lumière')) lights.unshift({ x: p.x, y: p.eyeY + 0.7, z: p.z, radius: 16, r: 1.5, g: 1.35, b: 1.05 });
     for (const { l } of near) {
       const k = (l.kind === 'torch' ? torchOn : 1) * (0.85 + 0.15 * Math.sin(this.elapsed * 11 + l.x * 3) * Math.sin(this.elapsed * 7 + l.z * 5));
@@ -1078,6 +1125,7 @@ export class Game {
     this.instances.reset();
     this.entities.render(this.instances, c.x, c.z, this.target && this.target.alive ? this.target.id : null);
     this.coop?.render(this.instances, c.x, c.z);
+    this.particles.render(this.instances, c.x, c.z);
     if (dg && dg.layout.lockedDoor && !this.state.flags.get(`door:dj${dg.layout.id}`)) {
       const d = dg.layout.lockedDoor;
       this.instances.add(trsYawPitch(this.m4, d.x, 1.6, d.z, d.horizontal ? Math.PI / 2 : 0, 0, 3.4, 3.2, 0.3), 0x5a3a22, M.DOOR, 0, 0, 0.3);

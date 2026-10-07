@@ -6,6 +6,7 @@ export const M = {
   WOOD: 10, STONE: 11, ROOF: 12, FOLIAGE: 13, TRUNK: 14, CLOTH: 15, SKIN: 16, BONE: 17, FUR: 18,
   METAL: 19, FIRE: 20, WINDOW: 21, PLANKS: 22, BUSH: 23, ITEM: 24, COBBLE: 25, DOOR: 26, THATCH: 27,
   SLIME: 28, BLOOD: 29, CROP: 30, RUBBLE: 31, GLOW: 32, LEATHER: 33, ICE: 34, PINE: 35, HEATH: 36,
+  SPARK: 37, SMOKE: 38, DUST: 39, FIREFLY: 40,
 } as const;
 export type MatId = number;
 
@@ -58,6 +59,11 @@ const DEFS: Record<number, MatDef> = {
   [M.DOOR]: { ramp: ' .:│║▓█', detail: '║' },
   [M.ITEM]: { ramp: ' .*◆◆♦♦█', detail: '◆♦', flags: MF.EMISSIVE },
   [M.BLOOD]: { ramp: ' .,:░▒', detail: ',.' },
+  // particules
+  [M.SPARK]: { ramp: ' .·+*', flags: MF.EMISSIVE },
+  [M.SMOKE]: { ramp: ' .·°oO', detail: '°o' },
+  [M.DUST]: { ramp: ' .,·:', detail: '.,' },
+  [M.FIREFLY]: { ramp: ' .·+*', flags: MF.EMISSIVE },
 };
 
 // Rangées spéciales de la table
