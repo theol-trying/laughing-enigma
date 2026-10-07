@@ -474,8 +474,8 @@ export class EntityManager {
     const gone = this.entities.filter((e) => !e.alive && e.mon && e.deadT > 150);
     if (gone.length) this.remove(gone);
     this.dynamic.length = 0;
-    for (const e of this.entities) if (e.alive && Math.hypot(e.x - p.x, e.z - p.z) < 12) this.dynamic.push({ x: e.x, z: e.z, r: e.radius, bottom: e.y, top: e.y + e.model.height });
-    for (const o of this.mctx.others) if (!o.dead && Math.hypot(o.x - p.x, o.z - p.z) < 12) this.dynamic.push({ x: o.x, z: o.z, r: 0.32, bottom: o.y, top: o.y + 1.8 });
+    for (const e of this.entities) if (e.alive && Math.hypot(e.x - p.x, e.z - p.z) < 12) this.dynamic.push({ x: e.x, z: e.z, r: e.radius, bottom: e.y, top: e.y + e.model.height, dyn: true });
+    for (const o of this.mctx.others) if (!o.dead && Math.hypot(o.x - p.x, o.z - p.z) < 12) this.dynamic.push({ x: o.x, z: o.z, r: 0.32, bottom: o.y, top: o.y + 1.8, dyn: true });
   }
 
   // ---------------------------------------------------------------- multijoueur : autorité par zone

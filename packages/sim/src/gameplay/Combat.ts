@@ -58,7 +58,8 @@ export function hitPlayer(host: CombatHost, amount: number, src: Entity, element
   const armor = host.playerArmor();
   dmg = Math.max(1, Math.round(dmg * (1 - armor / (armor + 15))));
   p.hp -= dmg;
-  p.hurt = 0.35;
+  p.hurt = Math.min(1, 0.35 + dmg / 30);
+  p.hitAmount = dmg; p.hitT = 1; p.hitDir = Math.atan2(src.x - p.x, -(src.z - p.z));
   if (element === 'poison') p.poison = Math.max(p.poison, 6);
   if (element === 'givre') p.frost = Math.max(p.frost, 3);
   if (element === 'feu') p.burn = Math.max(p.burn, 3);

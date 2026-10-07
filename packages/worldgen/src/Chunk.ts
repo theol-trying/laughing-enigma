@@ -8,7 +8,7 @@ import { Noise2D } from '@ascii-fort/core/Noise';
 
 // Un chunk = 64 × 64 m généré à la demande, régénérable à l'identique.
 
-export interface CircleCollider { x: number; z: number; r: number; bottom: number; top: number }
+export interface CircleCollider { x: number; z: number; r: number; bottom: number; top: number; /** obstacle mobile (créature, joueur) : on ne se tient pas dessus */ dyn?: boolean }
 /** Mur : segment épais (bâtiments, palissades) — ajouté par la civilisation. */
 export interface SegCollider { ax: number; az: number; bx: number; bz: number; r: number; bottom: number; top: number }
 /** Plateforme praticable (sol de bâtiment, pont, escalier). */

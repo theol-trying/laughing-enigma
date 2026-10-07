@@ -602,7 +602,8 @@ export class Game {
       if (this.god) { p.hp = p.maxHp; p.dead = false; p.stamina = p.maxStamina; p.mana = p.maxMana; }
       if (p.dead) this.onPlayerDeath();
       if (p.lastFall > 13) {
-        p.hp -= Math.round((p.lastFall - 13) * 6);
+        const fall = Math.round((p.lastFall - 13) * 6);
+        p.hp -= fall; p.hurt = Math.min(1, 0.4 + fall / 30); p.hitAmount = fall; p.hitT = 1; p.hitDir = null;
         this.events.emit('message', { text: 'Chute douloureuse.', color: 0xe05040 });
         if (p.hp <= 0) { p.hp = 0; p.dead = true; this.onPlayerDeath(); }
       }
@@ -611,14 +612,16 @@ export class Game {
         heightAt: (x, z) => (this.dungeon ? 0 : this.world.heightAt(x, z)), onHit: (e) => this.onHit(e),
       });
       // nage : l'endurance s'épuise (plus vite en plongée) ; à bout de souffle, on se noie
-      if (p.swimming) {
-        p.stamina = Math.max(0, p.stamina - (p.diving ? 7 : 2.5) * dt);
-        if (p.stamina <= 0 && !this.god) {
-          p.hp -= 6 * dt;
-          if (this.elapsed - this.drownMsgT > 4) { this.drownMsgT = this.elapsed; this.events.emit('message', { text: 'À bout de souffle, vous buvez la tasse !', color: 0xe05040 }); }
+      if (p.swimming) p.stamina = Math.max(0, p.stamina - 2.5 * dt);
+      const headUnder = !this.dungeon && !Number.isNaN(p.water) && p.eyeY < p.water - 0.05;
+      if (headUnder) {
+        p.breath = Math.max(0, p.breath - dt / 20);
+        if (p.breath <= 0 && !this.god) {
+          p.hp -= 8 * dt; p.hurt = Math.max(p.hurt, 0.3);
+          if (this.elapsed - this.drownMsgT > 4) { this.drownMsgT = this.elapsed; this.events.emit('message', { text: 'Plus d\'air ! Remontez (Espace) ou vous allez vous noyer.', color: 0xe05040 }); }
           if (p.hp <= 0) { p.hp = 0; p.dead = true; this.onPlayerDeath(); }
         }
-      }
+      } else p.breath = Math.min(1, p.breath + dt / 3);
       if (input.key('h') && this.character.inv.count('potion de soin')) this.useItem('potion de soin');
       if (input.key('b')) this.swapBow();
       this.checkTraps();
@@ -859,6 +862,8 @@ export class Game {
     viewMode = viewMode || this.viewMode;
     const p = this.player, c = this.camera, dg = this.dungeon;
     c.x = p.x; c.y = p.eyeY; c.z = p.z; c.heading = p.heading; c.pitch = p.pitch;
+    // secousse quand on encaisse un coup
+    if (p.hurt > 0) { const k = Math.min(1, p.hurt) * 0.035; c.heading += (Math.random() - 0.5) * k; c.pitch += (Math.random() - 0.5) * k; c.y += (Math.random() - 0.5) * k * 2; }
     const atmo = computeAtmosphere(dg ? 0 : this.time.hour, dg ? CLEAR_WEATHER : this.wx.mix, dg ? 1 : 0, dg ? 0 : this.wx.flash);
     if (p.underRoof) { atmo.rain = 0; atmo.snow = 0; }
     atmo.wet = dg ? 0 : this.wetness;
@@ -909,6 +914,7 @@ export class Game {
       tint = [0.16, 0.42, 0.62, 0.62]; wobble = 1;
       atmo.fogColor = [0.04, 0.16, 0.24]; atmo.fogDensity = 0.09; atmo.rain = 0; atmo.snow = 0;
     } else if (p.swimming) tint = [0.2, 0.5, 0.7, 0.16];
+    else if (p.hurt > 0) tint = [0.9, 0.08, 0.05, Math.min(0.3, p.hurt * 0.4)];
     else if (this.tintFlash) tint = [...this.tintFlash.c, Math.min(0.35, this.tintFlash.t * 0.35)] as [number, number, number, number];
     this.renderer.render({ camera: c, atmo, time: this.elapsed, items, clipRadius: this.world.chunks.clipRadius, instances: this.instances, lights, viewMode, sceneOn: true, hurt: Math.max(0, p.hurt) * 2, tint, wobble });
   }

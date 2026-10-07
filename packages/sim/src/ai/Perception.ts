@@ -41,7 +41,7 @@ export function perceives(chunks: ChunkManager<any>, o: Observer, s: Stimulus, e
   const light = o.nocturnal ? 1 : 1 - env.night * 0.45;
   const range = o.range * light * (1 - env.fog * 0.5) * (1 - s.stealth * 0.55) * (o.asleep ? 0.25 : 1);
   if (d > range) return false;
-  if (d > 3) {
+  if (d > 0.9) {
     const fx = Math.sin(o.heading), fz = -Math.cos(o.heading);
     if ((dx * fx + dz * fz) / d < 0.34) return false; // cône d'environ 140°
   }

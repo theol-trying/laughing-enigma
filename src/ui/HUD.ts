@@ -89,6 +89,21 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
     const f = game.focus;
     if (f.t === 'prop' && f.hint) g.center(mid + 3, ` ${f.hint} `, f.danger ? C.red : C.green, C.panel);
   }
+  // souffle sous l'eau
+  if (p.breath < 0.999 && !p.dead) {
+    g.center(mid + 6, ' Souffle ', p.breath < 0.25 ? C.red : C.cyan, C.panel);
+    g.bar(Math.floor(cols / 2) - 10, mid + 7, 20, p.breath, p.breath < 0.25 ? C.red : C.cyan, C.faint, C.panel);
+  }
+  // dégâts reçus : montant et direction de l'attaque
+  if (p.hitT > 0 && !p.dead) {
+    g.center(mid - 3, ` -${Math.round(p.hitAmount)} `, C.red, C.panel);
+    if (p.hitDir !== null) {
+      let a = p.hitDir - p.heading; while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2;
+      const dx = Math.round(Math.sin(a) * 12), dy = Math.round(-Math.cos(a) * 5);
+      const arrow = Math.abs(a) < 0.4 ? '▲' : Math.abs(a) > 2.7 ? '▼' : a > 0 ? '►' : '◄';
+      g.text(Math.floor(cols / 2) + dx, mid + dy, arrow, C.red, C.panel, 0.6);
+    }
+  }
   if (p.crouch && !p.dead && !p.swimming) {
     const w = game.watchers();
     const by = w.hunters[0]?.name ?? w.npcs[0]?.label;

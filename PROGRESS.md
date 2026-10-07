@@ -55,7 +55,7 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 
 ### Jalon 5 — retours de jeu n°2 (2026-10-07)
 - [x] 32. Dialogue qui se ferme sans coup d'épée ; discrétion (ouïe selon l'allure, de dos accroupi = invisible), bruit du vol ; PNJ qui « travaillent » dans le vide (forgeron), outils en main
-- [ ] 33. Se tenir sur pierres, souches, murets (marches et sommets praticables) ; barre de souffle sous l'eau ; effet de dégâts (flash, secousse, direction, chiffres, chutes)
+- [x] 33. Se tenir sur pierres, souches, murets (marches et sommets praticables) ; barre de souffle sous l'eau ; effet de dégâts (flash, secousse, direction, chiffres, chutes)
 - [ ] 34. Météo : transitions spatiales douces entre régions (plus de pluie/brouillard côte à côte)
 - [ ] 35. Récolte : abattre les arbres à la hache (bois, branches, écorce), miner les rochers à la pioche (pierre, minerais, charbon, gemmes), fonte à la forge ; arbres/rochers retirés (persistants, partagés en ligne)
 - [ ] 36. Commerce visible : marchandises selon le métier (armes et outils chez le forgeron…), touche T pour commercer, prêtres qui vendent des sorts

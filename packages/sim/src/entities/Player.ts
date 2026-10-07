@@ -5,6 +5,9 @@ import { clamp, segDist } from '@ascii-fort/core/math';
 import { WORLD } from '@ascii-fort/worldgen/constants';
 
 /** Joueur : contrôleur à la première personne, gravité, pentes, nage, collisions. */
+/** hauteur franchie d'un pas (marches, pierres basses) */
+const STEP = 0.45;
+
 export class Player {
   x = 0; y = 0; z = 0;
   vx = 0; vy = 0; vz = 0;
@@ -12,6 +15,9 @@ export class Player {
   onGround = false; swimming = false; crouch = false; sprinting = false;
   /** surface de l'eau sous le joueur (NaN : pas d'eau) et profondeur d'eau au sol */
   water = NaN; depth = 0;
+  /** souffle sous l'eau (0..1) ; dégâts reçus récemment (effet visuel) */
+  breath = 1;
+  hitAmount = 0; hitDir: number | null = null; hitT = 0;
   /** plongée : accroupi en nageant */
   get diving(): boolean { return this.swimming && this.crouch; }
   radius = 0.35; eye = 1.65;
@@ -45,6 +51,7 @@ export class Player {
     if (this.frost > 0) this.frost -= dt;
     if (this.invuln > 0) this.invuln -= dt;
     if (this.hurt > 0) this.hurt -= dt;
+    if (this.hitT > 0) this.hitT -= dt;
     const regen = this.blocking ? 4 : this.sprinting ? -14 : 16 * this.staminaRegen;
     this.stamina = Math.max(0, Math.min(this.maxStamina, this.stamina + regen * dt));
     if (dmg > 0) { this.hp -= dmg; if (this.hp <= 0) { this.hp = 0; this.dead = true; } }
@@ -71,6 +78,9 @@ export class Player {
       const lx = dx * c - dz * s, lz = dx * s + dz * c;
       if (Math.abs(lx) <= p.hw && Math.abs(lz) <= p.hd && p.top <= fromY + 0.65 && p.top > g) { g = p.top; this.underRoof = p.hw > 2 && p.hd > 2 && p.top > 0.5 + world.heightAt(x, z) - 3; }
     }
+    // rochers, souches, murets, parapets : on peut monter dessus (en sautant, ou d'un pas s'ils sont bas)
+    for (const c of this.circles) if (!c.dyn && c.top <= fromY + STEP && c.top > g && Math.hypot(x - c.x, z - c.z) <= c.r * 0.9 + 0.2) g = c.top;
+    for (const s of this.segs) if (s.top <= fromY + STEP && s.top > g && segDist(x, z, s.ax, s.az, s.bx, s.bz).d <= s.r + 0.22) g = s.top;
     return g;
   }
 
@@ -134,12 +144,12 @@ export class Player {
     // collisions horizontales (troncs, rochers, murs)
     for (let it = 0; it < 2; it++) {
       for (const c of this.circles) {
-        if (this.y + 1.7 < c.bottom || this.y > c.top - 0.2) continue;
+        if (this.y + 1.7 < c.bottom || this.y > c.top - 0.2 || c.top - this.y <= STEP) continue;
         const dx = nx - c.x, dz = nz - c.z, d = Math.hypot(dx, dz), min = c.r + this.radius;
         if (d < min && d > 1e-5) { nx = c.x + (dx / d) * min; nz = c.z + (dz / d) * min; }
       }
       for (const s of this.segs) {
-        if (this.y + 1.7 < s.bottom || this.y > s.top - 0.3) continue;
+        if (this.y + 1.7 < s.bottom || this.y > s.top - 0.3 || s.top - this.y <= STEP) continue;
         const { d, t } = segDist(nx, nz, s.ax, s.az, s.bx, s.bz);
         const min = s.r + this.radius;
         if (d < min) {
