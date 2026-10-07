@@ -31,6 +31,17 @@ export interface HumanLook {
   apron?: number; cape?: number; boots?: number; belt?: number; hoodColor?: number; eyes?: number;
   /** arc tenu dans la main gauche (joueurs) */
   bow?: boolean;
+  /** variété : coiffure, barbe, chapeau, robe longue, bras nus, tabard (couleur de faction + emblème) */
+  hairStyle?: 'court' | 'long' | 'chignon' | 'queue' | 'chauve';
+  beardStyle?: 'barbe' | 'moustache' | 'bouc';
+  hat?: 'paille' | 'bonnet' | 'béret' | 'coiffe';
+  hatColor?: number;
+  dress?: boolean;
+  bareArms?: boolean;
+  tabard?: number;
+  emblem?: number;
+  /** visage visible de près (yeux, bouche, nez) */
+  face?: boolean;
 }
 
 const { sin, abs, max, PI } = Math;
@@ -124,7 +135,7 @@ export function humanoid(l: HumanLook): ModelDef {
     if (skel) R.part(knee, SHAPE.BOX, 0, -0.43 * s, -0.04 * s, 0.07 * s, 0.04 * s, 0.17 * s, l.skin, M.BONE);
     else R.part(knee, SHAPE.BOX, 0, -0.4 * s, -0.035 * s, 0.13 * s * th, 0.1 * s, 0.25 * s, l.boots ?? LEATHER_DARK, M.LEATHER);
   }
-  if (l.robe && !l.noLegs) R.part(hips, SHAPE.TAPER, 0, -0.43 * s, 0, 0.5 * s * wid, 0.9 * s, 0.42 * s, l.shirt, cloth);
+  if ((l.robe || l.dress) && !l.noLegs) R.part(hips, SHAPE.TAPER, 0, -0.43 * s, 0, 0.5 * s * wid, 0.9 * s, 0.42 * s, l.dress && !l.robe ? (l.hatColor ?? l.pants) : l.shirt, cloth);
   if (l.noLegs) R.part(hips, SHAPE.TAPER, 0, -0.45 * s, 0, 0.48 * s, -0.95 * s, 0.4 * s, l.shirt, cloth);
 
   // torse
@@ -141,6 +152,11 @@ export function humanoid(l: HumanLook): ModelDef {
     R.part(spine, SHAPE.CYL, 0, 0.03 * s, 0, 0.38 * s * wid, 0.07 * s, 0.26 * s * wid, l.belt ?? LEATHER_DARK, M.LEATHER);
   }
   if (l.helmet) for (const side of [-1, 1]) R.part(spine, SHAPE.SPHERE, side * 0.24 * s * wid, 0.5 * s, 0, 0.2 * s, 0.14 * s, 0.22 * s, IRON, M.METAL);
+  if (l.tabard !== undefined) {
+    R.part(spine, SHAPE.BOX, 0, 0.2 * s, -0.142 * s * wid, 0.34 * s * wid, 0.62 * s, 0.02, l.tabard, M.CLOTH);
+    R.part(spine, SHAPE.BOX, 0, 0.2 * s, 0.142 * s * wid, 0.34 * s * wid, 0.62 * s, 0.02, l.tabard, M.CLOTH);
+    R.part(spine, SHAPE.BOX, 0, 0.3 * s, -0.155 * s * wid, 0.1 * s, 0.1 * s, 0.015, l.emblem ?? 0xe8d8a0, M.CLOTH, { roll: PI / 4 });
+  }
   if (l.apron !== undefined) R.part(spine, SHAPE.BOX, 0, 0.08 * s, -0.145 * s * wid, 0.34 * s * wid, 0.66 * s, 0.02, l.apron, M.LEATHER);
   if (l.cape !== undefined) {
     const cape = R.bone(spine, 0, 0.53 * s, 0.15 * s * wid, (p, t, r) => { r.pitch = -(0.08 + abs(sin(p.walk)) * 0.2) * k(p); });
@@ -166,10 +182,34 @@ export function humanoid(l: HumanLook): ModelDef {
     R.part(head, SHAPE.BOX, 0, 0.12 * s, -0.145 * s, 0.03 * s, 0.11 * s, 0.02 * s, IRON, M.METAL);
   } else if (l.hood) R.part(head, SHAPE.SPHERE, 0, 0.18 * s, 0.025 * s, 0.32 * s, 0.33 * s, 0.32 * s, l.hoodColor ?? l.shirt, M.CLOTH);
   else if (!skel) {
-    R.part(head, SHAPE.SPHERE, 0, 0.21 * s, 0.015 * s, 0.27 * s, 0.21 * s, 0.29 * s, l.hair, M.FUR);
-    if (l.hairLong) R.part(head, SHAPE.BOX, 0, 0.06 * s, 0.11 * s, 0.25 * s, 0.3 * s, 0.07 * s, l.hair, M.FUR);
+    const st = l.hairStyle ?? (l.hairLong ? 'long' : 'court');
+    if (st !== 'chauve') R.part(head, SHAPE.SPHERE, 0, 0.21 * s, 0.015 * s, 0.27 * s, 0.21 * s, 0.29 * s, l.hair, M.FUR);
+    else R.part(head, SHAPE.SPHERE, 0, 0.13 * s, 0.05 * s, 0.27 * s, 0.12 * s, 0.22 * s, l.hair, M.FUR);
+    if (st === 'long') R.part(head, SHAPE.BOX, 0, 0.06 * s, 0.11 * s, 0.25 * s, 0.3 * s, 0.07 * s, l.hair, M.FUR);
+    if (st === 'chignon') R.part(head, SHAPE.SPHERE, 0, 0.27 * s, 0.12 * s, 0.13 * s, 0.12 * s, 0.13 * s, l.hair, M.FUR);
+    if (st === 'queue') R.part(head, SHAPE.TAPER, 0, 0.06 * s, 0.14 * s, 0.08 * s, -0.32 * s, 0.08 * s, l.hair, M.FUR, { pitch: 0.25 });
+    // chapeaux
+    const hc = l.hatColor ?? 0x6a4a3a;
+    if (l.hat === 'paille') { R.part(head, SHAPE.CYL, 0, 0.27 * s, 0, 0.52 * s, 0.03 * s, 0.52 * s, 0xd8c070, M.THATCH); R.part(head, SHAPE.CYL, 0, 0.33 * s, 0, 0.27 * s, 0.12 * s, 0.27 * s, 0xc8b060, M.THATCH); }
+    else if (l.hat === 'bonnet') R.part(head, SHAPE.SPHERE, 0, 0.27 * s, 0.02 * s, 0.29 * s, 0.18 * s, 0.3 * s, hc, M.CLOTH);
+    else if (l.hat === 'béret') R.part(head, SHAPE.SPHERE, 0.04 * s, 0.3 * s, 0, 0.32 * s, 0.09 * s, 0.32 * s, hc, M.CLOTH);
+    else if (l.hat === 'coiffe') { R.part(head, SHAPE.SPHERE, 0, 0.22 * s, 0.03 * s, 0.31 * s, 0.25 * s, 0.32 * s, 0xe8e4d8, M.CLOTH); R.part(head, SHAPE.BOX, 0, 0.02 * s, 0.13 * s, 0.24 * s, 0.3 * s, 0.04 * s, 0xe8e4d8, M.CLOTH); }
   }
-  if (l.beard) R.part(head, SHAPE.SPHERE, 0, 0.05 * s, -0.085 * s, 0.2 * s, 0.17 * s, 0.12 * s, l.hair, M.FUR);
+  if (l.face && !skel) {
+    // yeux, sourcils, nez, bouche : lisibles de près
+    for (const side of [-1, 1]) {
+      R.part(head, SHAPE.BOX, side * 0.055 * s, 0.17 * s, -0.128 * s, 0.035 * s, 0.025 * s, 0.012, 0x1a1410, M.LEATHER);
+      if (!l.helmet) R.part(head, SHAPE.BOX, side * 0.055 * s, 0.205 * s, -0.126 * s, 0.05 * s, 0.012 * s, 0.012, l.hair, M.FUR);
+    }
+    R.part(head, SHAPE.BOX, 0, 0.125 * s, -0.142 * s, 0.03 * s, 0.05 * s, 0.03 * s, l.skin, skinM);
+    R.part(head, SHAPE.BOX, 0, 0.075 * s, -0.128 * s, 0.07 * s, 0.014 * s, 0.012, 0x6a3a30, M.LEATHER);
+  }
+  if (l.beard || l.beardStyle) {
+    const bs = l.beardStyle ?? 'barbe';
+    if (bs === 'barbe') R.part(head, SHAPE.SPHERE, 0, 0.05 * s, -0.085 * s, 0.2 * s, 0.17 * s, 0.12 * s, l.hair, M.FUR);
+    else if (bs === 'moustache') R.part(head, SHAPE.BOX, 0, 0.095 * s, -0.135 * s, 0.11 * s, 0.025 * s, 0.02 * s, l.hair, M.FUR);
+    else R.part(head, SHAPE.TAPER, 0, 0.02 * s, -0.11 * s, 0.07 * s, -0.12 * s, 0.06 * s, l.hair, M.FUR);
+  }
   if (l.crown) R.part(head, SHAPE.CYL, 0, 0.31 * s, 0, 0.22 * s, 0.07 * s, 0.22 * s, 0xd8b040, M.METAL);
 
   // bras : épaule + coude, main ; arme à droite, bouclier ou arc à gauche
@@ -185,7 +225,7 @@ export function humanoid(l: HumanLook): ModelDef {
     const el = R.bone(sh, 0, -0.3 * s * armK, 0, (p, t, r) => {
       r.pitch = (0.2 + max(0, sin(p.walk + legPh)) * 0.25 + (right ? p.swing * 0.6 : p.block * 1.0)) * k(p);
     });
-    R.limb(el, 0.27 * s * armK, 0.095 * s * th, 0.1 * s * th, sleeve, cloth);
+    R.limb(el, 0.27 * s * armK, 0.095 * s * th, 0.1 * s * th, l.bareArms ? l.skin : sleeve, l.bareArms ? skinM : cloth);
     const hand = R.bone(el, 0, -0.28 * s * armK, 0);
     const hs = massif ? 1.4 : skel ? 0.8 : 1;
     R.part(hand, SHAPE.SPHERE, 0, -0.02 * s, 0, 0.09 * s * hs, 0.1 * s * hs, 0.08 * s * hs, l.skin, skinM);

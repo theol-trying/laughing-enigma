@@ -73,7 +73,7 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 44. Discrétion : crochetage (coffres verrouillés, crochets, mini-jeu) ; sort d'invisibilité
 - [x] 45. Particules en caractères : étincelles de forge, sang, poussière, fumée des cheminées, lucioles
 - [x] 46. Vent (arbres, herbe), reflets dans l'eau, ombres portées des torches
-- [ ] 47. Visages et tenues variés, bannières des factions, intérieurs plus riches
+- [x] 47. Visages et tenues variés (coiffures, barbes, chapeaux, robes, bras nus, tabards de faction), bannières des factions (couleur du propriétaire : `Game.ownerOf`, drapeau `owner:<sid>`), intérieurs (tapis, tentures, chandelles, vaisselle, pots, herbes ; décor sans RNG)
 - [ ] 48. Faune chassable (cerfs, sangliers, oiseaux), troupeaux visibles, pêche
 - [ ] 49. Artisanat élargi (forge d'armes et d'armures, alchimie, cuisine) avec usure et réparation
 - [ ] 50. Arbres de talents (tous les 3 niveaux)

@@ -644,6 +644,38 @@ export class Game {
     }, (ok) => { if (ok) { this.events.emit('message', { text: 'Le verrou cède.', color: 0x60d070 }); onOpen(); } }));
   }
 
+  private bannerCache = new Map<number, { x: number; y: number; z: number; yaw: number }[]>();
+  /** Faction qui tient une implantation (peut changer avec la guerre). */
+  ownerOf(sid: number): number { return this.state.flags.get('owner:' + sid) as unknown as number ?? this.world.civ.settlements[sid]?.factionId ?? -1; }
+  /** Bannières : au centre des villages et devant les corps de garde, châteaux et donjons. */
+  private renderBanners(cx: number, cz: number) {
+    const civ = this.world.civ, t = this.elapsed;
+    for (const s of civ.settlements) {
+      if (s.abandoned || Math.hypot(s.x - cx, s.z - cz) > s.radius + 160) continue;
+      let list = this.bannerCache.get(s.id);
+      if (!list) {
+        list = [];
+        const L = this.world.civWorld.layouts.find((l) => l.sid === s.id);
+        if (L?.plaza) list.push({ x: L.plaza.x + L.plaza.r * 0.55, y: 0, z: L.plaza.z, yaw: 0 });
+        for (const b of L?.buildings ?? []) {
+          if (!['corps de garde', 'caserne', 'donjon'].includes(b.kind) || b.ruined) continue;
+          const c = Math.cos(b.yaw), sn = Math.sin(b.yaw), lx = b.doorX + 1.6, lz = b.d / 2 + 0.8;
+          list.push({ x: b.x + lx * c + lz * sn, y: 0, z: b.z - lx * sn + lz * c, yaw: b.yaw });
+        }
+        for (const q of list) q.y = this.world.heightAt(q.x, q.z);
+        this.bannerCache.set(s.id, list);
+      }
+      const fac = civ.factions[this.ownerOf(s.id)], col = fac?.color ?? 0x7a2a2a;
+      for (const q of list) {
+        if (Math.hypot(q.x - cx, q.z - cz) > 140) continue;
+        this.instances.add(trsYawPitch(this.m4, q.x, q.y + 2.6, q.z, 0, 0, 0.08, 5.2, 0.08), 0x5a4030, M.WOOD, 0, 0, 1, 1);
+        const wave = Math.sin(t * 2.2 + q.x) * 0.12;
+        this.instances.add(trsYawPitch(this.m4, q.x + Math.cos(q.yaw) * 0.6, q.y + 3.6, q.z - Math.sin(q.yaw) * 0.6, -q.yaw + wave, wave * 0.3, 1.1, 1.5, 0.04), col, M.CLOTH, 0, 0, 1);
+        this.instances.add(trsYawPitch(this.m4, q.x + Math.cos(q.yaw) * 0.6, q.y + 3.75, q.z - Math.sin(q.yaw) * 0.6, -q.yaw + wave, wave * 0.3, 0.32, 0.32, 0.05), 0xe8d8a0, M.CLOTH, 0, 0, 1);
+      }
+    }
+  }
+
   private chimneyCache: { sid: number; list: { x: number; y: number; z: number }[] }[] = [];
   /** Cheminées des maisons avec un âtre, dans les villages proches (fumée). */
   private chimneys(): { x: number; y: number; z: number }[] {
@@ -1129,6 +1161,7 @@ export class Game {
     this.entities.render(this.instances, c.x, c.z, this.target && this.target.alive ? this.target.id : null);
     this.coop?.render(this.instances, c.x, c.z);
     this.particles.render(this.instances, c.x, c.z);
+    if (!dg) this.renderBanners(c.x, c.z);
     if (dg && dg.layout.lockedDoor && !this.state.flags.get(`door:dj${dg.layout.id}`)) {
       const d = dg.layout.lockedDoor;
       this.instances.add(trsYawPitch(this.m4, d.x, 1.6, d.z, d.horizontal ? Math.PI / 2 : 0, 0, 3.4, 3.2, 0.3), 0x5a3a22, M.DOOR, 0, 0, 0.3);

@@ -1,4 +1,4 @@
-Terres de Maromières — climat tempéré et humide — généré en 251 ms
+Terres de Maromières — climat tempéré et humide — généré en 262 ms
 terres 50 % — océan: 31635, lac: 845, côte: 744, plaine: 7875, forêt: 13825, forêt de pins: 1898, marais: 4228, lande: 84, montagne: 4244, cimes enneigées: 158
 137 rivières, 14 régions : Val d'Aubeloup, Forêt de Beronne, Forêt de Torouse, Hautes-Terres de Feneval, Forêt de Malevac, Forêt de Pont-Torille, Forêt de Dorevay, Comté de Ronceloup, Forêt de Pontcourt, Forêt d'Aremont, Val de Toraux, Comté de Calevais, Forêt de Givre-Sel, Forêt de Mur-Guéaux
 

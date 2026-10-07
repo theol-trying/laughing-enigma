@@ -1,7 +1,7 @@
 import { Entity, type RemoteTarget } from './Entity';
 export type { RemoteTarget } from './Entity';
 import { generateNPCs, type NPCData } from './NPC';
-import { humanoid, drawModel, type ModelDef } from './Models';
+import { humanoid, drawModel, type ModelDef, type HumanLook } from './Models';
 import { buildLairs, makeMonster, dangerAt, dungeonLevel, type Lair } from './Monster';
 import { NavGrid } from '../ai/Pathfinding';
 import { blockAt, resolveSpot, patrolRoute, type Spot } from '../ai/Schedule';
@@ -115,13 +115,21 @@ export class EntityManager {
     if (!m) {
       const c = n.colors, garde = n.look === 'garde', moine = n.look === 'moine', noble = n.look === 'noble';
       const h = (n.age * 31 + n.first.length * 7 + n.last.length) % 10; // variété visuelle stable
+      const pr = n.profession, f = n.sex === 'f', h2 = (n.age * 7 + n.last.length * 3) % 10;
+      const fc = this.host.world.civ.factions[n.factionId]?.color ?? 0x6a2a2a;
+      const hats: Record<string, HumanLook['hat']> = { fermier: 'paille', meunier: 'bonnet', pêcheur: 'bonnet', marchand: 'béret', noble: 'béret', guérisseuse: 'coiffe' };
       m = humanoid({
         skin: c.skin, shirt: garde ? 0x8a8a94 : noble ? 0x6a2a6a : c.shirt, pants: c.pants, hair: n.age > 58 ? 0xb8b4ac : c.hair,
-        helmet: garde, robe: moine, hood: moine && h < 4, cape: noble ? 0x3a2a5a : garde && h < 3 ? 0x6a2a2a : undefined,
-        weapon: garde ? 'lance' : n.profession === 'forgeron' || n.profession === 'artisan' ? 'marteau' : n.profession === 'mineur' ? 'pioche' : null, shield: garde,
-        beard: n.sex === 'm' && n.age > 22 && h < 5 && !garde, hairLong: n.sex === 'f',
-        apron: n.profession === 'forgeron' ? 0x4a3020 : n.profession === 'aubergiste' ? 0xd8d0c0 : undefined,
-        scale: (n.sex === 'f' ? 0.9 : 0.95) + ((n.age * 13) % 17) / 100, letter: '@',
+        helmet: garde, robe: moine, hood: moine && h < 4, cape: noble ? 0x3a2a5a : garde && h < 3 ? 0x6a2a2a : pr === 'chasseur' ? 0x3a5a2a : undefined,
+        weapon: garde ? 'lance' : pr === 'forgeron' || pr === 'artisan' ? 'marteau' : pr === 'mineur' ? 'pioche' : null, shield: garde,
+        beard: false, beardStyle: !f && n.age > 22 && !garde && h < 6 ? (['barbe', 'moustache', 'bouc'] as const)[h % 3] : undefined,
+        hairStyle: f ? (['long', 'chignon', 'queue'] as const)[h2 % 3] : n.age > 50 && h2 < 4 ? 'chauve' : h2 === 9 ? 'queue' : 'court',
+        hat: hats[noble ? 'noble' : pr] && (pr !== 'fermier' || h2 < 7) ? hats[noble ? 'noble' : pr] : undefined,
+        hatColor: noble ? 0x5a1a4a : [0x8a2a2a, 0x2a4a7a, 0x4a6a3a, 0x7a6a3a][h2 % 4],
+        dress: f && !garde && !moine && h2 < 6, bareArms: pr === 'forgeron' || (pr === 'fermier' && h2 > 6),
+        tabard: garde ? fc : undefined, emblem: garde ? 0xe8d8a0 : undefined, face: true,
+        apron: pr === 'forgeron' ? 0x4a3020 : pr === 'aubergiste' ? 0xd8d0c0 : undefined,
+        scale: (f ? 0.9 : 0.95) + ((n.age * 13) % 17) / 100, letter: '@',
       });
       this.models.set(n.id, m);
     }

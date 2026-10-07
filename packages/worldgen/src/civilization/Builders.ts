@@ -122,7 +122,61 @@ export function buildBuilding(mb: MeshBuilder, sampler: TerrainSampler, ch: Chun
   }
   // mobilier
   b.furniture.forEach((fu, i) => furniture(mb, ch, f, b, fu, y, i));
+  if (!b.ruined) interiorDecor(mb, ch, f, b, y);
   if (b.dungeonId >= 0) ch.props.push({ key: `b${b.sid}:${b.id}:entrée`, kind: 'entrée', x: b.x, y: y + 0.5, z: b.z, sid: b.sid, bid: b.id, dungeonId: b.dungeonId });
+}
+
+/** Décor sans incidence sur le jeu (aucun tirage aléatoire : variations tirées de la position du bâtiment). */
+function interiorDecor(mb: MeshBuilder, ch: ChunkData, f: ReturnType<typeof frame>, b: Building, y: number) {
+  const h = (k: number) => ((Math.imul((b.id + 1) * 73856093 ^ Math.floor(b.x * 7) * 19349663 ^ Math.floor(b.z * 3) * 83492791 ^ k * 2654435761, 2246822519) >>> 0) % 1000) / 1000;
+  const lived = ['maison', 'ferme', 'auberge', 'échoppe', 'donjon', 'cabane', 'moulin', 'corps de garde', 'chapelle', 'temple', 'forge', 'caserne', 'dortoir'].includes(b.kind);
+  if (!lived) return;
+  mb.sky = INSIDE;
+  const hw = b.w / 2 - 0.4, hd = b.d / 2 - 0.4;
+  const RUGS = [0x8a2a2a, 0x2a4a7a, 0x6a5a2a, 0x3a6a3a, 0x5a3a6a];
+  // tapis au centre (pas dans la forge ni le corps de garde)
+  if (b.kind !== 'forge' && b.kind !== 'corps de garde' && h(1) < 0.75) {
+    const rw = Math.min(2.6, b.w - 2.4), rd = Math.min(1.8, b.d - 2.6);
+    if (rw > 0.8 && rd > 0.8) { mb.box(f.wx(0, 0.4), y + 0.002, f.wz(0, 0.4), rw, 0.025, rd, b.yaw, RUGS[Math.floor(h(2) * RUGS.length)], M.CLOTH); mb.box(f.wx(0, 0.4), y + 0.004, f.wz(0, 0.4), rw * 0.7, 0.025, rd * 0.6, b.yaw, RUGS[Math.floor(h(3) * RUGS.length)], M.CLOTH); }
+  }
+  // tenture ou tableau sur le mur du fond
+  if (h(4) < 0.7) {
+    const lx = (h(5) - 0.5) * Math.max(0, b.w - 3), lz = -(b.d / 2 - 0.2);
+    mb.box(f.wx(lx, lz), y + 1.25, f.wz(lx, lz), 1.1, 0.95, 0.04, b.yaw, 0x4a3020, M.WOOD);
+    mb.box(f.wx(lx, lz + 0.03), y + 1.33, f.wz(lx, lz + 0.03), 0.9, 0.78, 0.03, b.yaw, RUGS[Math.floor(h(6) * RUGS.length)], M.CLOTH);
+  }
+  // herbes et saucissons suspendus près des poutres
+  if (b.kind === 'maison' || b.kind === 'ferme' || b.kind === 'auberge' || b.kind === 'cabane') for (let k = 0; k < 3; k++) {
+    const lx = -hw + 0.6 + k * 0.45, lz = hd - 0.4;
+    mb.box(f.wx(lx, lz), y + b.wallH - 0.75, f.wz(lx, lz), 0.12, 0.4, 0.12, b.yaw, [0x5a7a3a, 0x8a5a3a, 0x6a6a3a][k], M.BUSH);
+  }
+  // chandelles, vaisselle et pain sur les tables
+  for (const fu of b.furniture) {
+    if (fu.kind === 'table') {
+      const cx = f.wx(fu.lx, fu.lz), cz = f.wz(fu.lx, fu.lz);
+      const ox = Math.cos(b.yaw + fu.yaw) * 0.5, oz = -Math.sin(b.yaw + fu.yaw) * 0.5;
+      mb.cylinder(cx + ox, y + 0.8, cz + oz, 0.03, 0.2, 5, 0xe8e0c8, M.CLOTH);
+      mb.box(cx + ox, y + 1.0, cz + oz, 0.04, 0.06, 0.04, 0, 0xffc060, M.FIRE);
+      ch.lights.push({ x: cx + ox, y: y + 1.15, z: cz + oz, radius: 4.5, r: 1.2, g: 0.8, b: 0.4, kind: 'candle' });
+      mb.cylinder(cx - ox, y + 0.8, cz - oz, 0.12, 0.06, 7, 0xb8b0a0, M.STONE);
+      mb.blob(cx - ox * 0.2, y + 0.86, cz - oz * 0.2, 0.12, 0.06, 0.08, 0xc89850, M.WOOD, 5, 3);
+    } else if (fu.kind === 'étagère') {
+      const cx = f.wx(fu.lx, fu.lz), cz = f.wz(fu.lx, fu.lz);
+      for (let k = 0; k < 4; k++) {
+        const o = (k - 1.5) * 0.32, px = cx + Math.cos(b.yaw + fu.yaw) * o, pz = cz - Math.sin(b.yaw + fu.yaw) * o;
+        mb.cylinder(px, y + 2.0, pz, 0.07 + h(10 + k) * 0.05, 0.18 + h(20 + k) * 0.12, 6, [0x8a5a3a, 0x6a7a8a, 0xa88a5a, 0x5a6a4a][k], M.STONE);
+      }
+    } else if (fu.kind === 'autel') {
+      const cx = f.wx(fu.lx, fu.lz), cz = f.wz(fu.lx, fu.lz);
+      for (const side of [-1, 1]) {
+        const px = cx + Math.cos(b.yaw) * side * 1.2, pz = cz - Math.sin(b.yaw) * side * 1.2;
+        mb.cylinder(px, y, pz, 0.05, 1.1, 5, 0x8a7040, M.METAL);
+        mb.cylinder(px, y + 1.1, pz, 0.03, 0.2, 5, 0xe8e0c8, M.CLOTH);
+        mb.box(px, y + 1.3, pz, 0.04, 0.06, 0.04, 0, 0xffc060, M.FIRE);
+      }
+      ch.lights.push({ x: cx, y: y + 1.5, z: cz, radius: 6, r: 1.3, g: 0.9, b: 0.5, kind: 'candle' });
+    }
+  }
 }
 
 function furniture(mb: MeshBuilder, ch: ChunkData, f: ReturnType<typeof frame>, b: Building, fu: Furniture, y: number, i: number) {
