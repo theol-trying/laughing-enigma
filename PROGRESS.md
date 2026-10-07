@@ -72,7 +72,7 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 43. Interface : suivi de la quête à l'écran ; palettes (ambre, vert terminal) ; mode photo ; multi : bulles de chat et émotes
 - [x] 44. Discrétion : crochetage (coffres verrouillés, crochets, mini-jeu) ; sort d'invisibilité
 - [x] 45. Particules en caractères : étincelles de forge, sang, poussière, fumée des cheminées, lucioles
-- [ ] 46. Vent (arbres, herbe), reflets dans l'eau, ombres portées des torches
+- [x] 46. Vent (arbres, herbe), reflets dans l'eau, ombres portées des torches
 - [ ] 47. Visages et tenues variés, bannières des factions, intérieurs plus riches
 - [ ] 48. Faune chassable (cerfs, sangliers, oiseaux), troupeaux visibles, pêche
 - [ ] 49. Artisanat élargi (forge d'armes et d'armures, alchimie, cuisine) avec usure et réparation

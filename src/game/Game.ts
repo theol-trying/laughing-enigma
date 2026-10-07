@@ -128,6 +128,8 @@ export class Game {
   readonly particles = new Particles();
   private smokeT = 0;
   private wasGround = true; private prevVy = 0;
+  /** ombres portées de la torche la plus proche (option) */
+  torchShadows = true;
   /** mode photo : caméra libre (null en jeu normal) */
   photoCam: { x: number; y: number; z: number; heading: number; pitch: number } | null = null;
   /** mode coopératif en ligne (null en solo) */
@@ -1106,7 +1108,7 @@ export class Game {
     if (dg) items.push({ mesh: dg.mesh });
     else {
       items.push({ mesh: this.far, clip: 1 });
-      for (const g of this.world.chunks.gpuMeshes()) items.push({ mesh: g, clip: 2, shadow: true });
+      for (const g of this.world.chunks.gpuItems()) items.push({ mesh: g.gpu, clip: 2, shadow: true, cx: g.cx, cz: g.cz });
     }
     const lights: PointLight[] = [];
     const torchOn = dg ? 1 : Math.min(1, Math.max(0, (atmo.night - 0.12) / 0.35));
@@ -1116,6 +1118,7 @@ export class Game {
     if (this.coop) lights.push(...this.coop.lights());
     lights.push(...this.particles.lights());
     if (this.buffs.some((b) => b.id === 'lumière')) lights.unshift({ x: p.x, y: p.eyeY + 0.7, z: p.z, radius: 16, r: 1.5, g: 1.35, b: 1.05 });
+    const shadowL = this.torchShadows ? near.find(({ l, d }) => d < 22 && (l.kind !== 'torch' || torchOn > 0.3) && l.kind !== 'window')?.l : undefined;
     for (const { l } of near) {
       const k = (l.kind === 'torch' ? torchOn : 1) * (0.85 + 0.15 * Math.sin(this.elapsed * 11 + l.x * 3) * Math.sin(this.elapsed * 7 + l.z * 5));
       if (k < 0.02) continue;
@@ -1150,6 +1153,6 @@ export class Game {
     else if (p.hurt > 0) tint = [0.9, 0.08, 0.05, Math.min(0.3, p.hurt * 0.4)];
     else if (p.invisible) tint = [0.55, 0.62, 0.75, 0.3];
     else if (this.tintFlash) tint = [...this.tintFlash.c, Math.min(0.35, this.tintFlash.t * 0.35)] as [number, number, number, number];
-    this.renderer.render({ camera: c, atmo, time: this.elapsed, items, clipRadius: this.world.chunks.clipRadius, instances: this.instances, lights, viewMode, sceneOn: true, hurt: Math.max(0, p.hurt) * 2, tint, wobble });
+    this.renderer.render({ camera: c, atmo, time: this.elapsed, items, clipRadius: this.world.chunks.clipRadius, instances: this.instances, lights, viewMode, sceneOn: true, hurt: Math.max(0, p.hurt) * 2, tint, wobble, pointShadow: shadowL ? { x: shadowL.x, y: shadowL.y, z: shadowL.z, radius: Math.max(6, shadowL.radius) } : null });
   }
 }

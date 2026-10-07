@@ -1,5 +1,5 @@
 import { Shader, makeTexture, makeFramebuffer } from './gl';
-import { STATIC_VS, INSTANCED_VS, SCENE_FS, SHADOW_VS, SHADOW_INST_VS, SHADOW_FS, FULLSCREEN_VS, CELL_FS, PRESENT_FS, MAX_LIGHTS } from './shaders';
+import { STATIC_VS, INSTANCED_VS, SCENE_FS, SHADOW_VS, SHADOW_INST_VS, SHADOW_FS, FULLSCREEN_VS, CELL_FS, PRESENT_FS, MAX_LIGHTS , POINT_SHADOW_VS, POINT_SHADOW_INST_VS, POINT_SHADOW_FS } from './shaders';
 import { buildAtlas, measureCell, ATLAS_COLS } from './GlyphAtlas';
 import { buildMaterialTable, TABLE_W, TABLE_H } from './Materials';
 import { TextGrid } from './TextGrid';
@@ -7,13 +7,13 @@ import { VERTEX_STRIDE, type MeshData } from './Mesh';
 import { buildShapes, SHAPE_COUNT } from './Shapes';
 import type { Camera } from './Camera';
 import type { AtmosphereState } from './Atmosphere';
-import { mat4, ortho, lookAt, multiply, type Mat4 } from '@ascii-fort/core/math';
+import { mat4, ortho, lookAt, multiply, perspective, type Mat4 } from '@ascii-fort/core/math';
 
 export interface PointLight { x: number; y: number; z: number; radius: number; r: number; g: number; b: number }
 
 export interface GpuMesh { vao: WebGLVertexArrayObject; vbo: WebGLBuffer; ibo: WebGLBuffer; count: number }
 
-export interface DrawItem { mesh: GpuMesh; clip?: 0 | 1 | 2; shadow?: boolean }
+export interface DrawItem { mesh: GpuMesh; clip?: 0 | 1 | 2; shadow?: boolean; /** centre (chunks) pour l'ombre des torches */ cx?: number; cz?: number }
 
 /** Tampon d'instances d'entités (pièces animées : boîtes, cylindres, sphères, cônes…). */
 export class InstanceBuffer {
@@ -65,13 +65,15 @@ export interface FrameInput {
   sceneOn: boolean;
   /** 0..1 : liseré rouge de douleur */
   hurt?: number;
+  /** lumière ponctuelle qui projette des ombres (la torche la plus proche) */
+  pointShadow?: { x: number; y: number; z: number; radius: number } | null;
   /** teinte du monde [r, g, b, force] (eau, magie…) */
   tint?: [number, number, number, number];
   /** 0..1 : ondulation de l'image (sous l'eau) */
   wobble?: number;
 }
 
-const SHADOW_SIZE = 2048, SHADOW_RANGE = 110;
+const SHADOW_SIZE = 2048, SHADOW_RANGE = 110, POINT_SIZE = 256;
 
 export class Renderer {
   readonly gl: WebGL2RenderingContext;
@@ -94,6 +96,8 @@ export class Renderer {
   private cellTex: WebGLTexture[] = []; private cellFbo: WebGLFramebuffer | null = null;
   private uiGlyphTex: WebGLTexture | null = null; private uiFgTex: WebGLTexture | null = null; private uiBgTex: WebGLTexture | null = null;
   private shadowTex: WebGLTexture; private shadowFbo: WebGLFramebuffer;
+  private pointTex: WebGLTexture; private pointFbos: WebGLFramebuffer[] = [];
+  private pointSh: Shader; private pointInstSh: Shader;
   private shapes: GpuMesh[];
   private instF: WebGLBuffer; private instI: WebGLBuffer;
   private emptyVao: WebGLVertexArrayObject;
@@ -117,6 +121,22 @@ export class Renderer {
     this.shadowTex = makeTexture(gl, SHADOW_SIZE, SHADOW_SIZE, gl.DEPTH_COMPONENT24, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT);
     const dummy = makeTexture(gl, SHADOW_SIZE, SHADOW_SIZE, gl.R8, gl.RED, gl.UNSIGNED_BYTE);
     this.shadowFbo = makeFramebuffer(gl, [dummy], this.shadowTex);
+    // cube de profondeur pour l'ombre de la torche la plus proche
+    this.pointSh = new Shader(gl, POINT_SHADOW_VS, POINT_SHADOW_FS, 'pointShadow');
+    this.pointInstSh = new Shader(gl, POINT_SHADOW_INST_VS, POINT_SHADOW_FS, 'pointShadowInst');
+    this.pointTex = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_CUBE_MAP, this.pointTex);
+    for (let i = 0; i < 6; i++) gl.texImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, gl.DEPTH_COMPONENT24, POINT_SIZE, POINT_SIZE, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    for (let i = 0; i < 6; i++) {
+      const fb = gl.createFramebuffer()!;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_CUBE_MAP_POSITIVE_X + i, this.pointTex, 0);
+      gl.drawBuffers([gl.NONE]); gl.readBuffer(gl.NONE);
+      this.pointFbos.push(fb);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
     this.instF = gl.createBuffer()!; this.instI = gl.createBuffer()!;
     this.shapes = buildShapes().map((d) => {
@@ -227,8 +247,11 @@ export class Renderer {
       .v3('uSunDir', a.lightDir).v3('uSunColor', a.sunColor).v3('uAmbSky', a.ambSky).v3('uAmbGround', a.ambGround)
       .v3('uSkyHorizon', a.skyHorizon).f('uNight', a.night)
       .tex('uMatTable', 0, this.matTable).tex('uShadowMap', 1, this.shadowTex)
-      .m4('uShadowMat', this.shadowMat).f('uShadowOn', a.shadows ? 1 : 0).f('uWet', a.wet ?? 0);
+      .m4('uShadowMat', this.shadowMat).f('uShadowOn', a.shadows ? 1 : 0).f('uWet', a.wet ?? 0).f('uWind', Math.hypot(a.windX, a.windZ));
+    const ps = f.pointShadow;
+    sh.f('uPointShadowOn', ps ? 1 : 0).v3('uPointShadowPos', ps ? [ps.x, ps.y, ps.z] : [0, -9999, 0]).f('uPointShadowFar', ps ? ps.radius : 1);
     const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_CUBE_MAP, this.pointTex); gl.uniform1i(sh.u('uPointShadowMap'), 2);
     gl.uniform1i(sh.u('uNumLights'), Math.min(MAX_LIGHTS, f.lights.length));
     gl.uniform4fv(sh.u('uLightPos'), this.lightPos);
     gl.uniform4fv(sh.u('uLightCol'), this.lightCol);
@@ -241,6 +264,28 @@ export class Renderer {
     gl.bufferData(gl.ARRAY_BUFFER, fl, gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instI);
     gl.bufferData(gl.ARRAY_BUFFER, it, gl.DYNAMIC_DRAW);
+  }
+
+  /** Ombre de la torche la plus proche : 6 faces d'un cube de profondeur (distance à la lumière). */
+  private pointShadowPass(f: FrameInput, L: { x: number; y: number; z: number; radius: number }) {
+    const gl = this.gl;
+    const dirs: [number, number, number, number, number, number][] = [[1, 0, 0, 0, -1, 0], [-1, 0, 0, 0, -1, 0], [0, 1, 0, 0, 0, 1], [0, -1, 0, 0, 0, -1], [0, 0, 1, 0, -1, 0], [0, 0, -1, 0, -1, 0]];
+    const view = mat4(), proj = mat4(), vp = mat4();
+    perspective(proj, Math.PI / 2, 1, 0.05, L.radius);
+    gl.viewport(0, 0, POINT_SIZE, POINT_SIZE);
+    gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.5, 2);
+    const near = f.items.filter((it) => it.shadow && (it.cx === undefined || Math.hypot(it.cx - L.x, (it.cz ?? 0) - L.z) < L.radius + 46));
+    for (let face = 0; face < 6; face++) {
+      const d = dirs[face];
+      lookAt(view, 0, 0, 0, d[0], d[1], d[2], d[3], d[4], d[5]);
+      multiply(vp, proj, view);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.pointFbos[face]);
+      gl.clear(gl.DEPTH_BUFFER_BIT);
+      this.pointSh.use().m4('uFaceViewProj', vp).v3('uLightPos', [L.x, L.y, L.z]).f('uFar', L.radius);
+      for (const it of near) { gl.bindVertexArray(it.mesh.vao); gl.drawElements(gl.TRIANGLES, it.mesh.count, gl.UNSIGNED_INT, 0); this.drawCalls++; }
+      if (f.instances.count) { this.pointInstSh.use().m4('uFaceViewProj', vp).v3('uLightPos', [L.x, L.y, L.z]).f('uFar', L.radius); this.drawInstances(f.instances); }
+    }
+    gl.disable(gl.POLYGON_OFFSET_FILL);
   }
 
   private shadowPass(f: FrameInput) {
@@ -295,6 +340,7 @@ export class Renderer {
       if (f.instances.count) this.uploadInstances(f.instances);
       gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.depthMask(true);
       if (f.atmo.shadows) this.shadowPass(f);
+      if (f.pointShadow) this.pointShadowPass(f, f.pointShadow);
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFbo);
       gl.viewport(0, 0, this.wcols * 2, this.wrows * 2);

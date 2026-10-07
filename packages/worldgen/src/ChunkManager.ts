@@ -152,6 +152,13 @@ export class ChunkManager<T = unknown> {
     return out;
   }
 
+  /** Maillages chargés avec le centre de leur chunk. */
+  gpuItems(): { gpu: T; cx: number; cz: number }[] {
+    const out: { gpu: T; cx: number; cz: number }[] = [];
+    for (const l of this.chunks.values()) if (l.gpu) out.push({ gpu: l.gpu, cx: l.data.x0 + CHUNK / 2, cz: l.data.z0 + CHUNK / 2 });
+    return out;
+  }
+
   gpuMeshes(): T[] {
     const out: T[] = [];
     for (const l of this.chunks.values()) if (l.gpu) out.push(l.gpu);

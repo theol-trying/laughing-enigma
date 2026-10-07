@@ -15,6 +15,7 @@ layout(location=3) in uvec4 aMat;
 uniform mat4 uViewProj;
 uniform vec3 uCamPos;
 uniform float uTime;
+uniform float uWind;
 out vec3 vWorld;
 out vec3 vNormal;
 out vec4 vColor;
@@ -24,7 +25,10 @@ flat out uint vFlags;
 void main() {
   vec3 p = aPos;
   // balancement du feuillage au vent
-  if (aMat.y == 1u) p.xz += sin(uTime * 1.7 + p.x * 0.3 + p.z * 0.2) * 0.08 * clamp(p.y - aPos.y + 1.0, 0.0, 1.0);
+  if (aMat.y == 1u) {
+    float amp = 0.06 + uWind * 0.22, ph = uTime * (1.4 + uWind) + p.x * 0.3 + p.z * 0.2;
+    p.xz += vec2(sin(ph), cos(ph * 1.3 + 0.7)) * amp;
+  }
   vWorld = p;
   vNormal = aNormal.xyz;
   vColor = aColor;
@@ -75,6 +79,11 @@ flat in uint vFlags;
 uniform highp usampler2D uMatTable;
 uniform vec3 uCamPos;
 uniform float uWet;
+uniform float uWind;
+uniform highp samplerCube uPointShadowMap;
+uniform vec3 uPointShadowPos;
+uniform float uPointShadowFar;
+uniform float uPointShadowOn;
 uniform vec3 uSunDir;
 uniform vec3 uSunColor;
 uniform vec3 uAmbSky;
@@ -130,6 +139,12 @@ void main() {
   vec3 albedo = vColor.rgb;
   float sky = vColor.a;
   float phase = hash13(floor(vWorld * 2.0) + 0.5);
+  if (vMat == 1u || vMat == 8u || vMat == 30u || vMat == 36u) {
+    // vagues de vent dans l'herbe et les champs
+    float wv = sin(uTime * (1.1 + uWind * 1.5) - vWorld.x * 0.21 - vWorld.z * 0.13);
+    phase = fract(phase + wv * (0.12 + uWind * 0.2));
+    albedo *= 1.0 + wv * (0.04 + uWind * 0.05);
+  }
 
   if ((flags & 4u) != 0u) {
     // eau : normale animée
@@ -152,7 +167,19 @@ void main() {
     if (d >= r) continue;
     float att = 1.0 - d / r; att *= att;
     float lam = max(dot(n, L / max(d, 0.001)), 0.0) * 0.75 + 0.25;
-    light += uLightCol[i].rgb * att * lam;
+    float shf = 1.0;
+    if (uPointShadowOn > 0.5 && distance(uLightPos[i].xyz, uPointShadowPos) < 0.05) {
+      // ombre portée : distance au premier obstacle vue depuis la torche (4 échantillons doux)
+      vec3 lw = vWorld - uPointShadowPos;
+      float cur = length(lw) - 0.15, lit = 0.0;
+      vec3 t1 = normalize(cross(lw, vec3(0.0, 1.0, 0.01))), t2 = normalize(cross(lw, t1));
+      for (int k = 0; k < 4; k++) {
+        vec2 o = vec2(k == 0 || k == 2 ? -1.0 : 1.0, k < 2 ? -1.0 : 1.0) * 0.012 * cur;
+        lit += cur > texture(uPointShadowMap, lw + t1 * o.x + t2 * o.y).r * uPointShadowFar ? 0.0 : 1.0;
+      }
+      shf = 0.12 + 0.88 * lit / 4.0;
+    }
+    light += uLightCol[i].rgb * att * lam * shf;
   }
 
   vec3 col = albedo * light;
@@ -214,6 +241,31 @@ layout(location=7) in vec4 aM3;
 uniform mat4 uShadowMat;
 uniform vec3 uCamPos;
 void main() { vec4 w = mat4(aM0, aM1, aM2, aM3) * vec4(aPos, 1.0); gl_Position = uShadowMat * vec4(w.xyz - uCamPos, 1.0); }`;
+
+/** Ombre d'une lumière ponctuelle : distance au point lumineux, écrite comme profondeur (cube de 6 faces). */
+export const POINT_SHADOW_VS = SCENE_COMMON + /* glsl */ `
+layout(location=0) in vec3 aPos;
+uniform mat4 uFaceViewProj;
+uniform vec3 uLightPos;
+out vec3 vRel;
+void main() { vRel = aPos - uLightPos; gl_Position = uFaceViewProj * vec4(vRel, 1.0); }`;
+
+export const POINT_SHADOW_INST_VS = SCENE_COMMON + /* glsl */ `
+layout(location=0) in vec3 aPos;
+layout(location=4) in vec4 aM0;
+layout(location=5) in vec4 aM1;
+layout(location=6) in vec4 aM2;
+layout(location=7) in vec4 aM3;
+uniform mat4 uFaceViewProj;
+uniform vec3 uLightPos;
+out vec3 vRel;
+void main() { vec4 w = mat4(aM0, aM1, aM2, aM3) * vec4(aPos, 1.0); vRel = w.xyz - uLightPos; gl_Position = uFaceViewProj * vec4(vRel, 1.0); }`;
+
+export const POINT_SHADOW_FS = SCENE_COMMON + /* glsl */ `
+in vec3 vRel;
+uniform float uFar;
+out vec4 o;
+void main() { gl_FragDepth = clamp(length(vRel) / uFar, 0.0, 1.0); o = vec4(1.0); }`;
 
 export const SHADOW_FS = SCENE_COMMON + /* glsl */ `
 out vec4 o;
@@ -396,6 +448,27 @@ void main() {
       int mat = int(dat[i0].r * 255.0 + 0.5);
       float ph = dat[i0].g;
       uint flags = tbl(14, mat);
+      if ((flags & 4u) != 0u && ld[i0] < 160.0) {
+        // reflets dans l'eau : rayon réfléchi suivi dans l'image (arbres, berges, maisons, sinon le ciel)
+        vec3 fwd = uInvViewRot * vec3(0.0, 0.0, -1.0);
+        vec3 P = vd * ld[i0] / max(0.15, dot(vd, fwd));
+        vec3 rd = reflect(vd, vec3(0.0, 1.0, 0.0));
+        vec3 refl = skyColor(rd);
+        for (int k = 0; k < 7; k++) {
+          float t = 1.0 + float(k * k) * 1.6;
+          vec3 v = uViewRot * (P + rd * t);
+          if (v.z > -0.2) break;
+          vec2 ndc = vec2(v.x / (-v.z * uTanHalf.x), v.y / (-v.z * uTanHalf.y));
+          if (abs(ndc.x) > 1.0 || abs(ndc.y) > 1.0) break;
+          ivec2 tx = ivec2((ndc * 0.5 + 0.5) * vec2(uGrid * 2));
+          float zz = texelFetch(uDepth, tx, 0).r;
+          if (zz >= 0.99999) continue;
+          float sd = linDepth(zz);
+          if (sd < -v.z - 0.2 && sd > -v.z - t * 0.9 - 1.0) { refl = texelFetch(uColor, tx, 0).rgb; break; }
+        }
+        float fres = 0.3 + 0.5 * pow(1.0 - clamp(-vd.y, 0.0, 1.0), 3.0);
+        c = mix(c, refl, fres * 0.6);
+      }
       int rampLen = int(tbl(8, mat));
       int detN = int(tbl(13, mat));
       float d = ld[i0];

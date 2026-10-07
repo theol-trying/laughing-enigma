@@ -31,7 +31,7 @@ let closedAt = 0;
 screens.onResume = () => { closedAt = performance.now(); if (game) { input.requestLock(); game.fight.lockUntilRelease = true; } };
 
 // options (préférences locales du navigateur)
-const DEFAULT_OPTS: Options = { cellSize: Math.max(10, Math.min(20, Math.round(window.innerHeight / 58))), detail: 0.75, sensitivity: 1, fov: 68, volume: 0.6, music: 0.6, timeScale: 1, palette: 0 };
+const DEFAULT_OPTS: Options = { cellSize: Math.max(10, Math.min(20, Math.round(window.innerHeight / 58))), detail: 0.75, sensitivity: 1, fov: 68, volume: 0.6, music: 0.6, timeScale: 1, palette: 0, torchShadows: true };
 let opts: Options = { ...DEFAULT_OPTS };
 try { opts = { ...DEFAULT_OPTS, ...JSON.parse(localStorage.getItem('ascii-fort-options') ?? '{}') }; } catch { /* stockage indisponible */ }
 const saveOpts = () => { try { localStorage.setItem('ascii-fort-options', JSON.stringify(opts)); } catch { /* ignore */ } };
@@ -51,7 +51,7 @@ function applyOptions() {
   saveOpts();
   if (r.cssCellH !== opts.cellSize || r.detail !== opts.detail) r.resize(opts.cellSize, opts.detail);
   r.palette = opts.palette ?? 0;
-  if (game) { game.audio.setVolume(opts.volume); game.audio.setMusicVolume(opts.music); game.sensitivity = opts.sensitivity; game.camera.fovY = (opts.fov * Math.PI) / 180; game.time.scale = opts.timeScale; }
+  if (game) { game.audio.setVolume(opts.volume); game.audio.setMusicVolume(opts.music); game.torchShadows = opts.torchShadows !== false; game.sensitivity = opts.sensitivity; game.camera.fovY = (opts.fov * Math.PI) / 180; game.time.scale = opts.timeScale; }
 }
 
 function hasSave(): boolean { return !!SaveManager.latest(); }
