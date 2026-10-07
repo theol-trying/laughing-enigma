@@ -6,7 +6,7 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Jalon 5 en cours : retours de jeu n°2 (liste « Jalon 5 », première case vide). Lancer `npm run autosave` en arrière-plan.
+Jalon 5 terminé (retours de jeu n°2, étapes 32-38). Lancer `npm run autosave` en arrière-plan au début de chaque session.
 Jalon 2 terminé (étapes 12 à 19) : modèles articulés, police fine (deux grilles), bibliothèques (packages/*),
 multijoueur coop Cloudflare (un Worker : assets + Durable Object Room ; autorité par zone ; faits partagés).
 Déployé le 2026-10-06 par l'utilisateur : Worker Cloudflare « ascii-fort » relié au dépôt (build réussi, redéploiement à chaque push sur main).
@@ -60,7 +60,7 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 35. Récolte : abattre les arbres à la hache (bois, branches, écorce), miner les rochers à la pioche (pierre, minerais, charbon, gemmes), fonte à la forge ; arbres/rochers retirés (persistants, partagés en ligne)
 - [x] 36. Commerce visible : marchandises selon le métier (armes et outils chez le forgeron…), touche T pour commercer, prêtres qui vendent des sorts
 - [x] 37. TAB : gestion de l'équipement (emplacements, catégories, comparaison) et onglet Sorts (choisir R/F, nouveaux sorts)
-- [ ] 38. Vérification (local + en ligne), docs, déploiement
+- [x] 38. Vérification (local + en ligne), docs, déploiement
 
 ## Décisions clés (ne pas re-débattre)
 - Dev : `npm run dev` (port 5199). Dépôt : github.com/theol-trying/laughing-enigma (push à chaque checkpoint).
@@ -152,3 +152,10 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
   cris de créatures, hurlements, enclume). Game.musicMood/worldSounds. Rendu hors ligne vérifié (5 thèmes : son, pas
   de NaN ni saturation). Multi : PlayerCombat.onCast → fx (tirs rejoués, étincelles de soin, sons) ; échanges :
   Coop.trade (offres versionnées, validation croisée), écrans TradeAskScreen/PlayerTradeScreen. Testé avec un bot.
+- 2026-10-07 : jalon 5 (32-38) fait. PlayerCombat.lockUntilRelease (pas de coup en fermant un écran), dialogue E/Échap ;
+  ouïe = (0,8 + bruit×20)×(1 − discrétion×0,5)×murs, cône de vision dès 0,9 m (avant : 360° sous 3 m), bruit du vol ;
+  travail des PNJ seulement à leur poste, outil en main (forgeron/artisan : marteau, mineur : pioche). Sommets des
+  rochers/souches/murets praticables (STEP 0,45 m), colliders mobiles marqués dyn. Souffle (20 s), effet de dégâts.
+  Météo moyennée sur 25 points (≈ 340 m). Récolte : HarvestNode (id cx:cz:gx:gz), ChunkManager.removed/removeNode,
+  souche/gravats, fait node: en ligne, fonte au foyer de forge. Sorts (Spells.ts) : R/F au choix, parchemins,
+  projectiles givre/éclair (projectileLook partagé), bonus via castBonus. Inventaire à onglets + onglet Sorts. T = commerce.

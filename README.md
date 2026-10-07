@@ -106,6 +106,20 @@ pluie visible dans le décor (gouttes à plusieurs profondeurs, éclaboussures, 
 qui sèchent ensuite). Les murs bloquent la vue, l'ouïe (en partie) et les interactions ; accroupi, un
 indicateur dit si l'on est caché ou repéré, et chaque vol annonce s'il a des témoins.
 
+**Récolte et artisanat** — avec une hache de bûcheron, on abat les arbres (bûches, branches, écorce ;
+il reste une souche) ; avec une pioche, on brise les rochers (pierre, minerai de fer, charbon, parfois
+de l'or ou une gemme, plus souvent en montagne). Le minerai se fond au foyer d'une forge (2 minerais +
+1 charbon = 1 lingot), les branches servent aux flèches, l'écorce aux potions. Arbres abattus et
+rochers brisés restent ainsi (sauvegarde, et partagés en ligne). Les outils se vendent chez le forgeron.
+
+**Magie** — sept sorts : trait de feu, soin, éclat de givre (ralentit), éclair, bouclier de mana,
+lumière, pas feutrés ; les nouveaux s'apprennent en lisant un parchemin (prêtres, moines), et l'on
+choisit dans l'inventaire (onglet Sorts) celui lancé par `R` et celui lancé par `F`.
+
+**Corps** — on peut monter sur les rochers, souches et murets ; sous l'eau, une barre de souffle
+(20 s) avant de se noyer ; chaque coup reçu se voit (flash rouge, secousse, montant des dégâts et
+flèche vers l'attaquant), chutes comprises.
+
 **Progression** — les créatures sont plus fortes loin du village de départ (niveau affiché, ≈ +1 tous
 les 650 m, plus encore dans les donjons profonds) et rapportent plus d'expérience ; chaque niveau
 apporte PV, endurance, mana, dégâts et un point de caractéristique (touche `P`) ; bonus temporaires :
@@ -154,12 +168,12 @@ développement (F1).
 | `Z Q S D` / `W A S D` | se déplacer (selon le clavier) |
 | Souris | regarder (clic pour capturer) |
 | `Maj` | sprinter · `Espace` sauter (≈ 1,2 m) · `C` s'accroupir / se relever (discrétion ; en nageant : plonger) |
-| `E` | interagir / parler / fouiller |
+| `E` | interagir / parler / fouiller · `T` commercer avec le PNJ visé |
 | Clic gauche | attaquer (maintenir : attaque lourde ; arc : bander) |
 | Clic droit | bloquer |
 | `V` ou double appui | esquiver |
-| `B` | arc ↔ arme de mêlée · `R` trait de feu · `F` soin · `H` potion |
-| `Tab` inventaire · `M` carte · `J` journal · `P` personnage (dépenser ses points) | |
+| `B` | arc ↔ arme de mêlée · `R` / `F` les deux sorts choisis (Tab → Sorts) · `H` potion |
+| `Tab` inventaire (onglets, comparaison, équipement, sorts) · `M` carte · `J` journal · `P` personnage (points) | |
 | `Échap` | pause (sauvegarder, charger, options) · `F5`/`F9` sauvegarde/chargement rapides |
 | `F3` | informations de débogage · `F1` console (`help`) |
 | `Entrée` | (en ligne) écrire un message aux autres joueurs · `E` face à un joueur : proposer un échange |
