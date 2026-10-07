@@ -6,7 +6,7 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Jalon 4 terminé (musique procédurale, ambiances, son spatialisé, tirs/sorts et échanges en multi). Suite : selon l'utilisateur.
+Jalon 5 en cours : retours de jeu n°2 (liste « Jalon 5 », première case vide). Lancer `npm run autosave` en arrière-plan.
 Jalon 2 terminé (étapes 12 à 19) : modèles articulés, police fine (deux grilles), bibliothèques (packages/*),
 multijoueur coop Cloudflare (un Worker : assets + Durable Object Room ; autorité par zone ; faits partagés).
 Déployé le 2026-10-06 par l'utilisateur : Worker Cloudflare « ascii-fort » relié au dépôt (build réussi, redéploiement à chaque push sur main).
@@ -52,6 +52,15 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 29. Multi : flèches et sorts des autres joueurs visibles (et audibles)
 - [x] 30. Multi : échanges d'objets entre joueurs
 - [x] 31. Vérification (local + en ligne), docs, déploiement
+
+### Jalon 5 — retours de jeu n°2 (2026-10-07)
+- [ ] 32. Dialogue qui se ferme sans coup d'épée ; discrétion (ouïe selon l'allure, de dos accroupi = invisible), bruit du vol ; PNJ qui « travaillent » dans le vide (forgeron), outils en main
+- [ ] 33. Se tenir sur pierres, souches, murets (marches et sommets praticables) ; barre de souffle sous l'eau ; effet de dégâts (flash, secousse, direction, chiffres, chutes)
+- [ ] 34. Météo : transitions spatiales douces entre régions (plus de pluie/brouillard côte à côte)
+- [ ] 35. Récolte : abattre les arbres à la hache (bois, branches, écorce), miner les rochers à la pioche (pierre, minerais, charbon, gemmes), fonte à la forge ; arbres/rochers retirés (persistants, partagés en ligne)
+- [ ] 36. Commerce visible : marchandises selon le métier (armes et outils chez le forgeron…), touche T pour commercer, prêtres qui vendent des sorts
+- [ ] 37. TAB : gestion de l'équipement (emplacements, catégories, comparaison) et onglet Sorts (choisir R/F, nouveaux sorts)
+- [ ] 38. Vérification (local + en ligne), docs, déploiement
 
 ## Décisions clés (ne pas re-débattre)
 - Dev : `npm run dev` (port 5199). Dépôt : github.com/theol-trying/laughing-enigma (push à chaque checkpoint).
