@@ -43,6 +43,13 @@ export interface EntityNet {
 }
 
 const NO_OTHERS: RemoteTarget[] = [];
+/** Le déplacement (a→b) coupe-t-il la ligne du mur (c→d) ? */
+function segCross(ax: number, az: number, bx: number, bz: number, cx: number, cz: number, dx: number, dz: number): boolean {
+  const den = (bx - ax) * (dz - cz) - (bz - az) * (dx - cx);
+  if (Math.abs(den) < 1e-12) return false;
+  const t = ((cx - ax) * (dz - cz) - (cz - az) * (dx - cx)) / den, u = ((cx - ax) * (bz - az) - (cz - az) * (bx - ax)) / den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+}
 /** métiers qui travaillent un outil en main (geste de frappe à leur poste) */
 const WORK_TOOLS = new Set(['forgeron', 'artisan', 'mineur']);
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -340,6 +347,18 @@ export class EntityManager {
     e.faceTo = Math.hypot(p.x - e.x, p.z - e.z) < 3 && !e.path ? Math.atan2(p.x - e.x, -(p.z - e.z)) : sp.face;
   }
 
+  private wallSegs: SegCollider[] = []; private wallCircles: CircleCollider[] = []; private wallPlats: Platform[] = [];
+  /** Déplace un PNJ sans jamais franchir un mur (glisse le long si besoin) ; renvoie false s'il est bloqué. */
+  private step(e: Entity, mx: number, mz: number): boolean {
+    this.host.world.chunks.collidersNear(e.x, e.z, this.wallCircles, this.wallSegs, this.wallPlats);
+    const tall = this.wallSegs.filter((w) => w.top > e.y + 1.0 && w.bottom < e.y + 1.5);
+    const crosses = (nx: number, nz: number) => tall.some((w) => segCross(e.x, e.z, nx, nz, w.ax, w.az, w.bx, w.bz));
+    if (!crosses(e.x + mx, e.z + mz)) { e.x += mx; e.z += mz; return true; }
+    if (Math.abs(mx) > 1e-4 && !crosses(e.x + mx, e.z)) { e.x += mx; return true; }
+    if (Math.abs(mz) > 1e-4 && !crosses(e.x, e.z + mz)) { e.z += mz; return true; }
+    return false;
+  }
+
   private moveNpc(e: Entity, dt: number) {
     const foe = e.foe;
     // seul le sommeil couche un PNJ : réveillé, il se relève aussitôt
@@ -347,7 +366,7 @@ export class EntityManager {
     if (e.action === 'combattre' && !foe && e.hostile) {
       const p = this.host.player, dx = p.x - e.x, dz = p.z - e.z, d = Math.hypot(dx, dz);
       e.heading = turn(e.heading, Math.atan2(dx, -dz), dt * 8);
-      if (d > 1.9) { e.x += (dx / d) * e.speed * 2.6 * dt; e.z += (dz / d) * e.speed * 2.6 * dt; e.pose.walk += dt * 10; }
+      if (d > 1.9) { this.step(e, (dx / d) * e.speed * 2.6 * dt, (dz / d) * e.speed * 2.6 * dt); e.pose.walk += dt * 10; }
       else {
         e.cooldown -= dt;
         e.pose.swing = Math.max(0, e.cooldown - 0.6);
@@ -361,7 +380,7 @@ export class EntityManager {
     if (e.action === 'combattre' && foe) {
       const dx = foe.x - e.x, dz = foe.z - e.z, d = Math.hypot(dx, dz);
       e.heading = turn(e.heading, Math.atan2(dx, -dz), dt * 8);
-      if (d > 1.8) { e.x += (dx / d) * e.speed * 2.2 * dt; e.z += (dz / d) * e.speed * 2.2 * dt; e.pose.walk += dt * 9; }
+      if (d > 1.8) { this.step(e, (dx / d) * e.speed * 2.2 * dt, (dz / d) * e.speed * 2.2 * dt); e.pose.walk += dt * 9; }
       else {
         e.cooldown -= dt;
         e.pose.swing = Math.max(0, e.cooldown - 0.6);
@@ -384,7 +403,7 @@ export class EntityManager {
       if (moving && !blocked) {
         const dx = tx - e.x, dz = tz - e.z, d = Math.hypot(dx, dz) || 1;
         const step = Math.min(d, speed * dt);
-        e.x += (dx / d) * step; e.z += (dz / d) * step;
+        if (!this.step(e, (dx / d) * step, (dz / d) * step)) { e.path = null; e.target = null; }
         e.heading = turn(e.heading, Math.atan2(dx, -dz), dt * 6);
         e.pose.walk += dt * speed * 4.2;
       } else {
@@ -439,7 +458,10 @@ export class EntityManager {
       e.pathPending = false;
       const zone = this.zones.get(e.sid);
       if (!zone || !e.target) continue;
-      e.path = zone.grid.findPath(e.x, e.z, e.target.x, e.target.z) ?? [{ x: e.target.x, z: e.target.z }];
+      const path = zone.grid.findPath(e.x, e.z, e.target.x, e.target.z);
+      // pas de chemin : on ne va tout droit que si la cible est à deux pas (sinon on traverserait les murs)
+      e.path = path ?? (Math.hypot(e.target.x - e.x, e.target.z - e.z) < 2.5 ? [{ x: e.target.x, z: e.target.z }] : null);
+      if (!e.path) e.target = null;
       e.pathI = 0;
     }
     for (const e of this.entities) {

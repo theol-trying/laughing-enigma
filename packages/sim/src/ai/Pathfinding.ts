@@ -13,6 +13,8 @@ export class NavGrid {
   /** composante connexe de chaque case libre (−1 si bloquée) et composante principale */
   comp = new Int32Array(0);
   main = -1;
+  /** taille de chaque zone connexe */
+  sizes: number[] = [];
   constructor(readonly x0: number, readonly z0: number, readonly w: number, readonly h: number) {
     this.blocked = new Uint8Array(w * h);
   }
@@ -83,6 +85,7 @@ export class NavGrid {
       sizes.push(size);
     }
     this.comp = comp;
+    this.sizes = sizes;
     this.main = sizes.length ? sizes.indexOf(Math.max(...sizes)) : -1;
   }
 
@@ -95,7 +98,22 @@ export class NavGrid {
   inside(x: number, z: number): boolean { return this.idx(x, z) >= 0; }
 
   /** Case libre la plus proche (spirale). */
-  nearestFree(x: number, z: number, maxR = 8): number {
+/** Case libre la plus proche, dans une zone connexe donnée (−1 : n'importe laquelle). */
+  nearestCell(x: number, z: number, comp: number, maxR = 8): number {
+    const ok = (c: number) => !this.blocked[c] && (comp < 0 || !this.comp.length || this.comp[c] === comp);
+    const k = this.idx(x, z);
+    if (k >= 0 && ok(k)) return k;
+    const ci = Math.floor(x - this.x0), cj = Math.floor(z - this.z0);
+    for (let r = 1; r <= maxR; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
+      if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
+      const i = ci + di, j = cj + dj;
+      if (i < 0 || j < 0 || i >= this.w || j >= this.h) continue;
+      if (ok(j * this.w + i)) return j * this.w + i;
+    }
+    return -1;
+  }
+
+    nearestFree(x: number, z: number, maxR = 8): number {
     const k = this.idx(x, z);
     const ok = (c: number) => !this.blocked[c] && (this.main < 0 || this.comp[c] === this.main);
     if (k >= 0 && ok(k)) return k;
@@ -125,8 +143,17 @@ export class NavGrid {
 
   /** Chemin lissé (points en mètres) ou null. maxNodes borne le coût. */
   findPath(sx: number, sz: number, tx: number, tz: number, maxNodes = 120000): { x: number; z: number }[] | null {
-    const s = this.nearestFree(sx, sz), t = this.nearestFree(tx, tz);
-    if (s < 0 || t < 0) return null;
+    // départ dans la zone où se trouve réellement l'entité (pas de l'autre côté d'un mur),
+    // arrivée dans cette même zone
+    let s = this.nearestCell(sx, sz, -1);
+    if (s < 0) return null;
+    // petite poche (entre un lit et un mur…) : on rejoint la zone principale si elle est à deux pas
+    if (this.comp.length && this.main >= 0 && this.comp[s] !== this.main && (this.sizes[this.comp[s]] ?? 0) < 16) {
+      const m = this.nearestCell(sx, sz, this.main, 2);
+      if (m >= 0) s = m;
+    }
+    const t = this.nearestCell(tx, tz, this.comp.length ? this.comp[s] : -1);
+    if (t < 0) return null;
     const W = this.w, n = this.w * this.h;
     const g = new Float32Array(n).fill(Infinity), prev = new Int32Array(n).fill(-1), closed = new Uint8Array(n);
     const heap = new MinHeap(1024);

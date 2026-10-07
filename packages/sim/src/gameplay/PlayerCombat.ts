@@ -85,8 +85,10 @@ export class PlayerCombat {
     const bow = weapon.kind === 'arc';
     if (this.lockUntilRelease && !input.mouseDown(0) && !input.mouseReleased(0)) this.lockUntilRelease = false;
     const free = !this.lockUntilRelease;
-    if (free && input.mouseDown(0)) this.charge += dt;
-    if (free && input.mouseReleased(0) && this.cooldown <= 0) {
+    const noArrow = bow && !ch.inv.count('flèche');
+    if (noArrow && input.mouseClicked(0) && this.cooldown <= 0) { w.events.emit('message', { text: 'Plus de flèches ! (B : arme de mêlée)', color: 0xe05040 }); this.cooldown = 0.6; }
+    if (free && !noArrow && input.mouseDown(0)) this.charge += dt;
+    if (free && !noArrow && input.mouseReleased(0) && this.cooldown <= 0) {
       if (bow) this.fireArrow(w, Math.min(1, this.charge / (0.8 / weapon.speed)));
       else {
         const heavy = this.charge > 0.42;
@@ -225,11 +227,29 @@ export class PlayerCombat {
       trsYawPitch(tmp, x, y, z, -h, pt, 0.04, 0.75, 0.05); ib.add(tmp, 0x6a4a2a, M.WOOD, 0, 0, 1);
       if (dr > 0.05) { const [ax, ay, az] = at(0.75 - dr * 0.25, 0.05, -0.12); trsYawPitch(tmp, ax, ay, az, -h, pt, 0.02, 0.02, 0.7); ib.add(tmp, 0xb8b8b0, M.METAL, 0, 0, 1); }
     } else {
-      const len = wd ? (wd.kind === 'dague' ? 0.35 : wd.kind === 'lance' || wd.kind === 'bâton' ? 1.2 : 0.8) : 0.15;
+      // chaque arme a sa forme : lame (épée, dague), manche et fer (hache, pioche, masse, lance), bâton
+      const kind = wd?.kind;
+      const hafted = kind === 'hache' || kind === 'pioche' || kind === 'masse' || kind === 'lance' || kind === 'bâton';
+      const len = wd ? (kind === 'dague' ? 0.35 : kind === 'lance' || kind === 'bâton' ? 1.2 : hafted ? 0.75 : 0.8) : 0.15;
       const [x, y, z] = at(0.55 - s * 0.1, 0.3 - s * 0.25, -0.3 + s * 0.15 + bob);
-      const col = wd ? (wd.kind === 'bâton' ? 0x6a4a2a : wd.element === 'feu' ? 0xff8a40 : wd.element === 'givre' ? 0x9ad8ff : 0xc8c8d0) : 0xd0a080;
-      trsYawPitch(tmp, x, y, z, -h + 0.25 - s * 0.9, pt + 0.5 - s * 1.4, wd ? 0.05 : 0.12, wd ? 0.05 : 0.12, len);
-      ib.add(tmp, col, wd ? (wd.kind === 'bâton' ? M.WOOD : M.METAL) : M.SKIN, 0, 0, 1);
+      const yaw = -h + 0.25 - s * 0.9, pitch = pt + 0.5 - s * 1.4;
+      const blade = wd ? (wd.element === 'feu' ? 0xff8a40 : wd.element === 'givre' ? 0x9ad8ff : 0xc8c8d0) : 0xd0a080;
+      const thick = !wd ? 0.12 : hafted ? 0.04 : 0.05;
+      trsYawPitch(tmp, x, y, z, yaw, pitch, thick, thick, len);
+      ib.add(tmp, hafted ? 0x6a4a2a : blade, hafted ? M.WOOD : wd ? M.METAL : M.SKIN, 0, 0, 1);
+      if (hafted && kind !== 'bâton') {
+        const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+        const ax = [sy * cp, -sp, cy * cp], ay = [sy * sp, cp, cy * sp];
+        // le fer est au bout le plus éloigné de l'œil
+        const e1 = [x + ax[0] * len / 2, y + ax[1] * len / 2, z + ax[2] * len / 2], e2 = [x - ax[0] * len / 2, y - ax[1] * len / 2, z - ax[2] * len / 2];
+        const d1 = Math.hypot(e1[0] - cam.x, e1[1] - cam.y, e1[2] - cam.z), d2 = Math.hypot(e2[0] - cam.x, e2[1] - cam.y, e2[2] - cam.z);
+        const tip = d1 > d2 ? e1 : e2, sg = d1 > d2 ? 1 : -1;
+        const put = (o: number[], sx2: number, sy2: number, sz2: number) => { trsYawPitch(tmp, o[0], o[1], o[2], yaw, pitch, sx2, sy2, sz2); ib.add(tmp, 0x9a9aa4, M.METAL, 0, 0, 1); };
+        if (kind === 'hache') put([tip[0] - ax[0] * sg * 0.08 + ay[0] * 0.08, tip[1] - ax[1] * sg * 0.08 + ay[1] * 0.08, tip[2] - ax[2] * sg * 0.08 + ay[2] * 0.08], 0.03, 0.2, 0.17);
+        else if (kind === 'pioche') put([tip[0] - ax[0] * sg * 0.04, tip[1] - ax[1] * sg * 0.04, tip[2] - ax[2] * sg * 0.04], 0.05, 0.55, 0.06);
+        else if (kind === 'masse') put(tip, 0.14, 0.14, 0.14);
+        else if (kind === 'lance') put([tip[0] + ax[0] * sg * 0.08, tip[1] + ax[1] * sg * 0.08, tip[2] + ax[2] * sg * 0.08], 0.05, 0.05, 0.2);
+      }
     }
     if (ch.shield && (blocking || wd?.kind !== 'arc')) {
       const [x, y, z] = at(0.5, blocking ? -0.08 : -0.38, blocking ? -0.1 : -0.42);

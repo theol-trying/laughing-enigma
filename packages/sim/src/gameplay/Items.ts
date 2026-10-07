@@ -91,7 +91,7 @@ const D: ItemDef[] = [
 ];
 
 // parchemins : un par sort à apprendre
-for (const s of SPELLS) if (s.price) D.push({ id: scrollId(s.id), name: `Parchemin : ${s.name}`, cat: 'parchemin', value: s.price, weight: 0.1, desc: `${s.desc} Lire le parchemin pour apprendre le sort.` });
+for (const s of SPELLS) if (s.price) D.push({ id: scrollId(s.id), name: `Parchemin : ${s.name}`, cat: 'parchemin', value: s.price, weight: 0.1, desc: `${s.desc} Lire le parchemin (Entrée dans l'inventaire) apprend le sort pour toujours ; le parchemin se consume.` });
 
 export const ITEMS = new Map<string, ItemDef>(D.map((d) => [d.id, d]));
 
