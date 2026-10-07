@@ -120,6 +120,14 @@ choisit dans l'inventaire (onglet Sorts) celui lancé par `R` et celui lancé pa
 (20 s) avant de se noyer ; chaque coup reçu se voit (flash rouge, secousse, montant des dégâts et
 flèche vers l'attaquant), chutes comprises.
 
+**Discrétion** — accroupi (`C`), on est quasi inaudible à l'arrêt ; une cible qui ne vous a pas repéré
+subit une attaque sournoise (dégâts ×3 au corps à corps, ×2 à l'arc et aux sorts) ; dans le dos d'un PNJ,
+`E` vole à la tire (réussite selon la furtivité et l'agilité, un échec est un délit).
+
+**Commerce** — un clic choisit l'objet, la quantité se règle (+/-, boutons, Maj ×10), Entrée ou
+double-clic valide ; la fiche compare l'objet avec celui que vous portez. `E`, `Tab` ou `Échap` ferment
+les dialogues et le commerce.
+
 **Progression** — les créatures sont plus fortes loin du village de départ (niveau affiché, ≈ +1 tous
 les 650 m, plus encore dans les donjons profonds) et rapportent plus d'expérience ; chaque niveau
 apporte PV, endurance, mana, dégâts et un point de caractéristique (touche `P`) ; bonus temporaires :
@@ -168,14 +176,14 @@ développement (F1).
 | `Z Q S D` / `W A S D` | se déplacer (selon le clavier) |
 | Souris | regarder (clic pour capturer) |
 | `Maj` | sprinter · `Espace` sauter (≈ 1,2 m) · `C` s'accroupir / se relever (discrétion ; en nageant : plonger) |
-| `E` | interagir / parler / fouiller · `T` commercer avec le PNJ visé |
+| `E` | interagir / parler / fouiller (accroupi dans le dos d'un PNJ : voler à la tire) · `T` commercer avec le PNJ visé |
 | Clic gauche | attaquer (maintenir : attaque lourde ; arc : bander) |
 | Clic droit | bloquer |
 | `V` ou double appui | esquiver |
 | `B` | arc ↔ arme de mêlée · `R` / `F` les deux sorts choisis (Tab → Sorts) · `H` potion |
 | `Tab` inventaire (onglets, comparaison, équipement, sorts) · `M` carte · `J` journal · `P` personnage (points) | |
 | `Échap` | pause (sauvegarder, charger, options) · `F5`/`F9` sauvegarde/chargement rapides |
-| `F3` | informations de débogage · `F1` console (`help`) |
+| `F3` | informations de débogage · `F1` console de test (`help` : téléportation, heure, météo, objets, créatures…) |
 | `Entrée` | (en ligne) écrire un message aux autres joueurs · `E` face à un joueur : proposer un échange |
 
 ## Volontairement simplifié

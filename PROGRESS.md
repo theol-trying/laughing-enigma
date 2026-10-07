@@ -6,7 +6,7 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Jalon 6 en cours : retours de jeu n°3 (liste « Jalon 6 », première case vide). Lancer `npm run autosave` en arrière-plan.
+Jalon 6 terminé (retours de jeu n°3, étapes 39-42). Lancer `npm run autosave` en arrière-plan au début de chaque session.
 Jalon 2 terminé (étapes 12 à 19) : modèles articulés, police fine (deux grilles), bibliothèques (packages/*),
 multijoueur coop Cloudflare (un Worker : assets + Durable Object Room ; autorité par zone ; faits partagés).
 Déployé le 2026-10-06 par l'utilisateur : Worker Cloudflare « ascii-fort » relié au dépôt (build réussi, redéploiement à chaque push sur main).
@@ -66,7 +66,7 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 39. Dialogues : options visibles ; commerce : sélection puis achat confirmé, quantité, comparaison avec l'équipement ; Échap/Tab/E ferment sans ouvrir la pause
 - [x] 40. Attaque sournoise (accroupi, cible qui ne vous a pas repéré : dégâts ×3) et vol à la tire
 - [x] 41. Outil visible en main (hache, pioche…), arc sans flèches, PNJ qui fuyaient à travers les murs, parchemins expliqués
-- [ ] 42. Vérification, docs, déploiement
+- [x] 42. Vérification, docs, déploiement
 
 ## Décisions clés (ne pas re-débattre)
 - Dev : `npm run dev` (port 5199). Dépôt : github.com/theol-trying/laughing-enigma (push à chaque checkpoint).
@@ -165,3 +165,10 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
   Météo moyennée sur 25 points (≈ 340 m). Récolte : HarvestNode (id cx:cz:gx:gz), ChunkManager.removed/removeNode,
   souche/gravats, fait node: en ligne, fonte au foyer de forge. Sorts (Spells.ts) : R/F au choix, parchemins,
   projectiles givre/éclair (projectileLook partagé), bonus via castBonus. Inventaire à onglets + onglet Sorts. T = commerce.
+- 2026-10-07 : jalon 6 (39-42) fait. DialogueScreen : options dessinées dans draw() (avant : recouvertes par le cadre),
+  E/Tab/Échap ; TradeScreen : sélection, quantité (+/-, [max]), double-clic/Entrée/bouton, comparaison
+  (compareWithEquipped partagé avec l'inventaire) ; main : pas de pause sur perte de souris < 600 ms après fermeture.
+  Attaque sournoise (CombatWorld.sneak, Game.aware) ×3/×2 ; vol à la tire (focus pick, 1 fois par PNJ et par jour).
+  Arme en main selon le type (fer de hache/pioche/masse/lance) ; arc inactif sans flèches ; NavGrid : départ dans la
+  zone de l'entité (poche < 16 cases : zone principale à 2 m), plus de repli en ligne droite ; EntityManager.step :
+  un PNJ ne franchit plus la ligne d'un mur (glisse ou recalcule).
