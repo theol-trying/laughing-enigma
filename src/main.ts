@@ -8,7 +8,7 @@ import { Camera } from '@ascii-fort/ascii-engine/Camera';
 import { InstanceBuffer } from '@ascii-fort/ascii-engine/Renderer';
 import { UIManager } from './ui/UI';
 import { DialogueScreen, TradeScreen } from './ui/DialogueScreen';
-import { InventoryScreen, JournalScreen, MapScreen, StatsScreen, PauseScreen, type Options } from './ui/GameScreens';
+import { InventoryScreen, JournalScreen, MapScreen, StatsScreen, PauseScreen, PALETTES, type Options } from './ui/GameScreens';
 import { TitleScreen, NewGameScreen, drawTitleBackground } from './ui/TitleScreen';
 import { drawHud, type HudState } from './ui/HUD';
 import type { MacroWorld } from '@ascii-fort/worldgen/MacroWorld';
@@ -17,6 +17,7 @@ import { SaveManager } from './game/SaveManager';
 import { DevConsole } from './ui/DevConsole';
 import { MultiScreen, ChatScreen } from './ui/MultiScreen';
 import { TradeAskScreen, PlayerTradeScreen } from './ui/PlayerTradeScreen';
+import { PhotoScreen } from './ui/PhotoScreen';
 import { NetClient, shareLink, type Welcome } from './net/NetClient';
 import { Coop } from './net/Coop';
 import { roomCode } from '@ascii-fort/net/protocol';
@@ -30,7 +31,7 @@ let closedAt = 0;
 screens.onResume = () => { closedAt = performance.now(); if (game) { input.requestLock(); game.fight.lockUntilRelease = true; } };
 
 // options (préférences locales du navigateur)
-const DEFAULT_OPTS: Options = { cellSize: Math.max(10, Math.min(20, Math.round(window.innerHeight / 58))), detail: 0.75, sensitivity: 1, fov: 68, volume: 0.6, music: 0.6, timeScale: 1 };
+const DEFAULT_OPTS: Options = { cellSize: Math.max(10, Math.min(20, Math.round(window.innerHeight / 58))), detail: 0.75, sensitivity: 1, fov: 68, volume: 0.6, music: 0.6, timeScale: 1, palette: 0 };
 let opts: Options = { ...DEFAULT_OPTS };
 try { opts = { ...DEFAULT_OPTS, ...JSON.parse(localStorage.getItem('ascii-fort-options') ?? '{}') }; } catch { /* stockage indisponible */ }
 const saveOpts = () => { try { localStorage.setItem('ascii-fort-options', JSON.stringify(opts)); } catch { /* ignore */ } };
@@ -49,6 +50,7 @@ const idleInst = new InstanceBuffer();
 function applyOptions() {
   saveOpts();
   if (r.cssCellH !== opts.cellSize || r.detail !== opts.detail) r.resize(opts.cellSize, opts.detail);
+  r.palette = opts.palette ?? 0;
   if (game) { game.audio.setVolume(opts.volume); game.audio.setMusicVolume(opts.music); game.sensitivity = opts.sensitivity; game.camera.fovY = (opts.fov * Math.PI) / 180; game.time.scale = opts.timeScale; }
 }
 
@@ -139,7 +141,7 @@ function pause() {
   }));
 }
 
-canvas.addEventListener('click', () => { if (game) game.audio.start(); if (game && !screens.modal) input.requestLock(); });
+canvas.addEventListener('click', () => { if (game) game.audio.start(); if (game && (!screens.modal || screens.top?.wantsLock)) input.requestLock(); });
 document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement && game && !screens.modal && performance.now() - closedAt > 600) pause(); });
 
 const idle = (now: number) => r.render({ camera: idleCam, atmo: computeAtmosphere(12, CLEAR_WEATHER), time: now / 1000, items: [], clipRadius: 0, instances: idleInst, lights: [], viewMode: 0, sceneOn: false });
@@ -200,6 +202,7 @@ function tick(now: number) {
     else if (input.key('Escape')) pause();
     else if (input.key('Enter') && g.coop) screens.open(new ChatScreen(input, (t) => g.coop?.chat(t)));
     if (input.key('F3')) hud.debug = !hud.debug;
+    if (input.key('F2')) screens.open(new PhotoScreen(g, () => { opts.palette = ((opts.palette ?? 0) + 1) % PALETTES.length; applyOptions(); return PALETTES[opts.palette]; }));
     if (input.key('F1')) screens.open(new DevConsole(g, input, () => {}));
     if (input.key('F5')) void saveTo('rapide', 'rapide');
     if (input.key('F9')) void loadFrom('rapide');

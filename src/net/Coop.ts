@@ -42,6 +42,9 @@ export interface TradeSession {
   okMine: [number, number] | null; okTheirs: [number, number] | null;
 }
 
+/** Émotes (dans le chat : /salut, /danse…) → texte affiché au-dessus de la tête. */
+const EMOTES: Record<string, string> = { salut: '*fait signe de la main*', danse: '*danse*', révérence: '*fait une révérence*', reverence: '*fait une révérence*', rire: '*éclate de rire*', oui: '*acquiesce*', non: '*secoue la tête*' };
+
 export class RemotePlayer {
   x = 0; y = 0; z = 0; heading = 0;
   tx = 0; ty = 0; tz = 0; th = 0;
@@ -51,6 +54,9 @@ export class RemotePlayer {
   model: ModelDef;
   seen = 0;
   prevSwing = 0;
+  /** bulle de chat au-dessus de la tête, émote en cours */
+  bubble: { text: string; t: number } | null = null;
+  emote: { k: string; t: number } | null = null;
   constructor(readonly id: string, public name: string) { this.model = playerModel(name, ''); }
 }
 
@@ -160,7 +166,7 @@ export class Coop implements EntityNet {
       case 'to': this.onDirect(m.from, m.d as Direct); break;
       case 'fact': this.onFact(m.k, m.v, m.by); break;
       case 'fx': this.onFx(m.id, m.d as CastFx & { dg: number }); break;
-      case 'chat': this.msg(`[${m.name}] ${m.text}`, m.id === this.myId ? C.white : C.yellow); break;
+      case 'chat': { this.msg(`[${m.name}] ${m.text}`, m.id === this.myId ? C.white : C.yellow); const r = this.players.get(m.id); if (r) r.bubble = { text: m.text, t: 6 }; break; }
       case 'err': this.msg(m.msg, C.red); break;
     }
   }
@@ -182,6 +188,11 @@ export class Coop implements EntityNet {
     if (!f || typeof f.x !== 'number') return;
     const g = this.game, here = g.dungeon ? g.dungeon.layout.id : -1;
     if (f.dg !== here) return;
+    if ((f as unknown as { k: string }).k === 'emote') {
+      const r = this.players.get(from), em = (f as unknown as { e: string }).e;
+      if (r && EMOTES[em]) { r.emote = { k: em, t: 3 }; r.bubble = { text: EMOTES[em], t: 3 }; }
+      return;
+    }
     if (f.k === 'shot') {
       this.shots.push({ kind: f.kind, x: f.x, y: f.y, z: f.z, vx: f.vx, vy: f.vy, vz: f.vz, life: f.kind === 'flèche' ? 6 : 3, stuck: false, dg: f.dg });
       if (this.shots.length > 60) this.shots.shift();
@@ -402,6 +413,15 @@ export class Coop implements EntityNet {
       r.heading += dh * k;
       const moved = far ? 0 : Math.hypot(dx * k, dz * k);
       r.pose.walk = moved > 0.002 ? r.pose.walk + moved * 3.2 : r.pose.walk * 0.85;
+      if (r.bubble && (r.bubble.t -= dt) <= 0) r.bubble = null;
+      if (r.emote) {
+        const t = (r.emote.t -= dt);
+        if (r.emote.k === 'salut') r.pose.swing = 0.45 + Math.abs(Math.sin(t * 7)) * 0.5;
+        else if (r.emote.k === 'danse') { r.pose.walk += dt * 9; r.pose.hover = Math.abs(Math.sin(t * 9)) * 0.12; }
+        else if (r.emote.k === 'révérence' || r.emote.k === 'reverence') r.pose.dead = Math.min(0.28, (3 - t) * 0.5);
+        else if (r.emote.k === 'rire' || r.emote.k === 'oui') r.pose.hover = Math.abs(Math.sin(t * 12)) * 0.05;
+        if (t <= 0) { r.emote = null; r.pose.hover = 0; r.pose.dead = 0; r.pose.swing = 0; }
+      }
       this.targets.push({ id: 'p:' + r.id, x: r.x, y: r.y, z: r.z, dead: r.pose.dead > 0.5, crouch: r.crouch, sprint: r.sprint });
     }
     // tirs des autres joueurs : même trajectoire que chez eux (gravité pour les flèches)
@@ -446,7 +466,12 @@ export class Coop implements EntityNet {
     this.net.send({ t: 'save', c: d });
   }
 
-  chat(text: string): void { this.net.send({ t: 'chat', text }); }
+  chat(text: string): void {
+    const em = /^\/(\S+)/.exec(text)?.[1]?.toLowerCase();
+    if (em && EMOTES[em]) { this.net.send({ t: 'fx', d: { k: 'emote', e: em } }); this.msg(`Vous : ${EMOTES[em]}`, C.dim); return; }
+    if (em) { this.msg('Émotes : ' + Object.keys(EMOTES).map((k) => '/' + k).join(' '), C.dim); return; }
+    this.net.send({ t: 'chat', text });
+  }
 
   render(ib: InstanceBuffer, cx: number, cz: number): void {
     const dg = this.game.dungeon ? this.game.dungeon.layout.id : -1;

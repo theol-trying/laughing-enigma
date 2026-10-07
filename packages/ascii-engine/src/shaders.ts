@@ -512,6 +512,7 @@ uniform float uHurt;
 uniform float uWobble;
 uniform float uTime;
 uniform vec4 uTint;
+uniform int uPalette;
 out vec4 o;
 // Deux grilles superposées : le monde (police fine) et l'interface (police de lecture).
 // Une case d'interface avec un glyphe remplace les glyphes du monde qu'elle recouvre ; son fond
@@ -561,5 +562,10 @@ void main() {
   vec3 c = mix(bg, fg, m);
   vec2 uv = vec2(p) / vec2(uGrid * uCellPx) - 0.5;
   c *= 1.0 - uVignette * dot(uv, uv) * 1.4;
+  // palettes monochromes façon vieux terminal
+  if (uPalette > 0) {
+    float l = pow(clamp(dot(c, vec3(0.3, 0.59, 0.11)) * 1.15, 0.0, 1.0), 0.8);
+    c = uPalette == 1 ? vec3(1.0, 0.64, 0.16) * l + vec3(0.05, 0.02, 0.0) : vec3(0.28, 1.0, 0.38) * l + vec3(0.0, 0.03, 0.01);
+  }
   o = vec4(c, 1.0);
 }`;

@@ -82,6 +82,8 @@ export class Renderer {
   /** grille du monde, plus fine : cellule = interface × detail (police plus petite → plus de finesse) */
   wcols = 0; wrows = 0; wcellW = 8; wcellH = 16; worigX = 0; worigY = 0;
   detail = 0.75;
+  /** palette : 0 couleurs, 1 ambre, 2 vert terminal (s'applique aussi à l'interface) */
+  palette = 0;
   drawCalls = 0;
 
   private staticSh: Shader; private instSh: Shader; private cellSh: Shader; private presentSh: Shader;
@@ -358,7 +360,7 @@ export class Renderer {
       .iv2('uUiCellPx', this.cellW, this.cellH).iv2('uUiOrigin', this.originX, uiBottom).iv2('uUiGrid', this.cols, this.rows)
       .f('uHurt', f.sceneOn ? Math.min(1, f.hurt ?? 0) : 0).f('uWobble', f.sceneOn ? f.wobble ?? 0 : 0).f('uTime', f.time)
       .v4('uTint', f.sceneOn && f.tint ? f.tint : [0, 0, 0, 0])
-      .i('uAtlasCols', ATLAS_COLS).f('uVignette', f.sceneOn ? 0.35 : 0);
+      .i('uAtlasCols', ATLAS_COLS).f('uVignette', f.sceneOn ? 0.35 : 0).i('uPalette', this.palette);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindVertexArray(null);
   }

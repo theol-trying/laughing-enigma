@@ -121,6 +121,8 @@ export class Game {
   /** sensibilité de la souris (options) */
   sensitivity = 1;
   /** libère les ressources GPU (retour au titre) */
+  /** mode photo : caméra libre (null en jeu normal) */
+  photoCam: { x: number; y: number; z: number; heading: number; pitch: number } | null = null;
   /** mode coopératif en ligne (null en solo) */
   coop: Coop | null = null;
 
@@ -1002,6 +1004,7 @@ export class Game {
     viewMode = viewMode || this.viewMode;
     const p = this.player, c = this.camera, dg = this.dungeon;
     c.x = p.x; c.y = p.eyeY; c.z = p.z; c.heading = p.heading; c.pitch = p.pitch;
+    if (this.photoCam) { const q = this.photoCam; c.x = q.x; c.y = q.y; c.z = q.z; c.heading = q.heading; c.pitch = q.pitch; }
     // secousse quand on encaisse un coup
     if (p.hurt > 0) { const k = Math.min(1, p.hurt) * 0.035; c.heading += (Math.random() - 0.5) * k; c.pitch += (Math.random() - 0.5) * k; c.y += (Math.random() - 0.5) * k * 2; }
     const atmo = computeAtmosphere(dg ? 0 : this.time.hour, dg ? CLEAR_WEATHER : this.wx.mix, dg ? 1 : 0, dg ? 0 : this.wx.flash);
@@ -1043,7 +1046,7 @@ export class Game {
       const y = dg ? 0 : this.world.heightAt(dr.x, dr.z);
       this.instances.add(trsYawPitch(this.m4, dr.x, y + 0.15, dr.z, 0, 0, 0.35, 0.25, 0.35), 0xffd860, M.ITEM, '*'.charCodeAt(0) - 31, 0, 1);
     }
-    if (!p.dead) this.fight.render(this.instances, c, this.character, p.blocking);
+    if (!p.dead && !this.photoCam) this.fight.render(this.instances, c, this.character, p.blocking);
     if (this.showChunks && !dg) for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) {
       const x = (Math.floor(p.x / 64) + i) * 64, z = (Math.floor(p.z / 64) + j) * 64;
       this.instances.add(trsYawPitch(this.m4, x, this.world.heightAt(x, z) + 6, z, 0, 0, 0.3, 12, 0.3), 0xff40ff, M.GLOW, 0, 0, 1);

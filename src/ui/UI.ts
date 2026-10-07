@@ -9,6 +9,8 @@ export interface UICtx { input: Input; grid: TextGrid; renderer: Renderer; mouse
 
 export interface Screen {
   modal: boolean;
+  /** garde la capture de la souris malgré le mode modal (mode photo) */
+  wantsLock?: boolean;
   draw(ctx: UICtx): void;
   /** gère les entrées ; appeler ctx.close() pour fermer */
   input(ctx: UICtx): void;
@@ -18,7 +20,7 @@ export class UIManager {
   stack: Screen[] = [];
   constructor(private renderer: Renderer, private inputRef: Input) {}
 
-  open(s: Screen): void { this.stack.push(s); if (s.modal) this.inputRef.exitLock(); }
+  open(s: Screen): void { this.stack.push(s); if (s.modal && !s.wantsLock) this.inputRef.exitLock(); }
   replace(s: Screen): void { this.stack.pop(); this.open(s); }
   /** appelé quand le dernier écran modal se ferme (pour recapturer la souris en jeu) */
   onResume: (() => void) | null = null;

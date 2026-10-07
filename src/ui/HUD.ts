@@ -64,6 +64,20 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
       if (!pr || pr.u < 0 || pr.u > 1 || pr.v < 0 || pr.v > 1) continue;
       const label = ` ${r.name}${r.pose.dead > 0.5 ? ' (à terre)' : r.hp < r.maxHp * 0.35 ? ' (blessé)' : ''} `;
       g.text(Math.round(pr.u * cols - label.length / 2), Math.round(pr.v * rows), label, C.cyan, C.panel, 0.45);
+      if (r.bubble && r.bubble.t > 0) { const b = ` « ${r.bubble.text.slice(0, 40)} » `; g.text(Math.round(pr.u * cols - b.length / 2), Math.round(pr.v * rows) - 1, b, C.white, C.panel, 0.8); }
+    }
+  }
+
+  // suivi de la quête en cours : titre, étape, distance et direction
+  const tq = game.quests.quests.find((x) => x.status === 'active');
+  if (tq && !st.debug) {
+    const ty = coop ? 3 : 2, tw = Math.min(46, cols - 4);
+    g.text(1, ty, ` ◆ ${tq.title} `.slice(0, tw), C.yellow, C.panel, 0.65);
+    g.text(1, ty + 1, `   ${tq.stages[tq.stage] ?? ''} `.slice(0, tw), C.text, C.panel, 0.55);
+    if (tq.target && !game.dungeon) {
+      const dx = tq.target.x - p.x, dz = tq.target.z - p.z, dist = Math.hypot(dx, dz);
+      const card = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'][Math.round(((Math.atan2(dx, -dz) * 180 / Math.PI + 360) % 360) / 45) % 8];
+      g.text(1, ty + 2, `   → ${dist > 1000 ? (dist / 1000).toFixed(1) + ' km' : Math.round(dist) + ' m'} ${card} · ${tq.target.label} `.slice(0, tw), C.dim, C.panel, 0.55);
     }
   }
 
