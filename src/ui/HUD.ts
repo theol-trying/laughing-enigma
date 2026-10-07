@@ -86,7 +86,7 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
   const mid = Math.floor(rows / 2);
   g.text(Math.floor(cols / 2), mid, game.fight.charge > 0.42 && ch.weapon?.weapon?.kind !== 'arc' ? '✶'.length ? '*' : '+' : '+', p.blocking ? C.cyan : C.white);
   if (game.focus) {
-    g.center(mid + 2, ` [E] ${game.focus.label} `, C.yellow, C.panel);
+    g.center(mid + 2, ` [E] ${game.focus.label} `, game.focus.t === 'entity' && game.focus.pick ? C.magenta : C.yellow, C.panel);
     const f = game.focus;
     if (f.t === 'prop' && f.hint) g.center(mid + 3, ` ${f.hint} `, f.danger ? C.red : C.green, C.panel);
   }

@@ -30,6 +30,8 @@ export function projectileLook(kind: ProjectileKind): { w: number; len: number; 
 export type CastFx = { k: 'shot'; kind: ProjectileKind; x: number; y: number; z: number; vx: number; vy: number; vz: number } | { k: 'heal'; x: number; y: number; z: number };
 
 export interface CombatWorld {
+  /** multiplicateur d'attaque sournoise (cible qui ne vous a pas repéré, vous accroupi) */
+  sneak?(e: Entity, ranged: boolean): number;
   /** sorts de bonus (bouclier, lumière, pas feutrés) : appliqués par le jeu */
   castBonus?(id: string): void;
   /** coup porté dans le vide : peut-être un arbre ou un rocher (récolte) */
@@ -148,6 +150,8 @@ export class PlayerCombat {
     }
     if (!best) { w.harvest?.(heavy); return; }
     let dmg = damage * ch.meleeMult() * (heavy ? 1.8 : 1);
+    const sneak = w.sneak?.(best, false) ?? 1;
+    if (sneak > 1) { dmg *= sneak; w.events.emit('message', { text: `Attaque sournoise ! Dégâts ×${sneak}`, color: 0xd070d0 }); ch.practice('furtivité', 3); }
     if (ch.weapon?.weapon?.kind === 'masse' && (best.type === 'squelette' || best.mon?.def === 'roi-squelette')) dmg *= 1.4;
     const done = hitEntity(w.combat, best, dmg, 'player', element);
     if (heavy && best.mon) { best.mon.windup = 0; best.x += fx * 0.9; best.z += fz * 0.9; } // étourdi, repoussé
@@ -188,7 +192,9 @@ export class PlayerCombat {
         const t = Math.max(0, Math.min(1, (ex * sx + ez * sz) / l2));
         const px = pr.x + sx * t, pz = pr.z + sz * t, py = pr.y + (ny - pr.y) * t;
         if (Math.hypot(e.x - px, e.z - pz) < e.radius + 0.15 && py > e.y && py < e.y + e.model.height) {
-          hitEntity(w.combat, e, pr.dmg, pr.owner, pr.element);
+          const sneak = w.sneak?.(e, true) ?? 1;
+          if (sneak > 1) { w.events.emit('message', { text: `Tir sournois ! Dégâts ×${sneak}`, color: 0xd070d0 }); ch.practice('furtivité', 2); }
+          hitEntity(w.combat, e, pr.dmg * sneak, pr.owner, pr.element);
           if (pr.element && e.alive) applyElement(e, pr.element);
           this.lastTarget = e; w.onHit(e);
           ch.practice(pr.kind === 'flèche' ? 'tir' : 'magie', 1.5);

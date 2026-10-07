@@ -48,7 +48,7 @@ export interface Buff { id: string; name: string; t: number; dmg?: number; armor
 
 export type Focus =
   | { t: 'prop'; prop: Prop; label: string; hint?: string; danger?: boolean }
-  | { t: 'entity'; e: Entity; label: string }
+  | { t: 'entity'; e: Entity; label: string; pick?: boolean }
   | { t: 'drop'; d: Dropped; label: string }
   | { t: 'player'; id: string; label: string };
 
@@ -275,7 +275,11 @@ export class Game {
     const e = this.entities.pick(p.x, p.z, p.heading, 3.2, false);
     const see = (x: number, z: number) => lineOfSight(this.world.chunks, p.x, p.z, x, z, p.y);
     if (e && see(e.x, e.z)) {
-      if (e.alive && e.npc) return { t: 'entity', e, label: `Parler à ${e.label}${this.stockOf(e).length ? ' · [T] commercer' : ''}` };
+      if (e.alive && e.npc) {
+        const behind = (p.x - e.x) * Math.sin(e.heading) - (p.z - e.z) * Math.cos(e.heading) < 0;
+        if (p.crouch && behind && Math.hypot(e.x - p.x, e.z - p.z) < 1.9 && !this.aware(e)) return { t: 'entity', e, label: `Voler à la tire : ${e.label}`, pick: true };
+        return { t: 'entity', e, label: `Parler à ${e.label}${this.stockOf(e).length ? ' · [T] commercer' : ''}` };
+      }
       if (!e.alive && !e.looted) return { t: 'entity', e, label: `Fouiller : ${e.npc ? e.label : e.name}` };
     }
     const fx = Math.sin(p.heading), fz = -Math.cos(p.heading);
@@ -359,7 +363,7 @@ export class Game {
     if (!f) return;
     if (f.t === 'entity') {
       const e = f.e;
-      if (e.alive && e.npc) { this.talkTo(e); return; }
+      if (e.alive && e.npc) { if (f.pick) this.pickpocket(e); else this.talkTo(e); return; }
       if (!e.alive && !e.looted) {
         e.looted = true;
         const biome = this.world.sampler.biomeAt(e.x, e.z);
@@ -539,6 +543,50 @@ export class Game {
     this.audio.chime();
   }
 
+  /** La cible a-t-elle repéré le joueur ? (créature en chasse ou alertée, PNJ hostile ou qui le voit) */
+  aware(e: Entity): boolean {
+    const p = this.player;
+    if (e.mon) return e.mon.alerted || e.mon.targetId === 'player' || e.mon.state === 'chasse';
+    if (e.hostile) return true;
+    return perceives(this.world.chunks, { x: e.x, z: e.z, y: e.y, heading: e.heading, range: 22, nocturnal: false, asleep: e.action === 'dormir' },
+      { x: p.x, z: p.z, y: p.y, stealth: p.crouch ? Math.max(0.35, this.character.stealth()) : 0, noise: playerNoise(p) }, { night: this.atmoNight, fog: this.fog() });
+  }
+
+  /** Attaque sournoise : accroupi, sur une cible qui ne vous a pas repéré → ×3 au corps à corps, ×2 à distance. */
+  private sneakMult(e: Entity, ranged: boolean): number {
+    if (!this.player.crouch || !e.alive || this.aware(e)) return 1;
+    return ranged ? 2 : 3;
+  }
+
+  /** Vol à la tire : réussite selon la furtivité et l'agilité ; un échec est un délit. */
+  private pickpocket(e: Entity): void {
+    const n = e.npc!, ch = this.character, key = `poche:${n.id}`;
+    if (this.state.flags.get(key) as unknown === this.time.day) { this.events.emit('message', { text: `Les poches de ${n.first} sont vides pour aujourd'hui.`, color: 0x9a9a90 }); return; }
+    this.state.flags.set(key, this.time.day as unknown as boolean);
+    const chance = Math.min(0.9, 0.45 + ch.skills.furtivité * 0.006 + (ch.stats.AGI - 5) * 0.03);
+    if (Math.random() < chance) {
+      const gold = Math.min(n.wealth, 3 + Math.floor(Math.random() * 16));
+      n.wealth -= gold;
+      const pools: Record<string, string[]> = {
+        forgeron: ['lingot de fer', 'charbon'], aubergiste: ['pain', 'bière'], marchand: ['pomme', 'sel', 'fromage'],
+        prêtre: ['potion de soin', 'parchemin : lumière'], guérisseuse: ['herbe médicinale', 'potion de soin'], garde: ['flèche', 'pain'],
+        chasseur: ['flèche', 'viande crue'], fermier: ['pomme', 'pain'], mineur: ['charbon', 'minerai de fer'],
+      };
+      const lines: { id: string; qty: number }[] = [];
+      if (gold > 0) lines.push({ id: 'or', qty: gold });
+      if (Math.random() < 0.55) { const pool = pools[n.profession] ?? ['pain', 'pomme', 'herbe médicinale']; const id = pool[Math.floor(Math.random() * pool.length)]; lines.push({ id, qty: id === 'flèche' ? 5 : 1 }); }
+      ch.practice('furtivité', 4);
+      this.giveLoot(lines, `Poche de ${n.first}`);
+      return;
+    }
+    // pris la main dans le sac
+    e.hostile = true; e.thinkT = 0;
+    const w = this.witnesses();
+    this.events.emit('message', { text: `${n.first} ${n.last} vous surprend la main dans sa poche !`, color: 0xe05040 });
+    this.events.emit('player:crime', { type: 'vol', settlementId: n.sid, factionId: n.factionId, witnesses: [...new Set([e.id, ...w.map((x) => x.id)])], value: 10 });
+    this.alertGuards(n.sid);
+  }
+
   /** Ajoute (ou renouvelle) un bonus temporaire. */
   addBuff(b: Buff): void {
     const i = this.buffs.findIndex((x) => x.id === b.id);
@@ -689,7 +737,7 @@ export class Game {
       }
       this.fight.update(dt, input, {
         player: p, character: this.character, events: this.events, combat: this.combat, entities: this.entities.entities,
-        heightAt: (x, z) => (this.dungeon ? 0 : this.world.heightAt(x, z)), onHit: (e) => this.onHit(e), harvest: (heavy) => this.harvest(heavy), castBonus: (id) => this.castBonus(id),
+        heightAt: (x, z) => (this.dungeon ? 0 : this.world.heightAt(x, z)), onHit: (e) => this.onHit(e), harvest: (heavy) => this.harvest(heavy), castBonus: (id) => this.castBonus(id), sneak: (e, ranged) => this.sneakMult(e, ranged),
       });
       // nage : l'endurance s'épuise (plus vite en plongée) ; à bout de souffle, on se noie
       if (p.swimming) p.stamina = Math.max(0, p.stamina - 2.5 * dt);
