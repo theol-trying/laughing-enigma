@@ -2,6 +2,9 @@ import { Entity, type MonsterState } from './Entity';
 import { creatureModel } from './Models';
 import type { Civilization } from '@ascii-fort/worldgen/civilization/Civilization';
 import type { WorldSeed } from '@ascii-fort/core/Seed';
+import { B } from '@ascii-fort/worldgen/terrain/Biomes';
+import { W_NONE } from '@ascii-fort/worldgen/terrain/Hydrology';
+import { WORLD } from '@ascii-fort/worldgen/constants';
 
 // Familles de créatures adaptées aux biomes et aux lieux, avec comportement, perception,
 // territoire, agressivité, statistiques et butin.
@@ -10,6 +13,10 @@ export interface MonsterDef {
   name: string; hp: number; damage: number; armor: number; walk: number; run: number; reach: number; attackCd: number;
   perception: number; aggro: number; nocturnal: boolean; flee: number; xp: number; loot: string; element?: 'poison' | 'feu' | 'givre';
   undead?: boolean; hover?: number;
+  /** gibier : détale dès qu'il perçoit un chasseur */
+  prey?: boolean;
+  /** s'envole en fuyant */
+  flyer?: boolean;
 }
 
 export const MONSTERS: Record<string, MonsterDef> = {
@@ -23,6 +30,9 @@ export const MONSTERS: Record<string, MonsterDef> = {
   araignée: { name: 'Araignée géante', hp: 35, damage: 7, armor: 1, walk: 1.8, run: 5.6, reach: 1.7, attackCd: 1.0, perception: 20, aggro: 0.8, nocturnal: true, flee: 0.2, xp: 30, loot: 'araignée', element: 'poison' },
   troll: { name: 'Troll des montagnes', hp: 230, damage: 26, armor: 6, walk: 1.6, run: 5, reach: 3, attackCd: 2.0, perception: 32, aggro: 0.9, nocturnal: false, flee: 0, xp: 230, loot: 'troll' },
   'roi-squelette': { name: 'Roi-Squelette', hp: 210, damage: 20, armor: 6, walk: 1.3, run: 3.8, reach: 2.4, attackCd: 1.5, perception: 26, aggro: 1, nocturnal: false, flee: 0, xp: 260, loot: 'boss', undead: true },
+  cerf: { name: 'Cerf', hp: 34, damage: 4, armor: 0, walk: 1.5, run: 8.5, reach: 1.6, attackCd: 1.6, perception: 36, aggro: 0, nocturnal: false, flee: 1, xp: 14, loot: 'cerf', prey: true },
+  sanglier: { name: 'Sanglier', hp: 48, damage: 9, armor: 1, walk: 1.3, run: 6.2, reach: 1.5, attackCd: 1.3, perception: 20, aggro: 0.3, nocturnal: false, flee: 0.15, xp: 26, loot: 'sanglier' },
+  perdrix: { name: 'Perdrix', hp: 6, damage: 0, armor: 0, walk: 0.8, run: 7, reach: 0.5, attackCd: 2, perception: 16, aggro: 0, nocturnal: false, flee: 1, xp: 5, loot: 'perdrix', prey: true, flyer: true },
   'gardien des tombes': { name: 'Gardien des tombes', hp: 140, damage: 15, armor: 5, walk: 1.3, run: 3.6, reach: 2.2, attackCd: 1.5, perception: 22, aggro: 1, nocturnal: false, flee: 0, xp: 150, loot: 'boss', undead: true },
 };
 
@@ -56,6 +66,29 @@ export function buildLairs(civ: Civilization, seed: WorldSeed): Lair[] {
       default: continue;
     }
     out.push({ key: `lair:${p.id}`, poiId: p.id, sid: p.settlementId, x: p.x, z: p.z, type, leader, max, alive: max, leaderAlive: !!leader, territory, why: p.why });
+  }
+  return out;
+}
+
+/**
+ * Gibier en hardes : un tirage par case de 320 m sur un flux à part (« faune »), sans rien changer
+ * au reste du monde. Cerfs en forêt, taïga et prairies, sangliers en forêt et marais, perdrix dans les landes.
+ */
+export function buildHerds(civ: Civilization, seed: WorldSeed): Lair[] {
+  const out: Lair[] = [], G = 320, n = Math.floor(WORLD / G), macro = civ.macro;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const rng = seed.stream('faune', j * n + i);
+    if (!rng.chance(0.55)) continue;
+    const x = (i + 0.15 + rng.next() * 0.7) * G, z = (j + 0.15 + rng.next() * 0.7) * G;
+    const c = macro.cellOf(x, z);
+    if (macro.hydro.water[c] !== W_NONE || macro.elev[c] <= 1) continue;
+    if (civ.settlements.some((s) => !s.abandoned && Math.hypot(s.x - x, s.z - z) < s.radius + 110)) continue;
+    const b = macro.biome[c], r = rng.next();
+    const type = b === B.FOREST ? (r < 0.5 ? 'cerf' : 'sanglier') : b === B.TAIGA ? 'cerf' : b === B.SWAMP ? 'sanglier'
+      : b === B.PLAINS || b === B.HEATH ? (r < 0.55 ? 'cerf' : 'perdrix') : '';
+    if (!type) continue;
+    const max = type === 'cerf' ? rng.int(3, 6) : type === 'sanglier' ? rng.int(2, 4) : rng.int(3, 5);
+    out.push({ key: `herd:${j * n + i}`, poiId: -1, sid: -1, x, z, type, leader: null, max, alive: max, leaderAlive: false, territory: type === 'perdrix' ? 30 : 70, why: '' });
   }
   return out;
 }

@@ -6,7 +6,7 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Jalon 7 en cours (liste « Jalon 7 », première case vide). Lancer `node scripts/autosave.mjs 2` en arrière-plan (2 min).
+Jalon 7 en cours : étapes 43 à 48 faites (pause demandée le 2026-10-07 après la 48), reprendre à l’étape 49 (artisanat étendu). Lancer `node scripts/autosave.mjs 2` en arrière-plan (2 min).
 Jalon 2 terminé (étapes 12 à 19) : modèles articulés, police fine (deux grilles), bibliothèques (packages/*),
 multijoueur coop Cloudflare (un Worker : assets + Durable Object Room ; autorité par zone ; faits partagés).
 Déployé le 2026-10-06 par l'utilisateur : Worker Cloudflare « ascii-fort » relié au dépôt (build réussi, redéploiement à chaque push sur main).
@@ -74,7 +74,7 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 45. Particules en caractères : étincelles de forge, sang, poussière, fumée des cheminées, lucioles
 - [x] 46. Vent (arbres, herbe), reflets dans l'eau, ombres portées des torches
 - [x] 47. Visages et tenues variés (coiffures, barbes, chapeaux, robes, bras nus, tabards de faction), bannières des factions (couleur du propriétaire : `Game.ownerOf`, drapeau `owner:<sid>`), intérieurs (tapis, tentures, chandelles, vaisselle, pots, herbes ; décor sans RNG)
-- [ ] 48. Faune chassable (cerfs, sangliers, oiseaux), troupeaux visibles, pêche
+- [x] 48. Faune chassable : hardes de cerfs, sangliers, perdrix (`buildHerds`, flux « faune », clés `herd:<n>`, fuite en harde selon vue/ouïe, envol), oiseaux dans le ciel (`Birds.ts`), pêche (canne à pêche, [E] lancer/ferrer, poissons selon rivière/lac/mer, cuisson au feu)
 - [ ] 49. Artisanat élargi (forge d'armes et d'armures, alchimie, cuisine) avec usure et réparation
 - [ ] 50. Arbres de talents (tous les 3 niveaux)
 - [ ] 51. Cheval, mercenaire à engager, maison à acheter et coffre personnel

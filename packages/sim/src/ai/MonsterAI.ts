@@ -37,6 +37,26 @@ export function thinkMonster(e: Entity, ctx: MonsterCtx): void {
   const p = ctx.player;
   const homeD = Math.hypot(e.x - m.homeX, e.z - m.homeZ);
   const roam = m.territory * (m.def === 'loup' && ctx.env.night > 0.5 ? 2.5 : 1);
+  if (d.prey) {
+    // gibier : détale dès qu'il voit ou entend un chasseur (ou qu'on le blesse) ; toute la harde suit
+    if (m.targetId) {
+      const t = targetPos(m.targetId, ctx);
+      if (t && t.alive && Math.hypot(t.x - e.x, t.z - e.z) < m.perception * 1.6) { m.state = 'fuite'; return; }
+      m.targetId = null; m.alerted = false;
+    }
+    const cands: { id: string; x: number; z: number; y: number; stealth: number; noise: number; invisible?: boolean }[] = [];
+    if (!p.dead) cands.push({ id: 'player', x: p.x, z: p.z, y: p.y, stealth: p.crouch ? 0.75 : 0, noise: playerNoise(p), invisible: p.invisible });
+    for (const o of ctx.others) if (!o.dead) cands.push({ id: o.id, x: o.x, z: o.z, y: o.y, stealth: o.crouch ? 0.75 : 0, noise: o.sprint ? 1 : o.crouch ? 0 : 0.25 });
+    for (const c of cands) {
+      if (Math.hypot(c.x - e.x, c.z - e.z) > m.perception) continue;
+      if (!perceives(ctx.chunks, { x: e.x, z: e.z, y: e.y, heading: e.heading, range: m.perception, nocturnal: false, asleep: false }, c, ctx.env)) continue;
+      m.targetId = c.id; m.alerted = true; m.state = 'fuite';
+      for (const o of ctx.ents) if (o !== e && o.alive && o.mon && m.lair && o.mon.lair === m.lair && Math.hypot(o.x - e.x, o.z - e.z) < 40) { o.mon.targetId = c.id; o.mon.alerted = true; o.mon.state = 'fuite'; }
+      return;
+    }
+    m.state = ctx.env.night > 0.65 ? 'repos' : 'errance';
+    return;
+  }
   // fuite quand la vie est basse (les morts-vivants ne fuient pas)
   if (d.flee > 0 && e.hp < e.maxHp * d.flee) { m.state = 'fuite'; return; }
   // trop loin du territoire : on rentre et on oublie la proie
@@ -103,7 +123,10 @@ export function moveMonster(e: Entity, dt: number, ctx: MonsterCtx): void {
       const ax = t ? e.x - t.x : e.x - m.homeX, az = t ? e.z - t.z : e.z - m.homeZ, l = Math.hypot(ax, az) || 1;
       tx = e.x + (ax / l) * 10; tz = e.z + (az / l) * 10; speed = d.run;
       if (e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + dt * 0.5);
-      if (t && Math.hypot(t.x - e.x, t.z - e.z) > m.perception * 1.5) { m.state = 'retour'; m.targetId = null; }
+      if (t && Math.hypot(t.x - e.x, t.z - e.z) > m.perception * 1.5) {
+        m.state = 'retour'; m.targetId = null;
+        if (d.prey) { m.homeX = e.x; m.homeZ = e.z; m.alerted = false; } // la harde se pose plus loin
+      }
       break;
     }
     case 'retour':
@@ -145,6 +168,14 @@ export function moveMonster(e: Entity, dt: number, ctx: MonsterCtx): void {
       // errance / patrouille / garde : points du territoire (plus loin la nuit pour les loups)
       const roam = m.territory * (m.def === 'loup' && ctx.env.night > 0.5 ? 2.5 : 1) * (m.state === 'garde' ? 0.3 : 0.7);
       const slot = Math.floor(performance.now() / 9000);
+      if (m.lair.startsWith('herd:')) {
+        // harde : un même point de pâture pour tous, chacun à quelques pas des autres
+        const hs = Math.floor(performance.now() / 16000), lh = (k: number) => { let h = k * 374761393 + 1; for (let i = 0; i < m.lair.length; i++) h = Math.imul(h ^ m.lair.charCodeAt(i), 668265263); return ((h ^ (h >>> 15)) >>> 0) / 4294967296; };
+        const a = lh(hs) * Math.PI * 2, r = lh(hs + 7) * roam, b = ctx.hash(e, 3) * Math.PI * 2, o = 1.5 + ctx.hash(e, 4) * 4;
+        tx = m.homeX + Math.cos(a) * r + Math.cos(b) * o; tz = m.homeZ + Math.sin(a) * r + Math.sin(b) * o;
+        if (Math.hypot(tx - e.x, tz - e.z) < 1.5) go = false;
+        break;
+      }
       const a = ctx.hash(e, slot) * Math.PI * 2, r = ctx.hash(e, slot + 101) * roam;
       tx = m.homeX + Math.cos(a) * r; tz = m.homeZ + Math.sin(a) * r;
       if (Math.hypot(tx - e.x, tz - e.z) < 1.5) go = false;
@@ -164,6 +195,7 @@ export function moveMonster(e: Entity, dt: number, ctx: MonsterCtx): void {
   } else e.pose.walk *= 0.85;
   const g = ctx.ground(e.x, e.z, e.y + 0.4);
   e.y += (g - e.y) * Math.min(1, dt * 10);
+  if (d.flyer) e.pose.hover += ((m.state === 'fuite' ? 3.2 : 0) - e.pose.hover) * Math.min(1, dt * (m.state === 'fuite' ? 2.5 : 1));
 }
 
 export function turn(a: number, b: number, k: number): number {

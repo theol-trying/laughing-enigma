@@ -18,6 +18,9 @@ export interface ItemDef {
   good?: Good;           // catégorie économique (prix régionaux)
 }
 
+/** Poissons crus (à griller sur un feu). */
+export const FISH = ['truite', 'carpe', 'brochet', 'saumon', 'anguille', 'hareng', 'bar', 'morue'];
+
 const D: ItemDef[] = [
   // armes
   { id: 'dague', name: 'Dague', cat: 'arme', value: 18, weight: 0.5, desc: 'Courte et rapide.', weapon: { kind: 'dague', damage: 7, speed: 1.45, reach: 1.7, stamina: 6 }, good: 'outils' },
@@ -59,6 +62,21 @@ const D: ItemDef[] = [
   { id: 'potion de mana', name: 'Potion de mana', cat: 'potion', value: 35, weight: 0.3, desc: '', use: { mana: 50 }, good: 'herbes' },
   { id: 'antidote', name: 'Antidote', cat: 'potion', value: 20, weight: 0.2, desc: 'Soigne le poison.', use: { cure: true, hp: 5 }, good: 'herbes' },
   // matériaux
+  { id: 'peau de cerf', name: 'Peau de cerf', cat: 'matériau', value: 10, weight: 1.4, desc: 'Une peau souple que le tanneur paie bien.', good: 'laine' },
+  { id: 'bois de cerf', name: 'Bois de cerf', cat: 'matériau', value: 9, weight: 0.8, desc: 'Ramure recherchée des artisans.', good: 'outils' },
+  { id: 'peau de sanglier', name: 'Peau de sanglier', cat: 'matériau', value: 8, weight: 1.6, desc: 'Épaisse et rêche.', good: 'laine' },
+  { id: 'défense de sanglier', name: 'Défense de sanglier', cat: 'matériau', value: 7, weight: 0.2, desc: '', good: 'outils' },
+  { id: 'plume', name: 'Plume', cat: 'matériau', value: 1, weight: 0.01, desc: 'Pour empenner des flèches.', good: 'laine' },
+  { id: 'canne à pêche', name: 'Canne à pêche', cat: 'matériau', value: 12, weight: 1, desc: 'Au bord de l’eau : [E] pour lancer la ligne, puis [E] dès que ça mord.', good: 'outils' },
+  { id: 'truite', name: 'Truite', cat: 'nourriture', value: 4, weight: 0.4, desc: 'À griller sur un feu.', use: { hp: 4 }, good: 'poisson' },
+  { id: 'carpe', name: 'Carpe', cat: 'nourriture', value: 4, weight: 0.6, desc: 'À griller sur un feu.', use: { hp: 4 }, good: 'poisson' },
+  { id: 'brochet', name: 'Brochet', cat: 'nourriture', value: 6, weight: 0.8, desc: 'À griller sur un feu.', use: { hp: 5 }, good: 'poisson' },
+  { id: 'saumon', name: 'Saumon', cat: 'nourriture', value: 11, weight: 0.9, desc: 'Une belle prise !', use: { hp: 6 }, good: 'poisson', rarity: 'rare' },
+  { id: 'anguille', name: 'Anguille', cat: 'nourriture', value: 5, weight: 0.5, desc: 'À griller sur un feu.', use: { hp: 4 }, good: 'poisson' },
+  { id: 'hareng', name: 'Hareng', cat: 'nourriture', value: 3, weight: 0.3, desc: 'À griller sur un feu.', use: { hp: 3 }, good: 'poisson' },
+  { id: 'bar', name: 'Bar', cat: 'nourriture', value: 6, weight: 0.7, desc: 'À griller sur un feu.', use: { hp: 5 }, good: 'poisson' },
+  { id: 'morue', name: 'Morue', cat: 'nourriture', value: 7, weight: 0.9, desc: 'À griller sur un feu.', use: { hp: 5 }, good: 'poisson' },
+  { id: 'vieille botte', name: 'Vieille botte', cat: 'matériau', value: 0, weight: 0.8, desc: 'Ça a mordu, pourtant…' },
   { id: 'peau de loup', name: 'Peau de loup', cat: 'matériau', value: 12, weight: 1.5, desc: 'Le tanneur en donne un bon prix.', good: 'laine' },
   { id: 'croc de loup', name: 'Croc de loup', cat: 'matériau', value: 4, weight: 0.05, desc: '', good: 'gibier' },
   { id: 'minerai de fer', name: 'Minerai de fer', cat: 'matériau', value: 6, weight: 2, desc: '', good: 'minerai' },

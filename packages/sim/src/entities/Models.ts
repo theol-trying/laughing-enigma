@@ -44,7 +44,7 @@ export interface HumanLook {
   face?: boolean;
 }
 
-const { sin, abs, max, PI } = Math;
+const { sin, abs, max, min, PI } = Math;
 const LEATHER_DARK = 0x3a2a1c, STEEL = 0xc0c0c8, IRON = 0x8a8a94, WOODC = 0x6a4a2a;
 
 class Rig {
@@ -248,10 +248,10 @@ export function humanoid(l: HumanLook): ModelDef {
 
 // ---------------------------------------------------------------- quadrupèdes et araignées
 
-function quadruped(color: number, s: number, letter: string, mat: number = M.FUR, mane = color, snoutC = 0x3a3632): ModelDef {
+function quadruped(color: number, s: number, letter: string, mat: number = M.FUR, mane = color, snoutC = 0x3a3632, extra?: (R: Rig, head: number) => void, legK = 1): ModelDef {
   const R = new Rig();
   const k = (p: Pose) => 1 - p.dead;
-  const body = R.bone(0, 0, 0.62 * s, 0, (p, t, r) => { r.dy = abs(sin(p.walk)) * 0.03 * s * k(p); r.pitch = sin(p.walk * 2) * 0.03 * k(p); });
+  const body = R.bone(0, 0, 0.62 * s * legK, 0, (p, t, r) => { r.dy = abs(sin(p.walk)) * 0.03 * s * k(p); r.pitch = sin(p.walk * 2) * 0.03 * k(p); });
   R.part(body, SHAPE.SPHERE, 0, 0.02 * s, -0.18 * s, 0.36 * s, 0.38 * s, 0.62 * s, color, mat);
   R.part(body, SHAPE.SPHERE, 0, 0.03 * s, 0.26 * s, 0.3 * s, 0.3 * s, 0.56 * s, color, mat);
   R.part(body, SHAPE.SPHERE, 0, 0.08 * s, -0.33 * s, 0.4 * s, 0.4 * s, 0.36 * s, mane, mat);
@@ -267,14 +267,30 @@ function quadruped(color: number, s: number, letter: string, mat: number = M.FUR
   const legs: [number, number, number][] = [[-1, -1, 0], [1, -1, PI], [-1, 1, PI], [1, 1, 0]];
   for (const [side, fb, ph] of legs) {
     const hip = R.bone(body, side * 0.11 * s, -0.07 * s, fb < 0 ? -0.3 * s : 0.32 * s, (p, t, r) => { r.pitch = sin(p.walk + ph) * 0.6 * k(p); });
-    R.limb(hip, 0.28 * s, (fb < 0 ? 0.11 : 0.14) * s, (fb < 0 ? 0.12 : 0.16) * s, color, mat);
-    const low = R.bone(hip, 0, -0.28 * s, 0, (p, t, r) => { r.pitch = -max(0, -sin(p.walk + ph)) * 0.8 * k(p); });
-    R.limb(low, 0.29 * s, 0.07 * s, 0.075 * s, color, mat);
-    R.part(low, SHAPE.SPHERE, 0, -0.29 * s, -0.03 * s, 0.08 * s, 0.05 * s, 0.1 * s, color, mat);
+    R.limb(hip, 0.28 * s * legK, (fb < 0 ? 0.11 : 0.14) * s, (fb < 0 ? 0.12 : 0.16) * s, color, mat);
+    const low = R.bone(hip, 0, -0.28 * s * legK, 0, (p, t, r) => { r.pitch = -max(0, -sin(p.walk + ph)) * 0.8 * k(p); });
+    R.limb(low, 0.29 * s * legK, 0.07 * s, 0.075 * s, color, mat);
+    R.part(low, SHAPE.SPHERE, 0, -0.29 * s * legK, -0.03 * s, 0.08 * s, 0.05 * s, 0.1 * s, color, mat);
   }
   const tail = R.bone(body, 0, 0.1 * s, 0.55 * s, (p, t, r) => { r.yaw = sin(t * 7 + s) * 0.25 * k(p); r.pitch = -sin(p.walk) * 0.1 * k(p); }, { pitch: 2.0 });
-  R.part(tail, SHAPE.TAPER, 0, 0.19 * s, 0, 0.11 * s, 0.4 * s, 0.11 * s, color, mat);
-  return R.done(letter, 1.0 * s, 0.45 * s, true, 'côté');
+  R.part(tail, SHAPE.TAPER, 0, 0.19 * s, 0, 0.11 * s, 0.4 * s * (legK > 1 ? 0.4 : 1), 0.11 * s, color, mat);
+  extra?.(R, head);
+  return R.done(letter, 1.0 * s * legK, 0.45 * s, true, 'côté');
+}
+
+function bird(color: number, wing: number, s: number, letter: string): ModelDef {
+  const R = new Rig();
+  const body = R.bone(0, 0, 0.2 * s, 0, (p, t, r) => { r.dy = abs(sin(p.walk * 2)) * 0.02 * s * (1 - p.dead); r.pitch = -min(1, p.hover) * 0.15; });
+  R.part(body, SHAPE.SPHERE, 0, 0, 0, 0.26 * s, 0.22 * s, 0.36 * s, color, M.FUR);
+  R.part(body, SHAPE.SPHERE, 0, 0.13 * s, -0.18 * s, 0.15 * s, 0.15 * s, 0.15 * s, color, M.FUR);
+  R.part(body, SHAPE.CONE, 0, 0.12 * s, -0.28 * s, 0.04 * s, 0.07 * s, 0.04 * s, 0xc89040, M.BONE, { pitch: -PI / 2 });
+  R.part(body, SHAPE.BOX, 0, 0.03 * s, 0.2 * s, 0.14 * s, 0.03 * s, 0.14 * s, wing, M.FUR, { pitch: -0.3 });
+  for (const side of [-1, 1]) {
+    const w = R.bone(body, side * 0.11 * s, 0.05 * s, 0, (p, t, r) => { const fly = min(1, p.hover); r.roll = side * fly * (0.3 + sin(t * 26) * 0.9) * (1 - p.dead); });
+    R.part(w, SHAPE.BOX, side * 0.14 * s, 0, 0, 0.3 * s, 0.03 * s, 0.22 * s, wing, M.FUR);
+    R.part(body, SHAPE.CYL, side * 0.05 * s, -0.15 * s, 0.02 * s, 0.02 * s, 0.13 * s, 0.02 * s, 0xc89040, M.BONE);
+  }
+  return R.done(letter, 0.38 * s, 0.2 * s, true, 'côté');
 }
 
 function spider(color: number, s: number): ModelDef {
@@ -309,6 +325,18 @@ export function creatureModel(type: string): ModelDef {
   switch (type) {
     case 'loup': m = quadruped(0x6a6a66, 1, 'w', M.FUR, 0x5a5a56); break;
     case 'araignée': m = spider(0x2e2a26, 1.1); break;
+    case 'cerf': m = quadruped(0x8a6440, 1.05, 'c', M.FUR, 0x7a5636, 0x2a2420, (R, head) => {
+      // ramure : deux merrains et leurs andouillers
+      for (const side of [-1, 1]) {
+        R.part(head, SHAPE.CYL, side * 0.1, 0.27, 0.04, 0.03, 0.36, 0.03, 0xd8c8a0, M.BONE, { roll: -side * 0.45 });
+        R.part(head, SHAPE.CYL, side * 0.2, 0.47, 0.0, 0.025, 0.24, 0.025, 0xd8c8a0, M.BONE, { roll: side * 0.1, pitch: -0.5 });
+        R.part(head, SHAPE.CYL, side * 0.24, 0.46, 0.1, 0.025, 0.22, 0.025, 0xd8c8a0, M.BONE, { roll: -side * 0.6 });
+      }
+    }, 1.3); break;
+    case 'sanglier': m = quadruped(0x4a3a2c, 0.82, 'b', M.FUR, 0x2e241c, 0x6a4a40, (R, head) => {
+      for (const side of [-1, 1]) R.part(head, SHAPE.CONE, side * 0.06, -0.04, -0.27, 0.03, 0.1, 0.03, 0xe8e0c8, M.BONE, { pitch: -0.5 });
+    }, 0.8); break;
+    case 'perdrix': m = bird(0x8a7458, 0x6a5a48, 1, 'p'); break;
     case 'gobelin': m = humanoid({ skin: 0x5a8a3a, shirt: 0x5a4a2a, pants: 0x3a3020, hair: 0x2a2a1a, scale: 0.62, weapon: 'dague', letter: 'g', hunch: true, ears: true, nose: true, eyes: 0xffd040 }); break;
     case 'chef gobelin': m = humanoid({ skin: 0x4a7a2a, shirt: 0x7a2a2a, pants: 0x3a3020, hair: 0x2a2a1a, scale: 0.85, weapon: 'hache', shield: true, letter: 'G', hunch: true, ears: true, nose: true, eyes: 0xffd040, crown: true }); break;
     case 'squelette': m = humanoid({ skin: 0xd8d0b8, shirt: 0xc8c0a8, pants: 0xc8c0a8, hair: 0xd8d0b8, build: 'squelette', weapon: 'épée', letter: 's', scale: 0.95, eyes: 0x60d0ff }); break;

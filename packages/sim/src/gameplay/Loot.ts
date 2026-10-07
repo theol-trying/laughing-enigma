@@ -11,6 +11,9 @@ export interface LootCtx { biome?: number; depth?: number; building?: string; qu
 type Entry = [id: string, chance: number, min: number, max: number];
 const TABLES: Record<string, Entry[]> = {
   loup: [['peau de loup', 0.8, 1, 1], ['croc de loup', 0.5, 1, 2], ['viande crue', 0.5, 1, 2]],
+  cerf: [['viande crue', 1, 2, 3], ['peau de cerf', 0.9, 1, 1], ['bois de cerf', 0.5, 1, 1]],
+  sanglier: [['viande crue', 1, 2, 4], ['peau de sanglier', 0.8, 1, 1], ['défense de sanglier', 0.5, 1, 2]],
+  perdrix: [['plume', 1, 2, 5], ['viande crue', 0.6, 1, 1]],
   bandit: [['or', 1, 4, 18], ['pain', 0.35, 1, 1], ['épée courte', 0.15, 1, 1], ['tunique de cuir', 0.12, 1, 1], ['potion de soin', 0.2, 1, 1], ['flèche', 0.3, 3, 8], ['bière', 0.25, 1, 1]],
   'chef bandit': [['or', 1, 40, 85], ['épée longue', 0.45, 1, 1], ['cotte de mailles', 0.25, 1, 1], ['potion de soin', 1, 1, 2], ['bague en or', 0.4, 1, 1]],
   gobelin: [['or', 0.7, 1, 7], ['dague', 0.15, 1, 1], ['os', 0.4, 1, 2], ['pomme', 0.3, 1, 2]],

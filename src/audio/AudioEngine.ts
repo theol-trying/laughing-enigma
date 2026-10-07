@@ -187,6 +187,15 @@ export class AudioEngine {
         else if (dead) this.tone(520, 0.5, 0.25, 'triangle', 0.4, p);
         else { this.burst(700, 'bandpass', 0.14, 0.35, 2, p); this.tone(320, 0.12, 0.2, 'sawtooth', 0.6, p); }
         break;
+      case 'cerf':
+        this.tone(dead ? 380 : 520, dead ? 0.5 : 0.18, 0.18, 'sawtooth', 0.5, p);
+        break;
+      case 'sanglier':
+        for (let i = 0; i < (dead ? 4 : 2); i++) this.burst(240, 'lowpass', 0.12, 0.4, 2, p, i * 0.15);
+        break;
+      case 'perdrix':
+        for (let i = 0; i < 6; i++) this.burst(1400, 'bandpass', 0.04, 0.12, 1, p, i * 0.05);
+        break;
       case 'araignée':
         this.burst(4200, 'highpass', dead ? 0.25 : 0.5, dead ? 0.15 : 0.18, 1, p);
         break;

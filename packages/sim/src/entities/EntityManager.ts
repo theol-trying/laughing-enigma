@@ -2,7 +2,7 @@ import { Entity, type RemoteTarget } from './Entity';
 export type { RemoteTarget } from './Entity';
 import { generateNPCs, type NPCData } from './NPC';
 import { humanoid, drawModel, type ModelDef, type HumanLook } from './Models';
-import { buildLairs, makeMonster, dangerAt, dungeonLevel, type Lair } from './Monster';
+import { buildLairs, buildHerds, makeMonster, dangerAt, dungeonLevel, MONSTERS, type Lair } from './Monster';
 import { NavGrid } from '../ai/Pathfinding';
 import { blockAt, resolveSpot, patrolRoute, type Spot } from '../ai/Schedule';
 import { thinkMonster, moveMonster, turn, type MonsterCtx } from '../ai/MonsterAI';
@@ -86,7 +86,7 @@ export class EntityManager {
   private dungeonEnts: Entity[] = [];
 
   constructor(private host: EntityHost) {
-    this.lairs = buildLairs(host.world.civ, host.world.seed);
+    this.lairs = [...buildLairs(host.world.civ, host.world.seed), ...buildHerds(host.world.civ, host.world.seed)];
     this.mctx = {
       chunks: host.world.chunks, player: host.player, ents: this.entities, env: { night: 0, fog: 0 }, combat: host.combat,
       ground: (x, z, y) => this.ground(x, z, y),
@@ -187,7 +187,7 @@ export class EntityManager {
       const a = (i / Math.max(1, n)) * Math.PI * 2, r = 3 + (i % 3) * 2;
       const e = makeMonster(`${l.key}:${i}`, type, l.x + Math.cos(a) * r, l.z + Math.sin(a) * r, l.x, l.z, l.territory, {
         lair: l.key, poiId: l.poiId, campId: l.sid, leader: isLeader, unique: isLeader ? `${l.key}:chef` : '',
-        level: dangerAt(this.host.world.civ, l.x, l.z) + (isLeader ? 1 : 0),
+        level: MONSTERS[type]?.prey ? 1 : dangerAt(this.host.world.civ, l.x, l.z) + (isLeader ? 1 : 0),
       });
       if (isLeader) e.name = `${e.name} (${this.host.world.civ.settlements[l.sid]?.name.replace('Camp ', '') ?? ''})`;
       e.y = this.ground(e.x, e.z, 1000);
@@ -479,6 +479,7 @@ export class EntityManager {
         e.deadT += dt;
         e.pose.dead = Math.min(1, e.pose.dead + dt * 2.5);
         e.pose.swing = 0;
+        if (e.mon && MONSTERS[e.mon.def]?.flyer) e.pose.hover = Math.max(0, e.pose.hover - dt * 6); // l'oiseau abattu tombe
         continue;
       }
       if (e.status) {
@@ -578,7 +579,7 @@ export class EntityManager {
     }
     const l = this.lairs.find((q) => q.key === z);
     const civ = this.host.world.civ, dg = z.startsWith('d') ? civ.dungeons[Number(z.slice(1))] : null;
-    const lvl = l ? dangerAt(civ, l.x, l.z) + (type === l.leader ? 1 : 0) : dg ? dungeonLevel(civ, dg) : 1;
+    const lvl = MONSTERS[type]?.prey ? 1 : l ? dangerAt(civ, l.x, l.z) + (type === l.leader ? 1 : 0) : dg ? dungeonLevel(civ, dg) : 1;
     const e = makeMonster(id, type, x, zz, l?.x ?? x, l?.z ?? zz, l?.territory ?? 14, l ? { lair: l.key, poiId: l.poiId, campId: l.sid, leader: type === l.leader, unique: type === l.leader ? `${l.key}:chef` : '', level: lvl } : { unique: id, level: lvl });
     e.zoneKey = z;
     return e;

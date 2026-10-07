@@ -22,6 +22,8 @@ import type { Coop } from '../net/Coop';
 import { hashString } from '@ascii-fort/core/RNG';
 import { LockpickScreen } from '../ui/LockpickScreen';
 import { Particles } from './Particles';
+import { Birds } from './Birds';
+import { FISH } from '@ascii-fort/sim/gameplay/Items';
 import type { Mood } from '../audio/AudioEngine';
 import { B } from '@ascii-fort/worldgen/terrain/Biomes';
 import { W_SEA, W_LAKE } from '@ascii-fort/worldgen/terrain/Hydrology';
@@ -53,7 +55,8 @@ export type Focus =
   | { t: 'prop'; prop: Prop; label: string; hint?: string; danger?: boolean }
   | { t: 'entity'; e: Entity; label: string; pick?: boolean }
   | { t: 'drop'; d: Dropped; label: string }
-  | { t: 'player'; id: string; label: string };
+  | { t: 'player'; id: string; label: string }
+  | { t: 'fish'; label: string };
 
 /** Partie en cours : monde, joueur, temps et systèmes. */
 export class Game {
@@ -126,6 +129,10 @@ export class Game {
   /** libère les ressources GPU (retour au titre) */
   /** particules (étincelles, sang, poussière, fumée, lucioles…) */
   readonly particles = new Particles();
+  /** volées d'oiseaux (décor) */
+  readonly birds = new Birds();
+  /** pêche en cours : bouchon sur l'eau ; « bite » = ça mord (E pour ferrer) */
+  fishing: { x: number; y: number; z: number; px: number; pz: number; kind: string; t: number; bite: boolean } | null = null;
   private smokeT = 0;
   private wasGround = true; private prevVy = 0;
   /** ombres portées de la torche la plus proche (option) */
@@ -160,7 +167,7 @@ export class Game {
       if (d.sourceId === 'player') this.audio.hit();
       const e = this.entities.entities.find((x) => x.id === d.targetId);
       if (!e) return;
-      const kind = e.type.includes('squelette') || e.type === 'gardien des tombes' ? 'os' : e.type === 'spectre' ? 'brume' : 'sang';
+      const kind = e.type.includes('squelette') || e.type === 'gardien des tombes' ? 'os' : e.type === 'spectre' ? 'brume' : e.type === 'perdrix' ? 'plume' : 'sang';
       this.particles.emit(kind, e.x, e.y + e.model.height * 0.6, e.z, Math.min(14, 4 + Math.round(d.amount / 4)));
     });
     this.events.on('quest:completed', () => this.audio.chime());
@@ -281,7 +288,7 @@ export class Game {
       case 'puits': return "Boire l'eau du puits";
       case 'âtre': case 'feu': case 'foyer':
         if (pr.kind === 'foyer' && this.buildingKind(pr) === 'forge') return 'Fondre le minerai (2 minerais de fer + 1 charbon)';
-        return this.character.inv.count('viande crue') ? 'Cuire la viande' : '';
+        return this.character.inv.count('viande crue') || FISH.some((id) => this.character.inv.count(id)) ? 'Cuire la viande et le poisson' : '';
       case 'enclume': return 'Forger des flèches (1 bûche ou des branches + 1 lingot)';
       case 'établi': return 'Préparer une potion (2 herbes)';
       case 'piège': return this.state.flags.get(pr.key) ? '' : 'Désamorcer le piège';
@@ -291,6 +298,7 @@ export class Game {
 
   private findFocus(): Focus | null {
     const p = this.player;
+    if (this.fishing) return { t: 'fish', label: this.fishing.bite ? 'Ça mord : ferrer !' : 'Relever la ligne' };
     const e = this.entities.pick(p.x, p.z, p.heading, 3.2, false);
     const see = (x: number, z: number) => lineOfSight(this.world.chunks, p.x, p.z, x, z, p.y);
     if (e && see(e.x, e.z)) {
@@ -329,6 +337,9 @@ export class Game {
       const d = Math.hypot(dr.x - p.x, dr.z - p.z);
       if (d < 2.2 && d - 1 < bs) { bs = d - 1; best = { t: 'drop', d: dr, label: `Ramasser : ${item(dr.id).name}${dr.qty > 1 ? ' ×' + dr.qty : ''}` }; }
     }
+    // au bord de l'eau avec une canne : on peut pêcher
+    const w = this.waterNear.p;
+    if (!best && w && !this.dungeon && Math.hypot(w.x - p.x, w.z - p.z) < 8 && this.character.inv.count('canne à pêche')) best = { t: 'fish', label: `Pêcher (${this.waterNear.kind ?? 'eau'})` };
     return best;
   }
 
@@ -379,7 +390,9 @@ export class Game {
 
   interact(): void {
     const f = this.focus, ch = this.character, p = this.player;
+    if (this.fishing) { this.reelIn(); return; }
     if (!f) return;
+    if (f.t === 'fish') { this.castLine(); return; }
     if (f.t === 'entity') {
       const e = f.e;
       if (e.alive && e.npc) { if (f.pick) this.pickpocket(e); else this.talkTo(e); return; }
@@ -468,6 +481,9 @@ export class Game {
         }
         const n = ch.inv.count('viande crue');
         if (n) { ch.inv.remove('viande crue', n); ch.inv.add('viande grillée', n); ch.practice('artisanat', n); this.events.emit('message', { text: `Vous faites griller ${n} morceau(x) de viande.` }); }
+        let nf = 0;
+        for (const id of FISH) { const k = ch.inv.count(id); if (k) { ch.inv.remove(id, k); nf += k; } }
+        if (nf) { ch.inv.add('poisson grillé', nf); ch.practice('artisanat', nf * 0.5); this.events.emit('message', { text: `Vous faites griller ${nf} poisson${nf > 1 ? 's' : ''}.` }); }
         break;
       }
       case 'enclume':
@@ -700,6 +716,80 @@ export class Game {
     return out;
   }
 
+  /** Lance la ligne : le bouchon tombe dans l'eau devant soi (ou au point d'eau le plus proche). */
+  private castLine(): void {
+    const w = this.waterNear.p, p = this.player;
+    if (!w) return;
+    let bx = w.x, bz = w.z, by = w.y;
+    const fx = Math.sin(p.heading), fz = -Math.cos(p.heading);
+    for (let r = 2; r <= 8; r += 0.5) {
+      const x = p.x + fx * r, z = p.z + fz * r, wy = this.world.waterAt(x, z);
+      if (!Number.isNaN(wy) && wy > this.world.heightAt(x, z) + 0.1) { bx = x; bz = z; by = wy; break; }
+    }
+    this.fishing = { x: bx, y: by, z: bz, px: p.x, pz: p.z, kind: this.waterNear.kind ?? 'rivière', t: 3 + Math.random() * 7, bite: false };
+    this.audio.splash(0.35, { x: bx, y: by, z: bz });
+    this.particles.emit('gouttes', bx, by + 0.05, bz, 5);
+    this.events.emit('message', { text: 'Vous lancez votre ligne… Attendez que ça morde, puis [E] pour ferrer.' });
+  }
+
+  /** E pendant la pêche : on ferre (si ça mord) ou on relève la ligne. */
+  private reelIn(): void {
+    const fi = this.fishing!;
+    this.fishing = null;
+    if (!fi.bite) { this.events.emit('message', { text: 'Vous relevez votre ligne.', color: 0x9a9a90 }); return; }
+    const table: [string, number][] = fi.kind === 'mer' ? [['hareng', 40], ['bar', 25], ['morue', 22], ['anguille', 8], ['vieille botte', 5]]
+      : fi.kind === 'lac' ? [['carpe', 38], ['brochet', 28], ['truite', 20], ['anguille', 10], ['vieille botte', 4]]
+      : [['truite', 48], ['carpe', 18], ['brochet', 14], ['saumon', 12], ['anguille', 5], ['vieille botte', 3]];
+    let r = Math.random() * table.reduce((a, b) => a + b[1], 0), id = table[0][0];
+    for (const [k, w] of table) if ((r -= w) < 0) { id = k; break; }
+    this.giveLoot([{ id, qty: 1 }], 'Pêche');
+    this.audio.splash(0.9, { x: fi.x, y: fi.y, z: fi.z });
+    this.particles.emit('gouttes', fi.x, fi.y + 0.1, fi.z, 12);
+    if (id !== 'vieille botte') this.character.gainXp(4);
+  }
+
+  private updateFishing(dt: number): void {
+    const fi = this.fishing, p = this.player;
+    if (!fi) return;
+    if (Math.hypot(p.x - fi.px, p.z - fi.pz) > 0.8 || p.dead || this.dungeon) { this.fishing = null; return; }
+    if ((fi.t -= dt) > 0) return;
+    if (!fi.bite) {
+      fi.bite = true; fi.t = 0.8 + Math.random() * 0.5;
+      this.audio.splash(0.5, { x: fi.x, y: fi.y, z: fi.z });
+      this.particles.emit('gouttes', fi.x, fi.y + 0.05, fi.z, 6);
+    } else {
+      fi.bite = false; fi.t = 3 + Math.random() * 6;
+      this.events.emit('message', { text: 'Le poisson a filé… (ferrez plus vite avec E)', color: 0x9a9a90 });
+    }
+  }
+
+  /** Segment cylindrique de A à B (canne, ligne). */
+  private seg(ax: number, ay: number, az: number, bx: number, by: number, bz: number, w: number, color: number, mat: number): void {
+    const dx = bx - ax, dy = by - ay, dz = bz - az;
+    this.instances.add(trsYawPitch(this.m4, (ax + bx) / 2, (ay + by) / 2, (az + bz) / 2, Math.atan2(dx, dz), Math.atan2(Math.hypot(dx, dz), dy), w, Math.hypot(dx, dy, dz), w), color, mat, 0, 0, 1, 1);
+  }
+
+  /** Canne, ligne (en chaînette) et bouchon. */
+  private renderFishing(): void {
+    const fi = this.fishing, p = this.player;
+    if (!fi) return;
+    const fx = Math.sin(p.heading), fz = -Math.cos(p.heading), rx = -fz, rz = fx;
+    const hx = p.x + fx * 0.6 + rx * 0.35, hy = p.y + 1.05, hz = p.z + fz * 0.6 + rz * 0.35;
+    const tx = p.x + fx * 2.3 + rx * 0.25, ty = p.y + 1.9, tz = p.z + fz * 2.3 + rz * 0.25;
+    this.seg(hx, hy, hz, tx, ty, tz, 0.035, 0x6a4a2a, M.WOOD);
+    const bob = fi.bite ? -0.12 + Math.sin(this.elapsed * 30) * 0.06 : Math.sin(this.elapsed * 2.4) * 0.03;
+    const by = fi.y + 0.04 + bob;
+    let px = tx, py = ty, pz = tz;
+    for (let i = 1; i <= 8; i++) {
+      const k = i / 8, sag = Math.sin(k * Math.PI) * 0.5;
+      const x = tx + (fi.x - tx) * k, y = ty + (by - ty) * k - sag, z = tz + (fi.z - tz) * k;
+      this.seg(px, py, pz, x, y, z, 0.012, 0xd8d8d0, M.CLOTH);
+      px = x; py = y; pz = z;
+    }
+    this.instances.add(trsYawPitch(this.m4, fi.x, by + 0.05, fi.z, 0, 0, 0.12, 0.1, 0.12), 0xd03020, M.CLOTH, 0, 0, 1, 2);
+    this.instances.add(trsYawPitch(this.m4, fi.x, by + 0.13, fi.z, 0, 0, 0.08, 0.06, 0.08), 0xe8e8e0, M.CLOTH, 0, 0, 1, 2);
+  }
+
   /** Ajoute (ou renouvelle) un bonus temporaire. */
   addBuff(b: Buff): void {
     const i = this.buffs.findIndex((x) => x.id === b.id);
@@ -878,6 +968,8 @@ export class Game {
     const bio = this.world.sampler.biomeAt(p.x, p.z);
     this.particles.fireflies(!this.dungeon && this.atmoNight > 0.6 && this.rain() < 0.2 && (bio === B.FOREST || bio === B.PLAINS || bio === B.SWAMP || bio === B.HEATH), p.x, p.z, (x, z) => this.world.heightAt(x, z));
     this.particles.update(dt, this.wx.mix.windX, this.wx.mix.windZ);
+    this.birds.update(dt, !this.dungeon && this.atmoNight < 0.5 && this.rain() < 0.5, p.x, p.z, (x, z) => this.world.heightAt(x, z), this.waterNear.kind === 'mer');
+    this.updateFishing(dt);
     this.focus = p.dead ? null : this.findFocus();
     if (input.key('e')) this.interact();
     if (input.key('t')) this.tradeWithFocus();
@@ -1161,7 +1253,7 @@ export class Game {
     this.entities.render(this.instances, c.x, c.z, this.target && this.target.alive ? this.target.id : null);
     this.coop?.render(this.instances, c.x, c.z);
     this.particles.render(this.instances, c.x, c.z);
-    if (!dg) this.renderBanners(c.x, c.z);
+    if (!dg) { this.renderBanners(c.x, c.z); this.birds.render(this.instances, c.x, c.z); this.renderFishing(); }
     if (dg && dg.layout.lockedDoor && !this.state.flags.get(`door:dj${dg.layout.id}`)) {
       const d = dg.layout.lockedDoor;
       this.instances.add(trsYawPitch(this.m4, d.x, 1.6, d.z, d.horizontal ? Math.PI / 2 : 0, 0, 3.4, 3.2, 0.3), 0x5a3a22, M.DOOR, 0, 0, 0.3);

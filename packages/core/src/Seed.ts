@@ -5,7 +5,7 @@ import { GENERATOR_VERSION } from './version';
 export type StreamName =
   | 'terrain' | 'climate' | 'hydrology' | 'regions' | 'factions' | 'history'
   | 'settlements' | 'roads' | 'layout' | 'poi' | 'npc' | 'dungeon' | 'monsters'
-  | 'loot' | 'names' | 'weather' | 'vegetation' | 'quests' | 'economy' | 'items';
+  | 'loot' | 'names' | 'weather' | 'vegetation' | 'quests' | 'economy' | 'items' | 'faune';
 
 /** Normalise une saisie de seed : majuscules, séparateurs « - », caractères sûrs. */
 export function normalizeSeed(input: string): string {
