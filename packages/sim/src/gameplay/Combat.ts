@@ -9,6 +9,8 @@ export interface CombatHost {
   events: EventBus;
   onPlayerDeath(): void;
   playerArmor(): number;
+  /** coup encaissé (usure de l'équipement) */
+  onPlayerHit?(raw: number, blocked: boolean): void;
   /** multijoueur : coup sur une entité simulée par un autre joueur → transmis (renvoie true) */
   forward?(e: Entity, amount: number, element?: Element): boolean;
 }
@@ -49,20 +51,22 @@ export function hitPlayer(host: CombatHost, amount: number, src: Entity, element
   if (p.dead || p.invuln > 0) return 0;
   const dx = src.x - p.x, dz = src.z - p.z, d = Math.hypot(dx, dz) || 1;
   const front = (dx * Math.sin(p.heading) - dz * Math.cos(p.heading)) / d > 0.3;
-  let dmg = amount;
+  let dmg = amount, blocked = false;
   if (p.blocking && front && p.stamina > 0) {
     p.stamina = Math.max(0, p.stamina - amount * 1.2);
-    dmg *= p.shield ? 0.15 : 0.35;
+    dmg *= p.guard; blocked = true;
     host.events.emit('message', { text: 'Coup paré !', color: 0x9ad0ff });
   }
   const armor = host.playerArmor();
   dmg = Math.max(1, Math.round(dmg * (1 - armor / (armor + 15))));
+  if (element === 'givre' && p.warm) dmg = Math.max(1, Math.round(dmg * 0.5));
   p.hp -= dmg;
   p.hurt = Math.min(1, 0.35 + dmg / 30);
   p.hitAmount = dmg; p.hitT = 1; p.hitDir = Math.atan2(src.x - p.x, -(src.z - p.z));
   if (element === 'poison') p.poison = Math.max(p.poison, 6);
-  if (element === 'givre') p.frost = Math.max(p.frost, 3);
+  if (element === 'givre' && !p.warm) p.frost = Math.max(p.frost, 3);
   if (element === 'feu') p.burn = Math.max(p.burn, 3);
+  host.onPlayerHit?.(amount, blocked);
   if (p.hp <= 0) { p.hp = 0; p.dead = true; host.onPlayerDeath(); }
   return dmg;
 }

@@ -1,14 +1,14 @@
 import type { Input } from '@ascii-fort/ascii-engine/Input';
 import type { Entity } from '../entities/Entity';
 import type { Player } from '../entities/Player';
-import type { Character } from './Character';
+import type { Character, Slot } from './Character';
 import type { EventBus } from '@ascii-fort/core/Events';
 import { hitEntity, type CombatHost } from './Combat';
 import type { InstanceBuffer } from '@ascii-fort/ascii-engine/Renderer';
 import type { Camera } from '@ascii-fort/ascii-engine/Camera';
 import { M } from '@ascii-fort/ascii-engine/Materials';
 import { trsYawPitch, mat4 } from '@ascii-fort/core/math';
-import type { Element } from './Items';
+import { wearFactor, type Element } from './Items';
 import { spell } from './Spells';
 
 // Combat du joueur : attaques légère / lourde (maintenir), blocage, esquive, arc, sorts.
@@ -38,6 +38,8 @@ export interface CombatWorld {
   castBonus?(id: string): void;
   /** coup porté dans le vide : peut-être un arbre ou un rocher (récolte) */
   harvest?(heavy: boolean): void;
+  /** usure de l'équipement porté */
+  wear?(slot: Slot, units: number): void;
   player: Player;
   character: Character;
   events: EventBus;
@@ -69,7 +71,9 @@ export class PlayerCombat {
     this.cooldown -= dt;
     this.swing = Math.max(0, this.swing - dt * 2.4 * weapon.speed);
     p.mana = Math.min(p.maxMana, p.mana + dt * 1.5);
-    p.shield = !!ch.shield;
+    const sh = ch.shield;
+    p.shield = !!sh;
+    p.guard = sh ? 0.35 - 0.2 * wearFactor(sh.dur ?? 100) - (sh.quality ? 0.03 : 0) : 0.35;
     // esquive : V ou double appui d'une direction
     if ((input.key('v') || input.doubleTapped) && p.stamina >= 20 && this.dashT <= 0 && p.onGround) {
       let dx = 0, dz = 0;
@@ -160,6 +164,7 @@ export class PlayerCombat {
     if (sneak > 1) { dmg *= sneak; w.events.emit('message', { text: `Attaque sournoise ! Dégâts ×${sneak}`, color: 0xd070d0 }); ch.practice('furtivité', 3); }
     if (ch.weapon?.weapon?.kind === 'masse' && (best.type === 'squelette' || best.mon?.def === 'roi-squelette')) dmg *= 1.4;
     const done = hitEntity(w.combat, best, dmg, 'player', element);
+    w.wear?.('arme', heavy ? 1.6 : 1);
     if (heavy && best.mon) { best.mon.windup = 0; best.x += fx * 0.9; best.z += fz * 0.9; } // étourdi, repoussé
     if (element && best.alive) applyElement(best, element);
     this.lastTarget = best;
@@ -177,6 +182,7 @@ export class PlayerCombat {
     w.reveal?.();
     this.projectiles.push({ x: p.x + f[0] * 0.6, y: p.eyeY - 0.1, z: p.z + f[2] * 0.6, vx: f[0] * v, vy: f[1] * v, vz: f[2] * v, dmg: wd.damage * ch.bowMult() * (0.3 + 0.7 * draw), element: wd.element, kind: 'flèche', life: 6, stuck: false, owner: 'player' });
     this.cast(this.projectiles[this.projectiles.length - 1]);
+    w.wear?.('arme', 1);
     this.cooldown = 0.35;
   }
 
@@ -258,7 +264,7 @@ export class PlayerCombat {
     }
     if (ch.shield && (blocking || wd?.kind !== 'arc')) {
       const [x, y, z] = at(0.5, blocking ? -0.08 : -0.38, blocking ? -0.1 : -0.42);
-      trsYawPitch(tmp, x, y, z, -h, pt, 0.4, 0.5, 0.05); ib.add(tmp, ch.shield.id === 'bouclier de fer' ? 0x8a8a94 : 0x7a5a3a, ch.shield.id === 'bouclier de fer' ? M.METAL : M.WOOD, 0, 0, 1);
+      trsYawPitch(tmp, x, y, z, -h, pt, 0.4, 0.5, 0.05); ib.add(tmp, ch.shield.good === 'fer' ? 0x8a8a94 : 0x7a5a3a, ch.shield.good === 'fer' ? M.METAL : M.WOOD, 0, 0, 1);
     }
     for (const pr of this.projectiles) {
       const sp = Math.hypot(pr.vx, pr.vz) || 1;

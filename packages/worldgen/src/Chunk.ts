@@ -24,8 +24,8 @@ export interface ChunkExtras {
 
 const V = CHUNK_RES + 1;
 
-/** Arbre ou rocher que l'on peut abattre / miner ; id stable : « cx:cz:gx:gz » (case de végétation). */
-export interface HarvestNode { id: string; kind: 'arbre' | 'rocher'; x: number; y: number; z: number; size: number }
+/** Arbre ou rocher que l'on peut abattre / miner, buisson à cueillir ; id stable : « cx:cz:gx:gz » (case de végétation). */
+export interface HarvestNode { id: string; kind: 'arbre' | 'rocher' | 'buisson'; x: number; y: number; z: number; size: number }
 
 export class ChunkData {
   readonly x0: number; readonly z0: number;
@@ -134,6 +134,8 @@ export function buildChunk(sampler: TerrainSampler, cx: number, cz: number, extr
       const bc = shade(mixColor(0x3e6a2c, 0x5a7a34, r5), 0.9 + r4 * 0.2);
       mb.blob(x, y + 0.35, z, 0.7 + r4 * 0.6, 0.5 + r5 * 0.4, 0.7 + r5 * 0.5, bc, M.BUSH, 5, 3);
       mb.vflags = 0;
+      // buisson : cueillette (aucun tirage, rien ne change à l'image)
+      ch.nodes.push({ id, kind: 'buisson', x, y, z, size: 0.7 + r4 * 0.6 });
     } else if (r3 > 1 - bd.rocks * 0.06) {
       const sz = 0.5 + r4 * r4 * 2.5;
       const rc = s.biome === B.SNOW ? 0x9a9aa0 : shade(0x7a766c, 0.85 + r5 * 0.3);

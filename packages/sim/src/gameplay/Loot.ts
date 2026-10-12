@@ -72,3 +72,26 @@ function merge(l: LootLine[]): LootLine[] {
   for (const x of l) m.set(x.id, (m.get(x.id) ?? 0) + x.qty);
   return [...m].map(([id, qty]) => ({ id, qty }));
 }
+
+type BushEntry = [id: string, chance: number, min: number, max: number];
+/** Cueillette d'un buisson selon le biome (jeu : Math.random) ; au moins une poignée de baies. */
+const BUSH: Record<number, BushEntry[]> = {
+  [B.FOREST]: [['baies', 0.6, 1, 3], ['champignon', 0.45, 1, 2], ['herbe médicinale', 0.25, 1, 1]],
+  [B.SWAMP]: [['herbe médicinale', 0.55, 1, 2], ['champignon', 0.45, 1, 2], ['baies', 0.2, 1, 2]],
+  [B.HEATH]: [['baies', 0.65, 1, 3], ['herbe médicinale', 0.3, 1, 1]],
+  [B.TAIGA]: [['baies', 0.5, 1, 2], ['champignon', 0.4, 1, 2]],
+  [B.PLAINS]: [['baies', 0.5, 1, 2], ['herbe médicinale', 0.25, 1, 1]],
+  [B.MOUNTAIN]: [['herbe médicinale', 0.4, 1, 1], ['baies', 0.3, 1, 1]],
+};
+const BUSH_OTHER: BushEntry[] = [['baies', 0.4, 1, 2]];
+export function bushLoot(biome: number, rnd: () => number = Math.random): LootLine[] {
+  const out: LootLine[] = [];
+  for (const [id, ch, a, b] of BUSH[biome] ?? BUSH_OTHER) if (rnd() < ch) out.push({ id, qty: a + Math.floor(rnd() * (b - a + 1)) });
+  if (!out.length) out.push({ id: 'baies', qty: 1 });
+  return out;
+}
+/** Ce qu'on peut trouver sur un buisson de ce biome (indication [E]). */
+export function bushHint(biome: number): string {
+  const short: Record<string, string> = { baies: 'baies', champignon: 'champignons', 'herbe médicinale': 'herbes' };
+  return (BUSH[biome] ?? BUSH_OTHER).map(([id]) => short[id]).join(' · ');
+}

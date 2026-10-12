@@ -24,22 +24,26 @@ export class UIManager {
   replace(s: Screen): void { this.stack.pop(); this.open(s); }
   /** appelé quand le dernier écran modal se ferme (pour recapturer la souris en jeu) */
   onResume: (() => void) | null = null;
-  close(): void { this.stack.pop(); if (!this.modal) this.onResume?.(); }
+  /** ferme l'écran donné (par identité : un écran déjà remplacé ne ferme pas son successeur), ou le sommet */
+  close(s?: Screen): void {
+    if (s) { const i = this.stack.lastIndexOf(s); if (i < 0) return; this.stack.splice(i, 1); } else this.stack.pop();
+    if (!this.modal) this.onResume?.();
+  }
   closeAll(): void { this.stack = []; }
   get top(): Screen | undefined { return this.stack[this.stack.length - 1]; }
   get modal(): boolean { return this.stack.some((s) => s.modal); }
 
-  private ctx(): UICtx {
+  private ctx(s?: Screen): UICtx {
     const i = this.inputRef;
-    return { input: i, grid: this.renderer.ui, renderer: this.renderer, mouseCell: this.renderer.cellAt(i.mouseX, i.mouseY), clicked: i.mouseClicked(0), close: () => this.close() };
+    return { input: i, grid: this.renderer.ui, renderer: this.renderer, mouseCell: this.renderer.cellAt(i.mouseX, i.mouseY), clicked: i.mouseClicked(0), close: () => this.close(s) };
   }
 
   update(): void {
     const t = this.top;
-    if (t) t.input(this.ctx());
+    if (t) t.input(this.ctx(t));
   }
 
-  draw(): void { const c = this.ctx(); for (const s of this.stack) s.draw(c); }
+  draw(): void { for (const s of [...this.stack]) s.draw(this.ctx(s)); }
 }
 
 /** Liste d'options numérotées, cliquables ; renvoie l'index choisi ou −1. */

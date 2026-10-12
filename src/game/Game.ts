@@ -7,29 +7,31 @@ import type { MacroWorld } from '@ascii-fort/worldgen/MacroWorld';
 import type { Civilization } from '@ascii-fort/worldgen/civilization/Civilization';
 import { buildFarTerrain } from '@ascii-fort/worldgen/FarTerrain';
 import { generateDungeon, buildDungeon, type DungeonLayout } from '@ascii-fort/worldgen/dungeons/DungeonGenerator';
-import type { ChunkData, Prop } from '@ascii-fort/worldgen/Chunk';
+import type { ChunkData, Prop, HarvestNode } from '@ascii-fort/worldgen/Chunk';
 import { Player } from '@ascii-fort/sim/entities/Player';
 import { EntityManager } from '@ascii-fort/sim/entities/EntityManager';
 import type { Entity } from '@ascii-fort/sim/entities/Entity';
 import { MONSTERS } from '@ascii-fort/sim/entities/Monster';
 import { type CombatHost } from '@ascii-fort/sim/gameplay/Combat';
-import { Character } from '@ascii-fort/sim/gameplay/Character';
+import { Character, type Slot } from '@ascii-fort/sim/gameplay/Character';
 import { PlayerCombat , projectileLook } from '@ascii-fort/sim/gameplay/PlayerCombat';
 import { WorldState, type Dropped } from '@ascii-fort/sim/gameplay/WorldState';
-import { item } from '@ascii-fort/sim/gameplay/Items';
+import { item, baseId, durOf, FISH, QUALITY } from '@ascii-fort/sim/gameplay/Items';
+import { WORKSHOP_TABS, WORKSHOP_TITLE, WORKSHOP_LABEL, WORKSHOP_IDLE, VERB_DONE, SOURCES, craft, missing, craftableCount, repairAt, goldRepairCost, type Workshop, type Recipe } from '@ascii-fort/sim/gameplay/Crafting';
+import type { NPCData } from '@ascii-fort/sim/entities/NPC';
 import { packBits, unpackBits, type SaveData } from './SaveManager';
 import type { Coop } from '../net/Coop';
 import { hashString } from '@ascii-fort/core/RNG';
 import { LockpickScreen } from '../ui/LockpickScreen';
+import { CraftingScreen, type Feedback } from '../ui/CraftingScreen';
 import { Particles } from './Particles';
 import { Birds } from './Birds';
-import { FISH } from '@ascii-fort/sim/gameplay/Items';
-import type { Mood } from '../audio/AudioEngine';
+import type { Mood, Pos } from '../audio/AudioEngine';
 import { B } from '@ascii-fort/worldgen/terrain/Biomes';
 import { W_SEA, W_LAKE } from '@ascii-fort/worldgen/terrain/Hydrology';
 import { GAME_VERSION, GENERATOR_VERSION } from '../version';
 import type { Good } from '@ascii-fort/worldgen/civilization/types';
-import { creatureLoot, containerLoot, type LootLine } from '@ascii-fort/sim/gameplay/Loot';
+import { creatureLoot, containerLoot, bushLoot, bushHint, type LootLine } from '@ascii-fort/sim/gameplay/Loot';
 import { perceives, lineOfSight, playerNoise } from '@ascii-fort/sim/ai/Perception';
 import { Reputation } from '@ascii-fort/sim/gameplay/Reputation';
 import { Economy } from '@ascii-fort/sim/gameplay/Economy';
@@ -52,7 +54,8 @@ interface ActiveDungeon { layout: DungeonLayout; mesh: GpuMesh; data: ChunkData;
 export interface Buff { id: string; name: string; t: number; dmg?: number; armor?: number; regen?: number; stam?: number }
 
 export type Focus =
-  | { t: 'prop'; prop: Prop; label: string; hint?: string; danger?: boolean }
+  | { t: 'prop'; prop: Prop; label: string; hint?: string; danger?: boolean; muted?: boolean }
+  | { t: 'bush'; node: HarvestNode; label: string; hint?: string }
   | { t: 'entity'; e: Entity; label: string; pick?: boolean }
   | { t: 'drop'; d: Dropped; label: string }
   | { t: 'player'; id: string; label: string }
@@ -97,7 +100,9 @@ export class Game {
   /** objets récupérés récemment (affichés à droite de l'écran) */
   lootFeed: { text: string; color: number; t: number }[] = [];
   /** bandeau central (montée de niveau…) */
-  banner: { text: string; sub: string; t: number } | null = null;
+  banner: { text: string; sub: string; t: number; color?: number } | null = null;
+  /** dernier rappel « arme hors d'usage » */
+  private brokenMsgT = -100;
   private lastLevel = 1;
   private tintFlash: { c: [number, number, number]; t: number } | null = null;
   /** humidité des surfaces (0..1) : monte sous la pluie, sèche lentement */
@@ -152,7 +157,7 @@ export class Game {
     this.player.x = sp.x; this.player.z = sp.z; this.player.heading = sp.heading;
     this.world.chunks.update(sp.x, sp.z, -1);
     this.player.y = this.world.heightAt(sp.x, sp.z) + 0.1;
-    this.combat = { player: this.player, events: this.events, onPlayerDeath: () => this.onPlayerDeath(), playerArmor: () => this.character.armor, forward: (e, a, el) => !!this.coop?.forwardHit(e, a, el) };
+    this.combat = { player: this.player, events: this.events, onPlayerDeath: () => this.onPlayerDeath(), playerArmor: () => this.character.armor, forward: (e, a, el) => !!this.coop?.forwardHit(e, a, el), onPlayerHit: (raw, blocked) => this.wearOnHit(raw, blocked) };
     this.entities = new EntityManager(this);
     this.world.chunks.dynamic = this.entities.dynamic;
     this.lastDay = this.time.day;
@@ -273,6 +278,29 @@ export class Game {
     return L?.buildings[pr.bid]?.kind ?? 'maison';
   }
 
+  /** Atelier d'un objet du décor (null : pas un atelier). */
+  private workshop(pr: Prop): Workshop | null {
+    switch (pr.kind) {
+      case 'enclume': return 'enclume';
+      case 'établi': return 'établi';
+      case 'foyer': return this.buildingKind(pr) === 'forge' ? 'foyer de forge' : 'feu';
+      case 'âtre': return pr.sid >= 0 && this.entities.npcsOf(pr.sid).some((n) => n.profession === 'guérisseuse' && n.alive && n.home === pr.bid) ? 'guérisseuse' : 'feu';
+      case 'feu': return 'feu';
+      default: return null;
+    }
+  }
+
+  /** Indication sous l'invite [E] d'un atelier : pièce à réparer, recettes possibles, ou ce qu'il faut. */
+  private workshopHint(w: Workshop): { hint: string; muted?: boolean; danger?: boolean } {
+    const ch = this.character;
+    if (w === 'enclume') {
+      const bad = ch.worn().find((x) => x.slot && durOf(x.id) < 50);
+      if (bad) { const d = durOf(bad.id); return { hint: `${item(baseId(bad.id)).name} à ${d} % : onglet Réparer`, danger: d < 25 }; }
+    }
+    const k = craftableCount(ch.inv, WORKSHOP_TABS[w], ch.skills.artisanat);
+    return k ? { hint: `${k} recette${k > 1 ? 's' : ''} possible${k > 1 ? 's' : ''}` } : { hint: WORKSHOP_IDLE[w], muted: true };
+  }
+
   private propLabel(pr: Prop): string {
     const owned = this.isOwned(pr);
     switch (pr.kind) {
@@ -286,11 +314,7 @@ export class Game {
       case 'lit': return this.buildingKind(pr) === 'auberge' ? 'Dormir (chambre : 10 or)' : owned ? '' : 'Dormir';
       case 'autel': case 'sanctuaire': return 'Prier';
       case 'puits': return "Boire l'eau du puits";
-      case 'âtre': case 'feu': case 'foyer':
-        if (pr.kind === 'foyer' && this.buildingKind(pr) === 'forge') return 'Fondre le minerai (2 minerais de fer + 1 charbon)';
-        return this.character.inv.count('viande crue') || FISH.some((id) => this.character.inv.count(id)) ? 'Cuire la viande et le poisson' : '';
-      case 'enclume': return 'Forger des flèches (1 bûche ou des branches + 1 lingot)';
-      case 'établi': return 'Préparer une potion (2 herbes)';
+      case 'âtre': case 'feu': case 'foyer': case 'enclume': case 'établi': return WORKSHOP_LABEL[this.workshop(pr)!];
       case 'piège': return this.state.flags.get(pr.key) ? '' : 'Désamorcer le piège';
       default: return '';
     }
@@ -333,9 +357,20 @@ export class Game {
       best.hint = n ? `${n} témoin${n > 1 ? 's' : ''} vous verrai${n > 1 ? 'en' : ''}t ou entendrai${n > 1 ? 'en' : ''}t !` : p.crouch ? 'personne ne vous voit ni ne vous entend' : 'personne ne vous voit (accroupi avec C : plus silencieux)';
       best.danger = n > 0;
     }
+    if (best?.t === 'prop') { const w = this.workshop(best.prop); if (w) Object.assign(best, this.workshopHint(w)); }
     for (const dr of this.state.dropped) {
       const d = Math.hypot(dr.x - p.x, dr.z - p.z);
       if (d < 2.2 && d - 1 < bs) { bs = d - 1; best = { t: 'drop', d: dr, label: `Ramasser : ${item(dr.id).name}${dr.qty > 1 ? ' ×' + dr.qty : ''}` }; }
+    }
+    // buisson à cueillir (repousse chaque jour)
+    if (!best && !this.dungeon) {
+      let bb = Infinity;
+      for (const n of this.world.chunks.nodesNear(p.x, p.z, 2.6)) {
+        if (n.kind !== 'buisson' || this.state.flags.get('cueilli:' + n.id) === this.time.day) continue;
+        const dx = n.x - p.x, dz = n.z - p.z, d = Math.hypot(dx, dz);
+        if ((d > 0.8 && (dx * fx + dz * fz) / d < 0.35) || Math.abs(n.y - p.y) > 2 || d >= bb) continue;
+        bb = d; best = { t: 'bush', node: n, label: 'Cueillir : buisson', hint: bushHint(this.world.sampler.biomeAt(n.x, n.z)) };
+      }
     }
     // au bord de l'eau avec une canne : on peut pêcher
     const w = this.waterNear.p;
@@ -414,6 +449,7 @@ export class Game {
       this.events.emit('message', { text: `Ramassé : ${item(f.d.id).name}` });
       return;
     }
+    if (f.t === 'bush') { this.gather(f.node); return; }
     const pr = f.prop;
     switch (pr.kind) {
       case 'entrée': this.enterDungeon(pr.dungeonId); break;
@@ -470,42 +506,110 @@ export class Game {
         this.addBuff({ id: 'désaltéré', name: 'Désaltéré', t: 120, stam: 0.5 });
         this.events.emit('message', { text: "L'eau est fraîche : vous êtes désaltéré (endurance +50 %, 2 min)." });
         break;
-      case 'âtre': case 'feu': case 'foyer': {
-        if (pr.kind === 'foyer' && this.buildingKind(pr) === 'forge' && ch.inv.count('minerai de fer') >= 2 && ch.inv.count('charbon') >= 1) {
-          const n = Math.min(Math.floor(ch.inv.count('minerai de fer') / 2), ch.inv.count('charbon'));
-          ch.inv.remove('minerai de fer', n * 2); ch.inv.remove('charbon', n); ch.inv.add('lingot de fer', n); ch.practice('artisanat', 2 * n);
-          this.lootFeed.push({ text: `+ ${n > 1 ? n + ' ' : ''}Lingot de fer`, color: 0xe8e8e0, t: performance.now() });
-          this.events.emit('message', { text: `Le minerai fond dans le creuset : ${n} lingot${n > 1 ? 's' : ''} de fer.` });
-          this.audio.clang({ x: pr.x, y: pr.y + 1, z: pr.z });
-          break;
-        }
-        const n = ch.inv.count('viande crue');
-        if (n) { ch.inv.remove('viande crue', n); ch.inv.add('viande grillée', n); ch.practice('artisanat', n); this.events.emit('message', { text: `Vous faites griller ${n} morceau(x) de viande.` }); }
-        let nf = 0;
-        for (const id of FISH) { const k = ch.inv.count(id); if (k) { ch.inv.remove(id, k); nf += k; } }
-        if (nf) { ch.inv.add('poisson grillé', nf); ch.practice('artisanat', nf * 0.5); this.events.emit('message', { text: `Vous faites griller ${nf} poisson${nf > 1 ? 's' : ''}.` }); }
-        break;
-      }
-      case 'enclume':
-        if ((ch.inv.count('bois') || ch.inv.count('branche')) && ch.inv.count('lingot de fer')) {
-          ch.inv.remove(ch.inv.count('branche') ? 'branche' : 'bois'); ch.inv.remove('lingot de fer');
-          const n = 8 + Math.floor(ch.skills.artisanat / 10);
-          ch.inv.add('flèche', n); ch.practice('artisanat', 3);
-          this.events.emit('message', { text: `Vous forgez ${n} pointes et montez autant de flèches.` });
-        } else this.events.emit('message', { text: 'Il faut une bûche (ou des branches) et un lingot de fer.' });
-        break;
-      case 'établi':
-        if (ch.inv.count('herbe médicinale') >= 2 || (ch.inv.count('herbe médicinale') && ch.inv.count('écorce'))) {
-          if (ch.inv.count('écorce') && ch.inv.count('herbe médicinale') < 2) { ch.inv.remove('écorce'); ch.inv.remove('herbe médicinale'); } else ch.inv.remove('herbe médicinale', 2);
-          ch.inv.add('potion de soin'); ch.practice('artisanat', 3);
-          this.events.emit('message', { text: 'Vous broyez les herbes et préparez une potion de soin.' });
-        } else this.events.emit('message', { text: 'Il faut deux herbes médicinales (ou une herbe et de l’écorce).' });
-        break;
+      case 'âtre': case 'feu': case 'foyer': case 'enclume': case 'établi': this.openCrafting(pr); break;
       case 'piège':
         if (ch.skills.furtivité >= 15 || ch.stats.AGI >= 7) { this.setFlag(pr.key, true); ch.practice('furtivité', 3); this.events.emit('message', { text: 'Piège désamorcé.' }); }
         else this.events.emit('message', { text: 'Le mécanisme est trop délicat pour vous (Furtivité 15 requise).' });
         break;
     }
+  }
+
+  /** Ouvre l'écran d'artisanat de l'atelier visé. */
+  private openCrafting(pr: Prop): void {
+    const w = this.workshop(pr);
+    if (!w) return;
+    const p = this.player, pos = { x: pr.x, y: pr.y + 1, z: pr.z };
+    let lastHit = p.hitT;
+    this.ui?.openScreen?.(new CraftingScreen(WORKSHOP_TITLE[w], WORKSHOP_TABS[w], {
+      character: this.character, events: this.events,
+      craft: (r, n) => this.craftRecipe(r, n, pos),
+      repair: (ids) => this.repairAtAnvil(ids, pos),
+      closeReason: () => {
+        const hit = p.hitT > lastHit + 1e-3; lastHit = p.hitT;
+        if (p.dead) return '';
+        if (hit) return 'Vous êtes attaqué : vous lâchez votre ouvrage !';
+        if (Math.hypot(pr.x - p.x, pr.z - p.z) > 4.5) return 'L’atelier est trop loin.';
+        return null;
+      },
+    }));
+  }
+
+  /** Fabrication : consomme, produit, pratique, son et particules, fil de butin, message. */
+  private craftRecipe(r: Recipe, n: number, pos: Pos): Feedback {
+    const ch = this.character, skill = ch.skills.artisanat;
+    if (skill < r.skill) return { text: `Artisanat ${r.skill} requis (vous : ${skill}). Chaque fabrication fait progresser.`, color: 0xf09040 };
+    const res = craft(ch.inv, r, n, skill);
+    if (!res) {
+      const m = missing(ch.inv, r, 1)[0], src = m ? SOURCES[m.ing.ids[0]] : '';
+      this.audio.ui();
+      return { text: m ? `Il manque : ${m.lack} × ${m.ing.label ?? item(m.ing.ids[0]).name}${src ? ' — ' + src : ''}.` : 'Impossible.', color: 0xe05040 };
+    }
+    let ups = 0;
+    for (let i = 0; i < res.made; i++) if (ch.practice('artisanat', r.xp)) ups++;
+    if (r.tab === 'Potions') { this.audio.brew(pos); this.particles.emit('brume', pos.x, pos.y, pos.z, 4); }
+    else if (r.tab === 'Tannage') this.audio.scrape(pos);
+    else if (r.tab === 'Cuisine') { this.audio.sizzle(pos); this.particles.emit('fumée', pos.x, pos.y, pos.z, 3); }
+    else { this.audio.clang(pos); this.particles.emit('étincelle', pos.x, pos.y, pos.z, 8); }
+    const now = performance.now(), plain = (res.made - res.good) * res.per, fine = res.good * res.per;
+    if (plain) this.lootFeed.push({ text: `+ ${plain > 1 ? plain + ' ' : ''}${item(r.out).name}`, color: 0xe8e8e0, t: now });
+    if (fine) { this.lootFeed.push({ text: `+ ${fine > 1 ? fine + ' ' : ''}${item(r.out + QUALITY).name}`, color: 0x60d070, t: now }); this.audio.chime(); }
+    if (this.lootFeed.length > 8) this.lootFeed.splice(0, this.lootFeed.length - 8);
+    const total = plain + fine;
+    const text = `${VERB_DONE[r.verb]} : ${item(r.out).name}${total > 1 ? ' ×' + total : ''}${fine ? ` (dont ${fine} de qualité !)` : ''}.`;
+    this.events.emit('message', { text, color: 0xc8c8bc });
+    if (ups) { this.events.emit('message', { text: `Artisanat : ${ch.skills.artisanat}`, color: 0xe8c050 }); this.audio.chime(); }
+    return { text: text + (ups ? ` · Artisanat : ${ch.skills.artisanat}` : ''), color: fine ? 0xe8c050 : 0x60d070 };
+  }
+
+  /** Réparation à l'enclume (matériaux) ; 1,5 de pratique par pièce. */
+  private repairAtAnvil(ids: string[], pos: Pos): Feedback {
+    const ch = this.character, res = repairAt(ch, ids);
+    if (!res.fixed.length) { this.audio.ui(); return { text: res.blocked ?? 'Rien à réparer.', color: 0xe05040 }; }
+    let ups = 0;
+    for (let i = 0; i < res.fixed.length; i++) if (ch.practice('artisanat', 1.5)) ups++;
+    this.audio.clang(pos); this.particles.emit('étincelle', pos.x, pos.y, pos.z, 8);
+    const text = `Réparé : ${[...new Set(res.fixed)].map((id) => item(id).name).join(', ')} (${res.used.map(([id, n]) => `${n} × ${item(id).name}`).join(', ')}).`;
+    this.events.emit('message', { text, color: 0x60d070 });
+    if (ups) { this.events.emit('message', { text: `Artisanat : ${ch.skills.artisanat}`, color: 0xe8c050 }); this.audio.chime(); }
+    return { text: text + (res.blocked ? ` ${res.blocked}` : '') + (ups ? ` · Artisanat : ${ch.skills.artisanat}` : ''), color: 0x60d070 };
+  }
+
+  /** Usure de la pièce portée ; prévient aux seuils (50 %, 25 %, hors d'usage). */
+  private wearSlot(slot: Slot, units: number): void {
+    if (this.god) return;
+    const ev = this.character.wear(slot, units);
+    if (!ev) return;
+    const name = item(baseId(ev.id)).name;
+    if (ev.to <= 0) {
+      this.banner = { text: `${name.toUpperCase()} HORS D’USAGE`, sub: 'Plus aucun effet tant que l’objet n’est pas réparé : enclume (matériaux) ou forgeron (or).', t: 4, color: 0xe05040 };
+      this.events.emit('message', { text: `${name} : hors d’usage !`, color: 0xe05040 });
+      this.audio.crack(); this.tintFlash = { c: [0.9, 0.3, 0.2], t: 0.5 };
+    } else if (ev.from >= 25 && ev.to < 25) {
+      this.events.emit('message', { text: `${name} : usure critique (${ev.to} %). À réparer : enclume ou forgeron.`, color: 0xf09040 });
+      this.audio.ui();
+    } else if (ev.from >= 50 && ev.to < 50) {
+      this.lootFeed.push({ text: `${name} : usure visible (${ev.to} %)`, color: 0x9a9a90, t: performance.now() });
+      if (this.lootFeed.length > 8) this.lootFeed.splice(0, this.lootFeed.length - 8);
+      if (!this.state.flags.get('astuce:usure')) { this.state.flags.set('astuce:usure', true); this.events.emit('message', { text: 'L’équipement porté s’use : son état s’affiche dans le sac (Tab). On le répare à l’enclume d’une forge ou chez un forgeron.', color: 0x60d0e0 }); }
+    }
+  }
+
+  /** Coup encaissé : la parade use le bouclier (ou l'arme), sinon une pièce d'armure tirée au sort. */
+  private wearOnHit(raw: number, blocked: boolean): void {
+    const ch = this.character;
+    if (blocked) { if (ch.shield) this.wearSlot('bouclier', 1 + raw / 20); else this.wearSlot('arme', 0.5); return; }
+    const parts = ([['corps', 4], ['tête', 2], ['mains', 1], ['pieds', 1]] as [Slot, number][]).filter(([s]) => ch.equip[s] && ch.cond(s) > 0);
+    let r = Math.random() * parts.reduce((a, [, w]) => a + w, 0);
+    for (const [s, w] of parts) if ((r -= w) < 0) { this.wearSlot(s, raw >= 15 ? 2 : 1); return; }
+  }
+
+  /** Cueillette d'un buisson (une fois par jour et par buisson, propre à chaque joueur). */
+  private gather(n: HarvestNode): void {
+    this.state.flags.set('cueilli:' + n.id, this.time.day);
+    this.giveLoot(bushLoot(this.world.sampler.biomeAt(n.x, n.z)), 'Cueillette');
+    this.audio.rustle({ x: n.x, y: n.y + 0.5, z: n.z });
+    this.particles.emit('copeau', n.x, n.y + 0.6, n.z, 4);
+    this.character.practice('artisanat', 0.3);
   }
 
   /** Fouille d'un contenant : butin, objets de quête, vol devant témoins. */
@@ -535,19 +639,28 @@ export class Game {
     const fx = Math.sin(p.heading), fz = -Math.cos(p.heading);
     let node = null as (ReturnType<typeof this.world.chunks.nodesNear>[number]) | null, bd = Infinity;
     for (const n of this.world.chunks.nodesNear(p.x, p.z, 4)) {
+      if (n.kind === 'buisson') continue;
       const dx = n.x - p.x, dz = n.z - p.z, d = Math.hypot(dx, dz);
       const reach = n.kind === 'arbre' ? 2.4 : 1.8 + n.size * 0.8;
       if (d > reach || (d > 0.5 && (dx * fx + dz * fz) / d < 0.55) || Math.abs(n.y - p.y) > 2.5 || d >= bd) continue;
       node = n; bd = d;
     }
     if (!node || this.dungeon) return;
+    const ch = this.character;
     const pos = { x: node.x, y: node.y + 1, z: node.z };
     const tree = node.kind === 'arbre';
+    // le bon outil, mais hors d'usage (une autre arme cassée : message habituel « il faudrait… »)
+    const bk = ch.equip.arme && !ch.weapon ? item(ch.equip.arme).weapon?.kind : undefined;
+    if (bk && bk === (tree ? 'hache' : 'pioche')) {
+      if (this.elapsed - this.harvestMsgT > 4) { this.harvestMsgT = this.brokenMsgT = this.elapsed; this.events.emit('message', { text: 'Votre outil est hors d’usage : faites-le réparer (enclume ou forgeron).', color: 0xf09040 }); }
+      return;
+    }
     if (tree ? wk !== 'hache' : wk !== 'pioche') {
       if (tree) this.audio.chop(pos); else this.audio.mine(pos);
       if (this.elapsed - this.harvestMsgT > 4) { this.harvestMsgT = this.elapsed; this.events.emit('message', { text: tree ? 'Il faudrait une hache pour couper ce bois (le forgeron en vend).' : 'Il faudrait une pioche pour briser cette roche (le forgeron en vend).', color: 0x9a9a90 }); }
       return;
     }
+    this.wearSlot('arme', 0.5);
     if (tree) this.audio.chop(pos); else this.audio.mine(pos);
     this.particles.emit(tree ? 'copeau' : 'éclat', node.x - Math.sin(p.heading) * 0.4, p.y + (tree ? 1.1 : 0.6), node.z + Math.cos(p.heading) * 0.4, 4);
     this.character.practice('artisanat', 0.4);
@@ -565,6 +678,7 @@ export class Game {
     if (tree) {
       lines.push({ id: 'bois', qty: ri(2, 4) }, { id: 'branche', qty: ri(1, 3) });
       if (r() < 0.7) lines.push({ id: 'écorce', qty: ri(1, 2) });
+      if ((biome === B.FOREST || biome === B.SWAMP || biome === B.TAIGA) && r() < 0.3) lines.push({ id: 'champignon', qty: ri(1, 2) });
       this.audio.timber(pos);
     } else {
       lines.push({ id: 'pierre', qty: ri(1, 3) + Math.round(node.size) });
@@ -804,6 +918,7 @@ export class Game {
     ch.bonusDmg = dmg; ch.bonusArmor = armor; p.staminaRegen = 1 + stam;
     p.quiet = this.buffs.some((b) => b.id === 'feutré');
     p.invisible = this.buffs.some((b) => b.id === 'invisible');
+    p.warm = this.buffs.some((b) => b.id === 'réchauffé');
     if (regen > 0 && !p.dead) p.hp = Math.min(p.maxHp, p.hp + regen * dt);
     if (this.tintFlash && (this.tintFlash.t -= dt) <= 0) this.tintFlash = null;
   }
@@ -893,7 +1008,9 @@ export class Game {
   update(dt: number, input: Input): void {
     this.elapsed += dt;
     if (this.coop) this.time.minutes = this.coop.clockMinutes(); else this.time.advance(dt);
-    if (this.time.day !== this.lastDay) { this.lastDay = this.time.day; this.entities.dailyTick(); this.economy.dailyTick(); this.rumors.dailyTick(); this.stocks.clear(); }
+    if (this.time.day !== this.lastDay) { this.lastDay = this.time.day; this.entities.dailyTick(); this.economy.dailyTick(); this.rumors.dailyTick(); this.stocks.clear();
+      for (const k of [...this.state.flags.keys()]) if (k.startsWith('cueilli:') && this.state.flags.get(k) !== this.time.day) this.state.flags.delete(k);
+    }
     // météo au point du joueur
     const prevState = this.wx.state;
     this.wx = this.weatherSys.at(this.player.x, this.player.z, this.time.minutes);
@@ -942,7 +1059,12 @@ export class Game {
       this.fight.update(dt, input, {
         player: p, character: this.character, events: this.events, combat: this.combat, entities: this.entities.entities,
         heightAt: (x, z) => (this.dungeon ? 0 : this.world.heightAt(x, z)), onHit: (e) => this.onHit(e), harvest: (heavy) => this.harvest(heavy), castBonus: (id) => this.castBonus(id), sneak: (e, ranged) => this.sneakMult(e, ranged), reveal: () => this.reveal(),
+        wear: (s, u) => this.wearSlot(s, u),
       });
+      if (this.character.equip.arme && !this.character.weapon && input.locked && input.mouseClicked(0) && this.elapsed - this.brokenMsgT > 20) {
+        this.brokenMsgT = this.elapsed;
+        this.events.emit('message', { text: 'Arme hors d’usage : vous frappez comme à mains nues (réparation : enclume ou forgeron).', color: 0xf09040 });
+      }
       // nage : l'endurance s'épuise (plus vite en plongée) ; à bout de souffle, on se noie
       if (p.swimming) p.stamina = Math.max(0, p.stamina - 2.5 * dt);
       const headUnder = !this.dungeon && !Number.isNaN(p.water) && p.eyeY < p.water - 0.05;
@@ -1112,7 +1234,12 @@ export class Game {
   /** Utiliser / consommer un objet de l'inventaire. */
   useItem(id: string): boolean {
     const d = item(id), ch = this.character, p = this.player;
-    if (d.weapon || d.armor || d.shield) { ch.equipItem(id); this.events.emit('message', { text: `${ch.isEquipped(id) ? 'Équipé' : 'Rangé'} : ${d.name}` }); return true; }
+    if (d.weapon || d.armor || d.shield) {
+      ch.equipItem(id);
+      const on = ch.isEquipped(id), broken = on && d.dur === 0;
+      this.events.emit('message', { text: `${on ? 'Équipé' : 'Rangé'} : ${d.name}${broken ? ' — aucun effet avant réparation' : ''}`, color: broken ? 0xf09040 : undefined });
+      return true;
+    }
     if (d.cat === 'parchemin') {
       const sid = id.replace('parchemin : ', '');
       if (ch.spells.includes(sid)) { this.events.emit('message', { text: 'Vous connaissez déjà ce sort.', color: 0x9a9a90 }); return false; }
@@ -1126,9 +1253,19 @@ export class Game {
     if (d.use.stamina) p.stamina = Math.min(p.maxStamina, p.stamina + d.use.stamina);
     if (d.use.mana) p.mana = Math.min(p.maxMana, p.mana + d.use.mana);
     if (d.use.cure) p.poison = 0;
-    if (d.cat === 'nourriture') this.addBuff(id === 'viande grillée' || id === 'ragoût' ? { id: 'rassasié', name: 'Rassasié', t: 300, regen: 0.6, stam: 0.2 } : { id: 'rassasié', name: 'Rassasié', t: 150, regen: 0.3 });
-    this.events.emit('message', { text: `${d.cat === 'potion' ? 'Vous buvez' : 'Vous mangez'} : ${d.name}` });
+    if (d.use.buff) this.addBuff({ ...d.use.buff });
+    if (d.use.warm) { const cur = this.buffs.find((b) => b.id === 'réchauffé'); this.addBuff({ id: 'réchauffé', name: 'Réchauffé', t: Math.max(d.use.warm * 60, cur?.t ?? 0) }); }
+    if (d.cat === 'nourriture' && d.use.meal !== false) this.feed(d.use.meal ?? { t: 150, regen: 0.3 });
+    const drink = d.cat === 'potion' || !!d.use.drink, raw = id === 'viande crue' || FISH.includes(id);
+    this.events.emit('message', { text: `${drink ? 'Vous buvez' : 'Vous mangez'} : ${d.name}${raw ? ' — un plat cuisiné nourrit bien mieux' : ''}` });
     return true;
+  }
+
+  /** Repas : bonus « rassasié » ; un repas moins nourrissant n'écrase pas un meilleur en cours. */
+  private feed(m: { t: number; regen: number; stam?: number }): void {
+    const cur = this.buffs.find((b) => b.id === 'rassasié');
+    if (cur && cur.t * (cur.regen ?? 0) > m.t * m.regen) return;
+    this.addBuff({ id: 'rassasié', name: m.regen >= 0.6 ? 'Bien nourri' : 'Rassasié', t: m.t, regen: m.regen, stam: m.stam });
   }
 
   dropItem(id: string, qty = 1): void {
@@ -1140,13 +1277,40 @@ export class Game {
 
   private swapBow() {
     const ch = this.character;
-    const bow = ['arc long', 'arc court'].find((b) => ch.inv.count(b));
-    if (!bow) return;
-    if (ch.weapon?.weapon?.kind === 'arc') {
-      const melee = [...ch.inv.items.keys()].find((k) => item(k).weapon && item(k).weapon!.kind !== 'arc');
-      if (melee) ch.equipItem(melee); else ch.equip.arme = null;
-    } else ch.equipItem(bow);
-    this.events.emit('message', { text: `En main : ${ch.weapon?.name ?? 'poings'}` });
+    const ok = (k: string, bow: boolean) => { const w = item(k).weapon; return !!w && (w.kind === 'arc') === bow && durOf(k) > 0; };
+    const cur = ch.equip.arme ? item(ch.equip.arme).weapon : null;
+    if (cur?.kind === 'arc') { const melee = [...ch.inv.items.keys()].find((k) => ok(k, false)); ch.equip.arme = null; if (melee) ch.equipItem(melee); }
+    else {
+      const bow = [...ch.inv.items.keys()].filter((k) => ok(k, true)).sort((a, b) => item(b).weapon!.damage - item(a).weapon!.damage)[0];
+      if (!bow) return;
+      ch.equipItem(bow);
+    }
+    this.events.emit('message', { text: `En main : ${ch.equip.arme ? item(ch.equip.arme).name : 'poings'}` });
+  }
+
+  /** Prix de réparation des pièces abîmées chez ce forgeron (apply : payer et réparer, portés d'abord ; une pièce trop chère est passée). */
+  private goldRepair(n: NPCData, apply: boolean): { count: number; cost: number; total: number } {
+    const ch = this.character, f = this.rep.priceFactor(n);
+    const ids = ch.worn().flatMap((w) => Array.from({ length: w.qty }, () => w.id));
+    let count = 0, cost = 0;
+    for (const id of ids) {
+      const c = goldRepairCost(id, this.economy.price(item(baseId(id)), n.sid, true, ch.priceMult(true), f));
+      if (apply) { if (ch.inv.gold < c) continue; ch.inv.gold -= c; n.wealth += c; ch.setDur(id, 100); }
+      count++; cost += c;
+    }
+    return { count, cost, total: ids.length };
+  }
+  repairQuote(n: NPCData): { count: number; cost: number } { const q = this.goldRepair(n, false); return { count: q.count, cost: q.cost }; }
+  repairAll(n: NPCData): { count: number; cost: number; total: number } {
+    const r = this.goldRepair(n, true);
+    if (r.count) {
+      const p = this.player;
+      this.events.emit('message', { text: `Le forgeron répare ${r.count} objet${r.count > 1 ? 's' : ''} (${r.cost} or).`, color: 0x60d070 });
+      this.events.emit('trade', { npcId: n.id, itemId: 'réparation', qty: r.count, price: r.cost, sold: false });
+      this.character.practice('commerce', 1);
+      this.audio.clang({ x: p.x, y: p.y + 1, z: p.z });
+    }
+    return r;
   }
 
   // ------------------------------------------------------------------ sauvegarde
@@ -1163,7 +1327,7 @@ export class Game {
       format: 1, game: GAME_VERSION, generator: GENERATOR_VERSION, seed: this.seed.text, savedAt: Date.now(), label, time: this.time.minutes,
       player: { x: p.x, y: p.y, z: p.z, heading: p.heading, pitch: p.pitch, hp: p.hp, stamina: p.stamina, mana: p.mana, dungeon: this.dungeon ? this.dungeon.layout.id : -1, ret: this.dungeon ? this.dungeon.ret : null },
       character: { stats: { ...ch.stats }, skills: { ...ch.skills }, skillXp: { ...ch.skillXp }, level: ch.level, xp: ch.xp, statPoints: ch.statPoints, inv: [...ch.inv.items], gold: ch.inv.gold, equip: { ...ch.equip }, spells: [...ch.spells], spellR: ch.spellR, spellF: ch.spellF },
-      state: { opened: [...st.opened], dropped: st.dropped, flags: [...st.flags], discovered: [...st.discovered], explored: packBits(st.explored) },
+      state: { opened: [...st.opened], dropped: st.dropped, flags: [...st.flags].filter(([k, v]) => !k.startsWith('cueilli:') || v === this.time.day), discovered: [...st.discovered], explored: packBits(st.explored) },
       npcs,
       rep: { global: this.rep.global, faction: [...this.rep.faction], local: [...this.rep.local], bounty: [...this.rep.bounty] },
       economy: [...this.economy.supply].map(([k, v]) => [k, { ...v }]),

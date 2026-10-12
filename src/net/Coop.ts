@@ -4,7 +4,7 @@ import { hitEntity, hitPlayer, type Element } from '@ascii-fort/sim/gameplay/Com
 import type { Entity } from '@ascii-fort/sim/entities/Entity';
 import type { EntityNet, RemoteTarget } from '@ascii-fort/sim/entities/EntityManager';
 import { MIN_PER_DAY } from '@ascii-fort/core/Time';
-import { item } from '@ascii-fort/sim/gameplay/Items';
+import { item, cleanId } from '@ascii-fort/sim/gameplay/Items';
 import type { InstanceBuffer } from '@ascii-fort/ascii-engine/Renderer';
 import { M } from '@ascii-fort/ascii-engine/Materials';
 import { trsYawPitch, mat4 } from '@ascii-fort/core/math';
@@ -245,7 +245,7 @@ export class Coop implements EntityNet {
         break;
       case 'trade-offer':
         if (t?.with !== from) break;
-        t.theirs = { items: (Array.isArray(d.items) ? d.items : []).filter(([id, n]) => this.tradeable(id) && n > 0).map(([id, n]) => [id, Math.floor(n)] as [string, number]), gold: Math.max(0, Math.floor(d.gold) || 0), v: d.v };
+        t.theirs = { items: (Array.isArray(d.items) ? d.items : []).map(([id, n]) => [cleanId(String(id)), Math.floor(n)] as [string, number]).filter(([id, n]) => this.tradeable(id) && n > 0), gold: Math.max(0, Math.floor(d.gold) || 0), v: d.v };
         t.okMine = null; t.okTheirs = null;
         break;
       case 'trade-ok':
@@ -445,7 +445,7 @@ export class Coop implements EntityNet {
     if (this.sendT <= 0 && this.players.size) {
       this.sendT = 1 / NET_HZ;
       const ch = g.character, w = ch.weapon?.weapon?.kind ?? '-';
-      const lk = `${w}|${ch.equip.bouclier === 'bouclier de fer' ? 'f' : ch.equip.bouclier ? 'b' : ''}|${ch.equip.tête ? 1 : 0}|${ch.equip.corps && /maille|plate/.test(ch.equip.corps) ? 1 : 0}`;
+      const lk = `${w}|${ch.shield ? (ch.shield.good === 'fer' ? 'f' : 'b') : ''}|${ch.equip.tête ? 1 : 0}|${ch.equip.corps && /maille|plate/.test(ch.equip.corps) ? 1 : 0}`;
       const r2 = (v: number) => Math.round(v * 100) / 100;
       const s: PlayerState = {
         x: r2(p.x), y: r2(p.y), z: r2(p.z), h: r2(p.heading), sw: r2(g.fight.swing), bl: p.blocking ? 1 : 0, d: p.dead ? 1 : 0,

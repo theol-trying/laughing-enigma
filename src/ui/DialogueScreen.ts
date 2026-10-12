@@ -6,28 +6,49 @@ import type { Character } from '@ascii-fort/sim/gameplay/Character';
 import type { Economy } from '@ascii-fort/sim/gameplay/Economy';
 import type { Reputation } from '@ascii-fort/sim/gameplay/Reputation';
 import type { EventBus } from '@ascii-fort/core/Events';
-import { item, type ItemDef } from '@ascii-fort/sim/gameplay/Items';
+import { item, baseId, wearable, wearState, wearFactor, type ItemDef } from '@ascii-fort/sim/gameplay/Items';
+import type { NPCData } from '@ascii-fort/sim/entities/NPC';
+import type { Input } from '@ascii-fort/ascii-engine/Input';
 
 const MOOD_COLOR: Record<string, number> = { amical: C.green, neutre: C.text, méfiant: C.orange, hostile: C.red };
+
+/**
+ * Pas de quantité au clavier : +/= et -/_ font ±1 (le « + » du clavier principal se tape déjà avec Maj, et
+ * Maj change e.key : ces touches ne dépendent donc pas de Maj), PgPréc/PgSuiv ou Maj + pavé numérique font ±10.
+ */
+export function qtyStep(i: Input): number {
+  const shift = i.isDown('ShiftLeft') || i.isDown('ShiftRight');
+  if (i.pressed('PageUp')) return 10;
+  if (i.pressed('PageDown')) return -10;
+  if (i.pressed('NumpadAdd')) return shift ? 10 : 1;
+  if (i.pressed('NumpadSubtract')) return shift ? -10 : -1;
+  if (i.key('+') || i.key('=')) return 1;
+  if (i.key('-') || i.key('_')) return -1;
+  return 0;
+}
 
 /** Comparaison d'un objet avec celui équipé au même emplacement (inventaire, commerce). */
 export function compareWithEquipped(ch: Character, d: ItemDef): [string, number][] {
   const out: [string, number][] = [];
   const diff = (label: string, a: number, b: number) => out.push([`${label} ${a} → ${b} (${b - a >= 0 ? '+' : ''}${Math.round((b - a) * 100) / 100})`, b - a]);
-  if (d.weapon && ch.weapon?.weapon && ch.weapon.id !== d.id) diff('Dégâts', ch.weapon.weapon.damage, d.weapon.damage);
-  else if (d.weapon && !ch.weapon) diff('Dégâts', 4, d.weapon.damage);
+  // par emplacement (la pièce portée ne se compare pas à elle-même) et en valeurs effectives : hors d'usage, on frappe à mains nues (4)
+  if (d.weapon && ch.equip.arme !== d.id) diff('Dégâts', ch.weapon?.weapon?.damage ?? 4, d.dur === 0 ? 4 : d.weapon.damage);
   if (d.armor) { const cur = ch.equip[d.armor.slot]; if (cur !== d.id) diff('Armure', cur ? item(cur).armor?.value ?? 0 : 0, d.armor.value); }
-  if (d.shield && ch.shield?.id !== d.id) diff('Parade %', Math.round((ch.shield?.shield?.block ?? 0) * 100), Math.round(d.shield.block * 100));
+  if (d.shield && ch.equip.bouclier !== d.id) diff('Parade %', Math.round((ch.shield?.shield?.block ?? 0) * 100), Math.round(d.shield.block * 100));
   return out;
 }
 
 /** Caractéristiques lisibles d'un objet. */
 export function itemStats(d: ItemDef): string[] {
   const out: string[] = [];
-  if (d.weapon) out.push(`Dégâts ${d.weapon.damage} · vitesse ${d.weapon.speed} · allonge ${d.weapon.reach} m`);
-  if (d.armor) out.push(`Armure +${d.armor.value} (${d.armor.slot})`);
+  const b = d.dur !== undefined ? item(baseId(d.id)) : null;
+  const was = (v: number, w?: number) => (w !== undefined && w !== v ? ` (${w} en parfait état)` : '');
+  if (d.weapon) out.push(`Dégâts ${d.weapon.damage}${was(d.weapon.damage, b?.weapon?.damage)} · vitesse ${d.weapon.speed} · allonge ${d.weapon.reach} m`);
+  if (d.armor) out.push(`Armure +${d.armor.value}${was(d.armor.value, b?.armor?.value)} (${d.armor.slot})`);
   if (d.shield) out.push(`Parade ${Math.round(d.shield.block * 100)} %`);
-  if (d.use) out.push([d.use.hp ? `+${d.use.hp} PV` : '', d.use.stamina ? `+${d.use.stamina} END` : '', d.use.mana ? `+${d.use.mana} MANA` : '', d.use.cure ? 'soigne le poison' : ''].filter(Boolean).join(' · '));
+  if (wearable(d)) { const s = d.dur ?? 100; out.push(s <= 0 ? 'Hors d’usage : aucun effet avant réparation (enclume, forgeron)' : `État ${s} % · ${wearState(s)}${s < 50 ? ` (efficacité ${Math.round(wearFactor(s) * 100)} %)` : ''}`); }
+  if (d.use) out.push([d.use.hp ? `+${d.use.hp} PV` : '', d.use.stamina ? `+${d.use.stamina} END` : '', d.use.mana ? `+${d.use.mana} MANA` : '', d.use.cure ? 'soigne le poison' : '',
+    d.use.buff ? `${d.use.buff.name} ${Math.round(d.use.buff.t / 60)} min` : '', d.use.warm ? `réchauffe ${d.use.warm} min` : '', d.use.meal ? `rassasie ${Math.round(d.use.meal.t / 60)} min` : ''].filter(Boolean).join(' · '));
   return out.filter(Boolean);
 }
 
@@ -72,6 +93,9 @@ export class DialogueScreen implements Screen {
 export interface TradeHost {
   character: Character; economy: Economy; rep: Reputation; events: EventBus;
   stockOf(e: Entity): { id: string; qty: number }[];
+  /** réparation contre de l'or (forgeron) : exemplaires abîmés et prix total */
+  repairQuote?(n: NPCData): { count: number; cost: number };
+  repairAll?(n: NPCData): { count: number; cost: number; total: number };
 }
 
 /**
@@ -84,6 +108,9 @@ export class TradeScreen implements Screen {
   private sel = [0, 0];
   private qty = 1;
   private lastClick = { t: 0, col: -1, row: -1 };
+  /** compte rendu de la réparation chez le forgeron */
+  private note: { text: string; color: number } | null = null;
+  private noteT = 0;
   constructor(private e: Entity, private h: TradeHost) {}
 
   private rows() {
@@ -166,7 +193,31 @@ export class TradeScreen implements Screen {
       btn(bx, `[ ${verb} ${this.qty} × ${d.name.slice(0, 24)} — ${total} or ]`, max > 0, () => this.doTrade());
       if (max <= 0) g.text(x + 2, yy + 1, this.col === 0 ? (cur.qty <= 0 ? 'Plus en stock.' : 'Pas assez d’or.') : 'Le marchand n’a plus assez d’or.', C.red);
     }
-    g.text(x + 2, y + h - 2, '↑↓ choisir · ←→ colonne · +/- quantité (Maj ×10) · Entrée ou double-clic : valider · E, Tab, Échap : quitter'.slice(0, w - 4), C.dim);
+    // forgeron : réparation de l'équipement contre de l'or
+    if (n.profession === 'forgeron' && this.h.repairQuote) {
+      const q = this.h.repairQuote(n), ry = y + h - 3;
+      const label = q.count ? `[R] Faire réparer l’équipement : ${q.count} objet${q.count > 1 ? 's' : ''} — ${q.cost} or` : 'Votre équipement est en bon état.';
+      // compte rendu de la dernière réparation à la place du libellé, quelques secondes
+      if (this.note && performance.now() - this.noteT < 3000) g.text(x + 2, ry, this.note.text.slice(0, w - 4), this.note.color);
+      else {
+        const over = q.count > 0 && ctx.mouseCell.y === ry && ctx.mouseCell.x >= x + 2 && ctx.mouseCell.x < x + 2 + label.length;
+        g.text(x + 2, ry, label.slice(0, w - 4), !q.count ? C.dim : over ? 0xffffff : C.yellow, over ? C.sel : -1);
+        if (over && ctx.clicked) this.repairAll();
+      }
+    }
+    g.text(x + 2, y + h - 2, '↑↓ choisir · ←→ colonne · +/- quantité (PgPréc/PgSuiv ×10) · Entrée : valider · Échap : quitter'.slice(0, w - 4), C.dim);
+  }
+
+  /** Réparation chez le forgeron, avec un compte rendu dans l'écran (le journal du HUD est masqué ici). */
+  private repairAll() {
+    const n = this.e.npc!;
+    if (n.profession !== 'forgeron' || !this.h.repairAll) return;
+    const r = this.h.repairAll(n);
+    if (!r.total) return;
+    this.note = !r.count ? { text: 'Pas assez d’or pour la moindre réparation.', color: C.red }
+      : r.count < r.total ? { text: `${r.count} objet${r.count > 1 ? 's' : ''} sur ${r.total} réparé${r.count > 1 ? 's' : ''} (${r.cost} or) : pas assez d’or pour le reste.`, color: C.orange }
+      : { text: `Équipement réparé (${r.cost} or).`, color: C.green };
+    this.noteT = performance.now();
   }
 
   private doTrade() {
@@ -206,6 +257,7 @@ export class TradeScreen implements Screen {
   input(ctx: UICtx): void {
     const i = ctx.input;
     if (i.key('Escape') || i.key('Tab') || i.key('e')) { ctx.close(); return; }
+    if (i.key('r')) this.repairAll();
     const [buy, sell] = this.rows();
     const len = [buy.length, sell.length];
     if (i.pressed('ArrowLeft')) this.select(0, this.sel[0]);
@@ -213,9 +265,8 @@ export class TradeScreen implements Screen {
     if (i.pressed('ArrowUp')) this.select(this.col, Math.max(0, this.sel[this.col] - 1));
     if (i.pressed('ArrowDown')) this.select(this.col, Math.min(len[this.col] - 1, this.sel[this.col] + 1));
     this.sel[this.col] = Math.max(0, Math.min(this.sel[this.col], len[this.col] - 1));
-    const step = i.isDown('ShiftLeft') || i.isDown('ShiftRight') ? 10 : 1;
-    if (i.key('+') || i.pressed('NumpadAdd')) this.qty = Math.min(this.maxQty(), this.qty + step);
-    if (i.key('-') || i.pressed('NumpadSubtract')) this.qty = Math.max(1, this.qty - step);
+    const step = qtyStep(i);
+    if (step) this.qty = Math.max(1, Math.min(Math.max(1, this.maxQty()), this.qty + step));
     if (i.pressed('Enter') || i.pressed('NumpadEnter')) this.doTrade();
   }
 }

@@ -21,6 +21,10 @@ export class Player {
   quiet = false;
   /** invisible (sort) */
   invisible = false;
+  /** réchauffé (repas chaud, potion) : insensible au gel */
+  warm = false;
+  /** part des dégâts qui passe une parade (0,35 sans bouclier ; 0,15 avec un bouclier en bon état) */
+  guard = 0.35;
   hitAmount = 0; hitDir: number | null = null; hitT = 0;
   /** plongée : accroupi en nageant */
   get diving(): boolean { return this.swimming && this.crouch; }
@@ -52,7 +56,7 @@ export class Player {
     let dmg = 0;
     if (this.poison > 0) { this.poison -= dt; dmg += 2.2 * dt; }
     if (this.burn > 0) { this.burn -= dt; dmg += 4 * dt; }
-    if (this.frost > 0) this.frost -= dt;
+    if (this.frost > 0) this.frost = this.warm ? 0 : this.frost - dt;
     if (this.invuln > 0) this.invuln -= dt;
     if (this.hurt > 0) this.hurt -= dt;
     if (this.hitT > 0) this.hitT -= dt;

@@ -24,6 +24,10 @@ export interface DialogueHost {
   openTrade(e: Entity): void;
   payFine(sid: number): boolean;
   resistArrest(sid: number): void;
+  /** réparation contre de l'or (forgeron) : exemplaires abîmés et prix total */
+  repairQuote?(n: NPCData): { count: number; cost: number };
+  /** le forgeron répare, portés d'abord, tant que l'or suffit */
+  repairAll?(n: NPCData): { count: number; cost: number; total: number };
 }
 
 const DIRS = ['au nord', 'au nord-est', "à l'est", 'au sud-est', 'au sud', 'au sud-ouest', "à l'ouest", 'au nord-ouest'];
@@ -75,6 +79,7 @@ export class DialogueSystem {
     const n = e.npc!, h = this.h, back = () => this.again(e);
     const opts: DialogueOption[] = [];
     if (h.economy.stock(n, h.time.day).length) opts.push({ label: 'Montre-moi tes marchandises (commerce).', go: () => { h.openTrade(e); return null; } });
+    if (n.profession === 'forgeron' && h.repairQuote) { const q = h.repairQuote(n); if (q.count) opts.push({ label: `Peux-tu réparer mon équipement ? (${q.count} objet${q.count > 1 ? 's' : ''}, ${q.cost} or)`, go: () => this.repair(e) }); }
     const offer = h.quests.offerFor(n.id), active = h.quests.activeFor(n.id);
     if (offer) opts.push({ label: 'Tu as l\'air soucieux…', go: () => this.questOffer(e) });
     if (active) opts.push({ label: h.quests.canTurnIn(active) ? `À propos de « ${active.title} »… c'est réglé.` : `À propos de « ${active.title} »…`, go: () => this.questProgress(e) });
@@ -89,6 +94,14 @@ export class DialogueSystem {
 
   private again(e: Entity): DialogueNode {
     return { ...this.head(e, this.h.rep.mood(e.npc!)), lines: [this.pick(e.npc!, 9, ['Autre chose ?', 'Oui ?', 'Je t\'écoute.'])], options: this.menu(e) };
+  }
+
+  /** Réparation chez le forgeron ; renvoie toujours un nœud (un go() qui renvoie null fermerait l'écran). */
+  private repair(e: Entity): DialogueNode {
+    const n = e.npc!, r = this.h.repairAll!(n), back = () => this.again(e);
+    if (!r.count) return this.node(e, ['Ça te coûtera plus que ce que tu as en poche. Reviens quand tu auras de quoi payer.'], back);
+    const done = r.count < r.total ? `Avec ce que tu as, j'en répare ${r.count} sur ${r.total}.` : this.pick(n, 11, ['Et voilà : comme neuf. Prends-en soin.', 'Un coup de marteau, un coup de meule… c’est réparé.']);
+    return this.node(e, [done, `Ça fait ${r.cost} pièce${r.cost > 1 ? 's' : ''}.`], back);
   }
 
   private node(e: Entity, lines: string[], back: () => DialogueNode | null): DialogueNode {
@@ -120,7 +133,7 @@ export class DialogueSystem {
       case 'forgeron': {
         const fer = shortages.find((x) => x.good === 'fer' || x.good === 'minerai' || x.good === 'outils');
         if (fer) return [`Je manque de ${fer.good === 'outils' ? 'métal' : 'fer'}. Il venait de ${civ.settlements[fer.from].name} par la route… mais plus rien n'arrive depuis que les bandits la tiennent.`, 'Sans métal, pas d\'épées. Et sans épées, qui nous défendra ?'];
-        return ['Le travail ne manque pas : socs, fers à cheval, et quelques lames pour les gardes.', 'Si tu as besoin d\'une arme, tu sais où me trouver.'];
+        return ['Le travail ne manque pas : socs, fers à cheval, et quelques lames pour les gardes.', 'Si tu as besoin d\'une arme, tu sais où me trouver. Et si ta lame s’émousse, je la répare contre quelques pièces.'];
       }
       case 'marchand': case 'aubergiste': {
         const sh = shortages[0];
@@ -143,7 +156,7 @@ export class DialogueSystem {
       case 'chasseur': return [wolves ? `Le gibier fuit les bois ${direction(s.x, s.z, wolves.x, wolves.z)} : une meute de loups s'y est installée.` : 'Le gibier est abondant ces temps-ci.', 'Je vends des peaux, et parfois un arc.'];
       case 'meunier': return [river ? `${river.name.charAt(0).toUpperCase() + river.name.slice(1)} fait tourner ma roue depuis toujours.` : 'Le moulin tourne.', 'Le grain arrive des fermes autour.'];
       case 'pêcheur': return [river ? `Le poisson remonte ${river.name}, en ce moment.` : 'La pêche est bonne.'];
-      case 'guérisseuse': return ['Les herbes du marais soignent bien des maux… mais attention aux araignées qui y vivent.', 'Si tu as besoin de potions, j\'en prépare.'];
+      case 'guérisseuse': return ['Les herbes du marais soignent bien des maux… mais attention aux araignées qui y vivent.', 'Si tu as besoin de potions, j\'en prépare.', 'Herbes, baies et champignons poussent sur les buissons des bois ; mon âtre ou l’établi d’une forge suffisent pour en tirer des potions.'];
       case 'mineur': return ['On ne descend plus dans les galeries basses. Des gobelins y ont fait leur nid.', 'Sans minerai, le village va crever de faim.'];
       case 'noble': {
         const enemy = civ.factions.find((f) => f.kind === 'royaume' && s.factionId >= 0 && (civ.factions[s.factionId]?.relations[f.id] ?? 0) < -0.3);

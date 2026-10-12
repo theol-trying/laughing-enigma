@@ -1,5 +1,6 @@
 import { C, type TextGrid } from '@ascii-fort/ascii-engine/TextGrid';
 import { spell } from '@ascii-fort/sim/gameplay/Spells';
+import { item } from '@ascii-fort/sim/gameplay/Items';
 import type { Game } from '../game/Game';
 import { GENERATOR_VERSION } from '../version';
 import { CHUNK } from '@ascii-fort/worldgen/constants';
@@ -25,9 +26,11 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
   bar(g, 1, by, 'HP', p.hp, p.maxHp, p.poison > 0 ? C.green : C.hp);
   bar(g, 1, by + 1, 'END', p.stamina, p.maxStamina, C.sta);
   bar(g, 1, by + 2, 'MANA', p.mana, p.maxMana, C.mp);
-  const status = [p.poison > 0 ? 'empoisonné' : '', p.frost > 0 ? 'gelé' : '', p.burn > 0 ? 'brûlé' : '', p.diving ? 'en plongée' : p.swimming ? 'à la nage' : p.depth > 0.3 ? 'dans l\'eau' : '', p.crouch && !p.swimming ? 'accroupi' : '', ch.inv.weight() > ch.carryMax() ? 'surchargé' : ''].filter(Boolean).join(' · ');
+  const worst = ch.worstEquipped();
+  const status = [p.poison > 0 ? 'empoisonné' : '', p.frost > 0 ? 'gelé' : '', p.burn > 0 ? 'brûlé' : '', p.diving ? 'en plongée' : p.swimming ? 'à la nage' : p.depth > 0.3 ? 'dans l\'eau' : '', p.crouch && !p.swimming ? 'accroupi' : '', ch.inv.weight() > ch.carryMax() ? 'surchargé' : '',
+    worst <= 0 ? 'équipement hors d’usage' : worst < 25 ? 'équipement très usé' : ''].filter(Boolean).join(' · ');
   g.text(1, by - 1, ` Niv ${ch.level} · ${ch.xp}/${ch.xpForNext()} XP · ${ch.inv.gold} or${ch.statPoints ? ' · +' + ch.statPoints + ' pt (P)' : ''} ${status ? '· ' + status : ''} `, C.gold, C.panel, 0.55);
-  g.text(1, rows - 1, ` ${ch.weapon?.name ?? 'Poings'}${ch.weapon?.weapon?.kind === 'arc' ? ` (${ch.inv.count('flèche')} flèches)` : ''} · H potion (${ch.inv.count('potion de soin')}) · R ${spell(ch.spellR)?.name ?? '—'} · F ${spell(ch.spellF)?.name ?? '—'} `, C.dim, C.panel, 0.45);
+  g.text(1, rows - 1, ` ${ch.equip.arme ? item(ch.equip.arme).name : 'Poings'}${ch.weapon?.weapon?.kind === 'arc' ? ` (${ch.inv.count('flèche')} flèches)` : ''} · H potion (${ch.inv.count('potion de soin')}) · R ${spell(ch.spellR)?.name ?? '—'} · F ${spell(ch.spellF)?.name ?? '—'} `, C.dim, C.panel, 0.45);
 
   // boussole
   const cw = Math.min(61, cols - 30), cx0 = Math.floor((cols - cw) / 2);
@@ -98,11 +101,11 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
     g.bar(Math.floor(cols / 2) - 8, 4, 16, t.hp / t.maxHp, C.hp, C.faint, C.panel);
   }
   const mid = Math.floor(rows / 2);
-  g.text(Math.floor(cols / 2), mid, game.fight.charge > 0.42 && ch.weapon?.weapon?.kind !== 'arc' ? '✶'.length ? '*' : '+' : '+', p.blocking ? C.cyan : C.white);
+  g.text(Math.floor(cols / 2), mid, game.fight.charge > 0.42 && ch.weapon?.weapon?.kind !== 'arc' ? '*' : '+', p.blocking ? C.cyan : C.white);
   if (game.focus) {
     g.center(mid + 2, ` [E] ${game.focus.label} `, game.focus.t === 'entity' && game.focus.pick ? C.magenta : C.yellow, C.panel);
     const f = game.focus;
-    if (f.t === 'prop' && f.hint) g.center(mid + 3, ` ${f.hint} `, f.danger ? C.red : C.green, C.panel);
+    if ((f.t === 'prop' || f.t === 'bush') && f.hint) g.center(mid + 3, ` ${f.hint} `, f.t === 'prop' && f.danger ? C.red : f.t === 'bush' || (f.t === 'prop' && f.muted) ? C.dim : C.green, C.panel);
   }
   // souffle sous l'eau
   if (p.breath < 0.999 && !p.dead) {
@@ -139,7 +142,7 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
   // montée de niveau
   if (game.banner) {
     const yb = Math.floor(rows * 0.2);
-    g.center(yb, `  ◆ ${game.banner.text} ◆  `, C.gold, C.panel);
+    g.center(yb, `  ◆ ${game.banner.text} ◆  `, game.banner.color ?? C.gold, C.panel);
     g.center(yb + 1, ` ${game.banner.sub} `.slice(0, cols - 2), C.text, C.panel);
   }
 

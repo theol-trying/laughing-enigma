@@ -98,14 +98,14 @@ export class Economy {
   stock(n: NPCData, day: number): { id: string; qty: number }[] {
     const rng = this.seed.stream('economy', n.id, day);
     const lists: Record<string, string[]> = {
-      marchand: ['pain', 'fromage', 'pomme', 'sel', 'étoffe', 'outils', 'potion de soin', 'antidote', 'flèche', 'bottes', 'gants', 'bois', 'hache de bûcheron', 'pioche', 'crochet', 'canne à pêche'],
-      forgeron: ['hache de bûcheron', 'pioche', 'épée courte', 'épée longue', 'hache', 'masse', 'lance', 'dague', 'casque de fer', 'cotte de mailles', 'bouclier en bois', 'bouclier de fer', 'lingot de fer', 'charbon', 'flèche'],
+      marchand: ['pain', 'fromage', 'pomme', 'sel', 'étoffe', 'outils', 'potion de soin', 'antidote', 'flèche', 'bottes', 'gants', 'bois', 'hache de bûcheron', 'pioche', 'crochet', 'canne à pêche', 'cuir'],
+      forgeron: ['hache de bûcheron', 'pioche', 'épée courte', 'épée longue', 'hache', 'masse', 'lance', 'dague', 'casque de fer', 'cotte de mailles', 'bouclier en bois', 'bouclier de fer', 'lingot de fer', 'charbon', 'flèche', 'gantelets de fer', 'bottes ferrées'],
       mineur: ['pioche', 'minerai de fer', 'charbon', 'pierre', 'lingot de fer'],
-      fermier: ['pain', 'pomme', 'fromage', 'viande crue'],
-      pêcheur: ['poisson grillé', 'sel', 'canne à pêche', 'truite', 'hareng'],
-      aubergiste: ['pain', 'fromage', 'ragoût', 'bière', 'hydromel', 'viande grillée', 'poisson grillé'],
-      guérisseuse: ['potion de soin', 'grande potion de soin', 'antidote', 'potion d’endurance', 'potion de mana', 'herbe médicinale', 'parchemin : lumière'],
-      chasseur: ['arc court', 'arc long', 'flèche', 'viande crue', 'tunique de cuir', 'casque de cuir', 'bottes', 'gants'],
+      fermier: ['pain', 'pomme', 'fromage', 'viande crue', 'baies'],
+      pêcheur: ['poisson grillé', 'sel', 'canne à pêche', 'truite', 'hareng', 'soupe de poisson'],
+      aubergiste: ['pain', 'fromage', 'ragoût', 'bière', 'hydromel', 'viande grillée', 'poisson grillé', 'soupe de poisson', 'tourte à la viande'],
+      guérisseuse: ['potion de soin', 'grande potion de soin', 'antidote', 'potion d’endurance', 'potion de mana', 'herbe médicinale', 'parchemin : lumière', 'champignon', 'baies', 'potion de force', 'potion de chaleur'],
+      chasseur: ['arc court', 'arc long', 'flèche', 'viande crue', 'tunique de cuir', 'casque de cuir', 'bottes', 'gants', 'cuir'],
       prêtre: ['potion de soin', 'antidote', 'potion de mana', 'parchemin : lumière', 'parchemin : bouclier de mana', 'parchemin : pas feutrés'],
       moine: ['potion de mana', 'parchemin : éclat de givre', 'parchemin : éclair', 'parchemin : lumière', 'parchemin : invisibilité'],
       meunier: ['pain', 'pain', 'bière'],

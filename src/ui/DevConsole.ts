@@ -2,7 +2,8 @@ import { C } from '@ascii-fort/ascii-engine/TextGrid';
 import type { Screen, UICtx } from './UI';
 import type { Game } from '../game/Game';
 import type { Input } from '@ascii-fort/ascii-engine/Input';
-import { ITEMS, item } from '@ascii-fort/sim/gameplay/Items';
+import { ITEMS, item, cleanId, baseId, wearable } from '@ascii-fort/sim/gameplay/Items';
+import { SLOTS } from '@ascii-fort/sim/gameplay/Character';
 import { makeMonster, MONSTERS } from '@ascii-fort/sim/entities/Monster';
 import { GENERATOR_VERSION } from '../version';
 import { blockAt } from '@ascii-fort/sim/ai/Schedule';
@@ -20,7 +21,7 @@ const HELP = [
   'view <normal|depth|normals|material|light>   vues de débogage',
   'chunks | seed | npc | quests | reveal   bords de chunks, seed, PNJ visé, quêtes, carte entière',
   'weather <clair|couvert|pluie|brouillard|orage|neige|auto>',
-  'give <objet> [n] | gold <n> | xp <n>    objets, or, expérience',
+  'give <objet[~état]> [n] | gold <n> | xp <n> | usure <0-100>   objets, or, expérience, état de l’équipement porté',
 ];
 
 export class DevConsole implements Screen {
@@ -104,11 +105,14 @@ export class DevConsole implements Screen {
       case 'weather': g.weatherOverride = args[0] && args[0] !== 'auto' ? (args[0] as WeatherState) : null; this.print(`météo ${args[0] ?? 'auto'}`); break;
       case 'give': {
         const name = args.filter((a) => isNaN(+a)).join(' '), n = +args[args.length - 1] || 1;
-        const id = [...ITEMS.keys()].find((k) => k === name) ?? [...ITEMS.keys()].find((k) => k.includes(name));
+        // « épée courte~40 » : exemplaire usé (id exact)
+        const worn = name.includes('~') ? cleanId(name) : null;
+        const id = worn !== null ? (ITEMS.has(baseId(worn)) ? worn : undefined) : [...ITEMS.keys()].find((k) => k === name) ?? [...ITEMS.keys()].find((k) => k.includes(name));
         if (!id) { this.print('objet inconnu', C.red); break; }
         g.character.inv.add(id, n); this.print(`+${n} ${item(id).name}`);
         break;
       }
+      case 'usure': { const v = Math.max(0, Math.min(100, +args[0] || 0)); for (const s of SLOTS) { const id = g.character.equip[s]; if (id && wearable(item(id))) g.character.setDur(id, v); } this.print(`équipement porté : ${v} %`); break; }
       case 'gold': g.character.inv.gold += +args[0] || 100; this.print(`${g.character.inv.gold} or`); break;
       case 'xp': { const ups = g.character.gainXp(+args[0] || 100); g.syncStats(); this.print(`niveau ${g.character.level}${ups ? ` (+${ups})` : ''}`); break; }
       case '': break;

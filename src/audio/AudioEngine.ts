@@ -250,6 +250,16 @@ export class AudioEngine {
   chop(p: Pos): void { this.burst(320, 'lowpass', 0.14, 0.45, 1, p); this.tone(150, 0.12, 0.25, 'triangle', 0.6, p); }
   mine(p: Pos): void { this.tone(1700 + Math.random() * 400, 0.18, 0.14, 'square', 0.9, p); this.burst(3200, 'highpass', 0.06, 0.25, 1, p); this.burst(260, 'lowpass', 0.1, 0.25, 1, p); }
   timber(p: Pos): void { this.tone(90, 1.2, 0.2, 'sawtooth', 0.45, p); this.burst(180, 'lowpass', 0.6, 0.5, 1, p, 1.0); }
+  /** Potion qui bouillonne (établi). */
+  brew(p: Pos): void { for (let i = 0; i < 5; i++) this.tone(300 + Math.random() * 500, 0.08, 0.06, 'sine', 1.6, p, i * 0.09); this.burst(700, 'lowpass', 0.5, 0.12, 1, p); }
+  /** Grésillement de la cuisson. */
+  sizzle(p: Pos): void { this.burst(5200, 'highpass', 0.7, 0.14, 1, p); }
+  /** Raclage du tannage. */
+  scrape(p: Pos): void { this.burst(900, 'bandpass', 0.25, 0.2, 2, p); this.burst(900, 'bandpass', 0.25, 0.18, 2, p, 0.3); }
+  /** Objet qui casse (pièce hors d'usage). */
+  crack(): void { this.burst(2600, 'bandpass', 0.18, 0.35, 3); this.tone(420, 0.35, 0.12, 'sawtooth', 0.4); }
+  /** Feuillage froissé (cueillette). */
+  rustle(p: Pos): void { this.burst(3000, 'bandpass', 0.3, 0.12, 0.8, p); }
 
   /** Projectile tiré par un autre joueur (multijoueur). */
   shot(kind: string, p: Pos): void {

@@ -1,10 +1,11 @@
 import { C, TextGrid } from '@ascii-fort/ascii-engine/TextGrid';
-import { compareWithEquipped } from './DialogueScreen';
+import { compareWithEquipped, itemStats } from './DialogueScreen';
 import { SPELLS, spell } from '@ascii-fort/sim/gameplay/Spells';
 import type { Screen, UICtx } from './UI';
 import { optionList } from './UI';
 import type { Game } from '../game/Game';
-import { item } from '@ascii-fort/sim/gameplay/Items';
+import { item, baseId, durOf, wearable } from '@ascii-fort/sim/gameplay/Items';
+import { recipeFor, usesOf, repairNeed, TAB_PLACE } from '@ascii-fort/sim/gameplay/Crafting';
 import { STATS, STAT_NAMES, SKILLS, SKILL_NAMES , STAT_DESC } from '@ascii-fort/sim/gameplay/Character';
 import { MACRO } from '@ascii-fort/worldgen/constants';
 import { B } from '@ascii-fort/worldgen/terrain/Biomes';
@@ -16,6 +17,12 @@ function frame(g: TextGrid, title: string, wMax = 110, hMax = 34) {
   const x = Math.floor((g.cols - w) / 2), y = Math.floor((g.rows - h) / 2);
   g.box(x, y, w, h, { title, double: true });
   return { x, y, w, h };
+}
+
+/** Nom d'un exemplaire tenant en `width` colonnes : le nom de base est coupé, jamais l'état (« (62 %) », « (HS) »). */
+function fitName(id: string, width: number, prefix = ''): string {
+  const s = durOf(id), st = wearable(item(id)) && s < 100 ? (s > 0 ? ` (${s} %)` : ' (HS)') : '';
+  return `${prefix}${item(baseId(id)).name}`.slice(0, Math.max(0, width - st.length)) + st;
 }
 
 // ------------------------------------------------------------------ inventaire
@@ -60,8 +67,9 @@ export class InventoryScreen implements Screen {
       const over = ctx.mouseCell.y === yy && ctx.mouseCell.x > x && ctx.mouseCell.x < x + lw;
       if (over) { this.sel = k; if (ctx.clicked) this.use(); }
       const eq = ch.isEquipped(l.id) ? '■ ' : '  ';
-      const name = `${eq}${l.def.name}`.slice(0, lw - 22).padEnd(lw - 22);
-      const col = l.def.rarity === 'rare' ? C.magenta : l.def.cat === 'quête' || l.def.cat === 'clé' ? C.gold : l.def.cat === 'parchemin' ? C.cyan : C.text;
+      const name = fitName(l.id, lw - 22, eq).padEnd(lw - 22);
+      const s = durOf(l.id), wr = wearable(l.def);
+      const col = wr && s <= 0 ? C.red : wr && s < 25 ? C.orange : l.def.rarity === 'rare' ? C.magenta : l.def.quality ? C.green : l.def.cat === 'quête' || l.def.cat === 'clé' ? C.gold : l.def.cat === 'parchemin' ? C.cyan : C.text;
       g.text(x + 2, yy, `${name}${String(l.qty).padStart(3)}  ${(l.def.weight * l.qty).toFixed(1).padStart(5)}  ${String(l.def.value).padStart(6)}`, k === this.sel ? 0xffffff : col, k === this.sel ? C.sel : -1);
     });
     // détails et comparaison
@@ -70,13 +78,16 @@ export class InventoryScreen implements Screen {
     if (d) {
       g.text(dx, yy++, d.name.slice(0, dw), d.rarity === 'rare' ? C.magenta : C.title);
       g.text(dx, yy++, `${d.cat}${d.rarity ? ' · ' + d.rarity : ''}${ch.isEquipped(d.id) ? ' · équipé' : ''}`, C.dim);
-      const info: string[] = [];
-      if (d.weapon) info.push(`Dégâts ${d.weapon.damage} · vitesse ${d.weapon.speed} · allonge ${d.weapon.reach} m`);
-      if (d.armor) info.push(`Armure +${d.armor.value} (${d.armor.slot})`);
-      if (d.shield) info.push(`Parade ${Math.round(d.shield.block * 100)} %`);
-      if (d.use) info.push([d.use.hp ? `+${d.use.hp} PV` : '', d.use.stamina ? `+${d.use.stamina} END` : '', d.use.mana ? `+${d.use.mana} MANA` : '', d.use.cure ? 'soigne le poison' : ''].filter(Boolean).join(' · '));
-      info.push(...TextGrid.wrap(d.desc, dw));
-      for (const l of info.slice(0, 5)) g.text(dx, yy++, l.slice(0, dw), C.text);
+      const id = list[this.sel].id, info: string[] = [];
+      info.push(...itemStats(d));
+      const need = repairNeed(id);
+      if (need) info.push(`Réparer : enclume (${need.n} × ${item(need.mat).name}${need.skill ? `, artisanat ${need.skill}` : ''}) ou forgeron (or)`);
+      info.push(d.desc);
+      const rf = recipeFor(id);
+      if (rf) info.push(`Se fabrique : ${TAB_PLACE[rf.tab]} · artisanat ${rf.skill}`);
+      const uses = [...new Set(usesOf(id).map((r) => item(r.out).name))];
+      if (uses.length) info.push(`Sert à : ${uses.slice(0, 3).join(', ')}${uses.length > 3 ? '…' : ''}`);
+      for (const l of info.flatMap((s) => TextGrid.wrap(s, dw)).slice(0, 10)) g.text(dx, yy++, l.slice(0, dw), C.text);
       for (const [l, v] of compareWithEquipped(ch, d)) g.text(dx, yy++, l.slice(0, dw), v > 0 ? C.green : v < 0 ? C.red : C.dim);
       const verb = d.weapon || d.armor || d.shield ? (ch.isEquipped(d.id) ? 'Entrée : retirer' : 'Entrée : équiper') : d.use ? 'Entrée : utiliser' : d.cat === 'parchemin' ? 'Entrée : lire (apprendre le sort)' : '';
       if (verb) g.text(dx, yy++, verb, C.yellow);
@@ -88,7 +99,7 @@ export class InventoryScreen implements Screen {
     (['arme', 'bouclier', 'tête', 'corps', 'mains', 'pieds'] as (keyof typeof ch.equip)[]).forEach((s, i) => {
       const yy2 = eqY + 1 + i, id = ch.equip[s];
       const over = ctx.mouseCell.y === yy2 && ctx.mouseCell.x >= dx && ctx.mouseCell.x < dx + dw;
-      g.text(dx, yy2, `${SLOT[s].padEnd(9)} ${id ? item(id).name : '—'}`.slice(0, dw), id ? C.text : C.faint, over && id ? C.sel : -1);
+      g.text(dx, yy2, `${SLOT[s].padEnd(9)} ${id ? fitName(id, dw - 10) : '—'}`.slice(0, dw), id ? (durOf(id) <= 0 ? C.red : durOf(id) < 25 ? C.orange : C.text) : C.faint, over && id ? C.sel : -1);
       if (over && id && ctx.clicked) this.game.useItem(id);
     });
     g.text(dx, eqY + 8, `Armure ${ch.armor} · Poids ${ch.inv.weight().toFixed(1)}/${ch.carryMax()} · ${ch.inv.gold} or`.slice(0, dw), C.gold);

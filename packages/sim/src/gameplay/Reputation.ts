@@ -9,7 +9,7 @@ import { factionOf } from '@ascii-fort/worldgen/civilization/History';
 export interface NpcLookup { findNpc(id: string): NPCData | undefined; npcsOf(sid: number): NPCData[] }
 
 export class Reputation {
-  global = 0;                                   // renommée −100 … 100
+  global = 0;                                   // renommée -100 … 100
   faction: number[];                            // par faction
   readonly local = new Map<number, number>();   // par implantation
   /** amendes en cours par implantation (délits vus par des témoins) */
