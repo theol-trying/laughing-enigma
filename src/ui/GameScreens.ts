@@ -11,6 +11,8 @@ import { MACRO } from '@ascii-fort/worldgen/constants';
 import { B } from '@ascii-fort/worldgen/terrain/Biomes';
 import { W_LAKE, W_RIVER, W_SEA } from '@ascii-fort/worldgen/terrain/Hydrology';
 import { GENERATOR_VERSION } from '../version';
+import { TalentPanel } from './TalentPanel';
+import { frNum } from '@ascii-fort/sim/gameplay/Talents';
 
 function frame(g: TextGrid, title: string, wMax = 110, hMax = 34) {
   const w = Math.min(g.cols - 2, wMax), h = Math.min(g.rows - 2, hMax);
@@ -116,12 +118,12 @@ export class InventoryScreen implements Screen {
       const over = ctx.mouseCell.y === yy && ctx.mouseCell.x > x && ctx.mouseCell.x < x + lw;
       if (over) { this.sel = i; if (ctx.clicked) this.assign(); }
       const key = ch.spellR === s.id ? 'R' : ch.spellF === s.id ? 'F' : '';
-      g.text(x + 2, yy, `${s.name.padEnd(lw - 14)}${String(s.mana).padStart(4)}  ${key.padStart(4)}`, i === this.sel ? 0xffffff : known ? C.text : C.faint, i === this.sel ? C.sel : -1);
+      g.text(x + 2, yy, `${s.name.padEnd(lw - 14)}${String(ch.manaCost(s.mana)).padStart(4)}  ${key.padStart(4)}`, i === this.sel ? 0xffffff : known ? C.text : C.faint, i === this.sel ? C.sel : -1);
     });
     const s = list[this.sel];
     let yy = y + 3;
     g.text(dx, yy++, s.name, C.title);
-    g.text(dx, yy++, `${s.mana} mana · ${s.kind === 'projectile' ? `projectile, ${s.dmg} dégâts` : s.kind === 'soin' ? 'soin' : 'bonus temporaire'}`, C.dim);
+    g.text(dx, yy++, `${ch.manaCost(s.mana)} mana · ${s.kind === 'projectile' ? `projectile, ${Math.round((s.dmg ?? 0) * ch.spellMult())} dégâts` : s.kind === 'soin' ? `soin, +${Math.round(ch.healAmount())} PV` : 'bonus temporaire'}`, C.dim);
     for (const l of TextGrid.wrap(s.desc, dw)) g.text(dx, yy++, l, C.text);
     yy++;
     if (ch.spells.includes(s.id)) g.text(dx, yy++, 'R ou F : lancer ce sort avec cette touche', C.yellow);
@@ -257,12 +259,35 @@ export class MapScreen implements Screen {
 // ------------------------------------------------------------------ personnage
 export class StatsScreen implements Screen {
   modal = true;
-  constructor(private game: Game) {}
+  private panel: TalentPanel;
+  constructor(private game: Game, private tab: 'perso' | 'talents' = 'perso') { this.panel = new TalentPanel(game); }
+
+  private setTab(t: 'perso' | 'talents') { if (t === this.tab) return; this.tab = t; if (t === 'talents') this.panel.focus(); }
+
   draw(ctx: UICtx): void {
+    const g = ctx.grid, ch = this.game.character;
+    const talents = this.tab === 'talents';
+    const { x, y, w, h } = talents ? frame(g, 'Talents', 108, 34) : frame(g, 'Personnage', 100, 32);
+    if (talents) this.panel.draw(ctx, x, y, w, h); else this.drawPerso(ctx, x, y, w, h);
+    // onglets (le changement prend effet à l'image suivante)
+    const tp = ch.talentPoints();
+    const tabs: ['perso' | 'talents', string][] = [['perso', ' Personnage (P) '], ['talents', ` Talents (K)${tp ? ` · ${tp} point${tp > 1 ? 's' : ''}` : ''} `]];
+    let tx = x + 2;
+    for (const [id, label] of tabs) {
+      const on = this.tab === id, over = ctx.mouseCell.y === y + 1 && ctx.mouseCell.x >= tx && ctx.mouseCell.x < tx + label.length;
+      const blink = id === 'talents' && tp > 0 && !on && Math.floor(performance.now() / 500) % 2 === 0;
+      g.text(tx, y + 1, label, on ? 0xffffff : over ? C.white : blink ? C.yellow : C.dim, on ? C.sel : -1);
+      if (over && ctx.clicked && !on) this.setTab(id);
+      tx += label.length + 1;
+    }
+  }
+
+  private drawPerso(ctx: UICtx, x: number, y: number, w: number, h: number): void {
     const g = ctx.grid, ch = this.game.character, p = this.game.player, rep = this.game.rep, civ = this.game.world.civ;
-    const { x, y, w, h } = frame(g, 'Personnage', 100, 32);
     g.text(x + 2, y + 2, `Niveau ${ch.level} · ${ch.xp}/${ch.xpForNext()} XP · ${ch.statPoints} point(s) à répartir`, ch.statPoints ? C.gold : C.title);
     g.text(x + 2, y + 13, 'Chaque niveau : +8 PV, +4 endurance, +3 mana, +3 % de dégâts et 1 point à répartir.', C.dim);
+    const tp = ch.talentPoints();
+    g.text(x + 2, y + 14, tp ? `Talents : ${tp} point${tp > 1 ? 's' : ''} à dépenser (touche K)` : `Talents : ${ch.talentSpent()} point(s) dépensé(s) · prochain point au niveau ${(Math.floor(ch.level / 3) + 1) * 3} (touche K)`, tp ? C.gold : C.dim);
     STATS.forEach((s, i) => {
       const yy = y + 4 + i;
       g.text(x + 3, yy, `${i + 1}. ${STAT_NAMES[s].padEnd(14)} ${String(ch.stats[s]).padStart(2)}`, C.text);
@@ -274,7 +299,7 @@ export class StatsScreen implements Screen {
       }
     });
     g.text(x + 3, y + 11, `PV ${Math.ceil(p.hp)}/${p.maxHp} · END ${Math.round(p.maxStamina)} · MANA ${Math.round(p.maxMana)} · Armure ${ch.armor}`, C.text);
-    g.text(x + 3, y + 12, `Dégâts ×${ch.meleeMult().toFixed(2)} · Arc ×${ch.bowMult().toFixed(2)} · Sorts ×${ch.spellMult().toFixed(2)} · Charge ${ch.carryMax()}`, C.text);
+    g.text(x + 3, y + 12, `Dégâts ×${frNum(ch.meleeMult(), 2)} · Arc ×${frNum(ch.bowMult(), 2)} · Sorts ×${frNum(ch.spellMult(), 2)} · Charge ${ch.carryMax()}`, C.text);
     const sx = x + Math.floor(w / 2) + 2;
     g.text(sx, y + 4 - 1, 'Compétences (progressent à l\'usage)', C.title);
     SKILLS.forEach((s, i) => {
@@ -284,12 +309,21 @@ export class StatsScreen implements Screen {
     g.text(x + 2, y + 15, 'Réputation', C.title);
     g.text(x + 3, y + 16, `Renommée ${Math.round(rep.global)}`, C.text);
     civ.factions.forEach((f, i) => g.text(x + 3 + (i % 2) * Math.floor(w / 2), y + 17 + Math.floor(i / 2), `${f.name.slice(0, 32).padEnd(33)} ${Math.round(rep.faction[f.id]).toString().padStart(4)}`, rep.faction[f.id] < -10 ? C.red : rep.faction[f.id] > 10 ? C.green : C.text));
-    g.text(x + 2, y + h - 2, '1-6 ou clic : augmenter une caractéristique · P/Échap : fermer', C.dim);
+    g.text(x + 2, y + h - 2, '1-6 ou clic : augmenter une caractéristique · K : talents · P/Échap : fermer', C.dim);
   }
   private raise(i: number) { const ch = this.game.character; if (ch.statPoints <= 0) return; ch.stats[STATS[i]]++; ch.statPoints--; this.game.syncStats(); }
+
   input(ctx: UICtx): void {
-    if (ctx.input.key('Escape') || ctx.input.key('p')) { ctx.close(); return; }
-    for (let k = 0; k < 6; k++) if (ctx.input.pressed('Digit' + (k + 1))) this.raise(k);
+    const i = ctx.input;
+    if (this.tab === 'talents') {
+      if (this.panel.input(ctx)) return; // le panneau garde Échap tant qu'une confirmation est en attente
+      if (i.key('Escape') || i.key('k')) { ctx.close(); return; }
+      if (i.key('p')) this.setTab('perso');
+      return;
+    }
+    if (i.key('Escape') || i.key('p')) { ctx.close(); return; }
+    if (i.key('k')) { this.setTab('talents'); return; }
+    for (let k = 0; k < 6; k++) if (i.pressed('Digit' + (k + 1))) this.raise(k);
   }
 }
 

@@ -23,8 +23,12 @@ export class Player {
   invisible = false;
   /** réchauffé (repas chaud, potion) : insensible au gel */
   warm = false;
-  /** part des dégâts qui passe une parade (0,35 sans bouclier ; 0,15 avec un bouclier en bon état) */
+  /** part des dégâts qui passe une parade (0,35 sans bouclier ; 0,15 avec un bouclier en bon état) : posée chaque image par PlayerCombat (Character.guard) */
   guard = 0.35;
+  /** endurance perdue en parant, par point de dégât reçu (Character.blockCost) */
+  blockCost = 1.2;
+  /** talents : × bruit émis et bonus de discrétion accroupi, posés chaque image par Game.updateBuffs */
+  noiseMul = 1; stealthBonus = 0;
   hitAmount = 0; hitDir: number | null = null; hitT = 0;
   /** plongée : accroupi en nageant */
   get diving(): boolean { return this.swimming && this.crouch; }

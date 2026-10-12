@@ -22,9 +22,12 @@ export class LockpickScreen implements Screen {
   private readonly W = 32;
   private readonly width: number;
   private readonly speed: number;
+  private readonly breakChance: number;
 
-  constructor(private label: string, private difficulty: number, skill: number, private host: LockpickHost, private onDone: (ok: boolean) => void) {
-    this.width = Math.max(2, Math.round(7 - difficulty * 1.6 + skill / 18));
+  /** `opts` (talents) : cases de zone en plus, chance de casse du crochet sur un raté (0,5 par défaut) */
+  constructor(private label: string, private difficulty: number, skill: number, private host: LockpickHost, private onDone: (ok: boolean) => void, opts: { width?: number; breakChance?: number } = {}) {
+    this.width = Math.max(2, Math.round(7 - difficulty * 1.6 + skill / 18)) + (opts.width ?? 0);
+    this.breakChance = opts.breakChance ?? 0.5;
     this.speed = 14 + difficulty * 7;
     this.newZone();
   }
@@ -65,7 +68,7 @@ export class LockpickScreen implements Screen {
       if (this.pin >= this.pins) { ctx.close(); this.onDone(true); return; }
       this.say('Clic ! Une goupille cède.', C.green);
       this.newZone();
-    } else if (Math.random() < 0.5) {
+    } else if (Math.random() < this.breakChance) {
       this.host.breakPick();
       this.say('Crac ! Le crochet se brise.', C.red);
       if (this.host.picks() <= 0) { ctx.close(); this.onDone(false); }

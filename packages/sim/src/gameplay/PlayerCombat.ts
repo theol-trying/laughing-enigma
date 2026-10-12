@@ -8,7 +8,8 @@ import type { InstanceBuffer } from '@ascii-fort/ascii-engine/Renderer';
 import type { Camera } from '@ascii-fort/ascii-engine/Camera';
 import { M } from '@ascii-fort/ascii-engine/Materials';
 import { trsYawPitch, mat4 } from '@ascii-fort/core/math';
-import { wearFactor, type Element } from './Items';
+import type { Element } from './Items';
+import { frNum, EXECUTE_HP } from './Talents';
 import { spell } from './Spells';
 
 // Combat du joueur : attaques légère / lourde (maintenir), blocage, esquive, arc, sorts.
@@ -69,11 +70,11 @@ export class PlayerCombat {
     const p = w.player, ch = w.character;
     const weapon = ch.weapon?.weapon ?? { kind: 'poings' as const, damage: 4, speed: 1.3, reach: 1.5, stamina: 5 };
     this.cooldown -= dt;
-    this.swing = Math.max(0, this.swing - dt * 2.4 * weapon.speed);
-    p.mana = Math.min(p.maxMana, p.mana + dt * 1.5);
-    const sh = ch.shield;
-    p.shield = !!sh;
-    p.guard = sh ? 0.35 - 0.2 * wearFactor(sh.dur ?? 100) - (sh.quality ? 0.03 : 0) : 0.35;
+    const spd = weapon.speed * (weapon.kind === 'arc' ? 1 : ch.atkSpeedMult());
+    this.swing = Math.max(0, this.swing - dt * 2.4 * spd);
+    p.mana = Math.min(p.maxMana, p.mana + dt * ch.manaRegen());
+    p.shield = !!ch.shield;
+    p.guard = ch.guard(); p.blockCost = ch.blockCost();
     // esquive : V ou double appui d'une direction
     if ((input.key('v') || input.doubleTapped) && p.stamina >= 20 && this.dashT <= 0 && p.onGround) {
       let dx = 0, dz = 0;
@@ -95,16 +96,16 @@ export class PlayerCombat {
     if (noArrow && input.mouseClicked(0) && this.cooldown <= 0) { w.events.emit('message', { text: 'Plus de flèches ! (B : arme de mêlée)', color: 0xe05040 }); this.cooldown = 0.6; }
     if (free && !noArrow && input.mouseDown(0)) this.charge += dt;
     if (free && !noArrow && input.mouseReleased(0) && this.cooldown <= 0) {
-      if (bow) this.fireArrow(w, Math.min(1, this.charge / (0.8 / weapon.speed)));
+      if (bow) this.fireArrow(w, Math.min(1, this.charge / ch.bowDrawTime()));
       else {
         const heavy = this.charge > 0.42;
-        const cost = weapon.stamina * (heavy ? 2 : 1);
+        const cost = weapon.stamina * (heavy ? 2 : 1) * ch.staCostMult();
         if (p.stamina >= cost * 0.5) {
           p.stamina = Math.max(0, p.stamina - cost);
           this.swing = 1; this.swingHeavy = heavy;
           w.reveal?.();
-          this.hitPending = 0.16 / weapon.speed;
-          this.cooldown = (heavy ? 0.85 : 0.5) / weapon.speed;
+          this.hitPending = 0.16 / spd;
+          this.cooldown = (heavy ? 0.85 : 0.5) / spd;
         }
       }
       this.charge = 0;
@@ -126,15 +127,16 @@ export class PlayerCombat {
     const p = w.player, ch = w.character, sp = spell(id);
     if (!sp || !ch.spells.includes(id)) return;
     if (sp.kind === 'soin' && p.hp >= p.maxHp && p.poison <= 0) return;
-    if (p.mana < sp.mana) { if (this.cooldown <= 0) w.events.emit('message', { text: `Pas assez de mana pour ${sp.name} (${sp.mana}).`, color: 0x7a7ae0 }); this.cooldown = 0.3; return; }
-    p.mana -= sp.mana;
+    const cost = ch.manaCost(sp.mana);
+    if (p.mana < cost) { if (this.cooldown <= 0) w.events.emit('message', { text: `Pas assez de mana pour ${sp.name} (${cost}).`, color: 0x7a7ae0 }); this.cooldown = 0.3; return; }
+    p.mana -= cost;
     if (sp.kind === 'projectile') w.reveal?.();
     if (sp.kind === 'projectile') {
       const f = this.aim(p), v = sp.speed ?? 24;
       this.projectiles.push({ x: p.x + f[0] * 0.8, y: p.eyeY - 0.2, z: p.z + f[2] * 0.8, vx: f[0] * v, vy: f[1] * v, vz: f[2] * v, dmg: (sp.dmg ?? 10) * ch.spellMult(), element: sp.element, kind: sp.fx ?? 'feu', life: 3, stuck: false, owner: 'player' });
       this.cast(this.projectiles[this.projectiles.length - 1]);
     } else if (sp.kind === 'soin') {
-      p.hp = Math.min(p.maxHp, p.hp + 25 * ch.spellMult()); p.poison = 0;
+      p.hp = Math.min(p.maxHp, p.hp + ch.healAmount()); p.poison = 0;
       this.onCast?.({ k: 'heal', x: p.x, y: p.y, z: p.z });
       w.events.emit('message', { text: 'Une chaleur douce referme vos plaies.', color: 0x60d070 });
     } else w.castBonus?.(id);
@@ -159,10 +161,11 @@ export class PlayerCombat {
       if (d < bd) { bd = d; best = e; }
     }
     if (!best) { w.harvest?.(heavy); return; }
-    let dmg = damage * ch.meleeMult() * (heavy ? 1.8 : 1);
+    let dmg = damage * ch.meleeMult() * (heavy ? ch.heavyMult() : 1);
     const sneak = w.sneak?.(best, false) ?? 1;
-    if (sneak > 1) { dmg *= sneak; w.events.emit('message', { text: `Attaque sournoise ! Dégâts ×${sneak}`, color: 0xd070d0 }); ch.practice('furtivité', 3); }
+    if (sneak > 1) { dmg *= sneak; w.events.emit('message', { text: `Attaque sournoise ! Dégâts ×${frNum(sneak)}`, color: 0xd070d0 }); ch.practice('furtivité', 3); }
     if (ch.weapon?.weapon?.kind === 'masse' && (best.type === 'squelette' || best.mon?.def === 'roi-squelette')) dmg *= 1.4;
+    if (best.hp < best.maxHp * EXECUTE_HP) dmg *= ch.executeMult();
     const done = hitEntity(w.combat, best, dmg, 'player', element);
     w.wear?.('arme', heavy ? 1.6 : 1);
     if (heavy && best.mon) { best.mon.windup = 0; best.x += fx * 0.9; best.z += fz * 0.9; } // étourdi, repoussé
@@ -178,12 +181,12 @@ export class PlayerCombat {
     if (!wd || draw < 0.15) return;
     if (!ch.inv.remove('flèche', 1)) { w.events.emit('message', { text: 'Plus de flèches !', color: 0xe05040 }); return; }
     const f = this.aim(p), v = 22 + 38 * draw;
-    p.stamina = Math.max(0, p.stamina - wd.stamina);
+    p.stamina = Math.max(0, p.stamina - wd.stamina * ch.staCostMult());
     w.reveal?.();
     this.projectiles.push({ x: p.x + f[0] * 0.6, y: p.eyeY - 0.1, z: p.z + f[2] * 0.6, vx: f[0] * v, vy: f[1] * v, vz: f[2] * v, dmg: wd.damage * ch.bowMult() * (0.3 + 0.7 * draw), element: wd.element, kind: 'flèche', life: 6, stuck: false, owner: 'player' });
     this.cast(this.projectiles[this.projectiles.length - 1]);
     w.wear?.('arme', 1);
-    this.cooldown = 0.35;
+    this.cooldown = ch.bowCooldown();
   }
 
   private cast(pr: Projectile) {
@@ -206,8 +209,9 @@ export class PlayerCombat {
         const px = pr.x + sx * t, pz = pr.z + sz * t, py = pr.y + (ny - pr.y) * t;
         if (Math.hypot(e.x - px, e.z - pz) < e.radius + 0.15 && py > e.y && py < e.y + e.model.height) {
           const sneak = w.sneak?.(e, true) ?? 1;
-          if (sneak > 1) { w.events.emit('message', { text: `Tir sournois ! Dégâts ×${sneak}`, color: 0xd070d0 }); ch.practice('furtivité', 2); }
+          if (sneak > 1) { w.events.emit('message', { text: `Tir sournois ! Dégâts ×${frNum(sneak)}`, color: 0xd070d0 }); ch.practice('furtivité', 2); }
           hitEntity(w.combat, e, pr.dmg * sneak, pr.owner, pr.element);
+          if (pr.kind === 'flèche' && pr.owner === 'player' && Math.random() < ch.arrowRecover()) { ch.inv.add('flèche', 1); w.events.emit('message', { text: 'Flèche récupérée.', color: 0x80c080 }); }
           if (pr.element && e.alive) applyElement(e, pr.element);
           this.lastTarget = e; w.onHit(e);
           ch.practice(pr.kind === 'flèche' ? 'tir' : 'magie', 1.5);
@@ -233,7 +237,7 @@ export class PlayerCombat {
     const s = this.swing;
     const bob = Math.sin(performance.now() / 300) * 0.006;
     if (wd?.kind === 'arc') {
-      const dr = Math.min(1, this.charge / 0.8);
+      const dr = Math.min(1, this.charge / ch.bowDrawTime());
       const [x, y, z] = at(0.55, 0.05, -0.12 + bob);
       trsYawPitch(tmp, x, y, z, -h, pt, 0.04, 0.75, 0.05); ib.add(tmp, 0x6a4a2a, M.WOOD, 0, 0, 1);
       if (dr > 0.05) { const [ax, ay, az] = at(0.75 - dr * 0.25, 0.05, -0.12); trsYawPitch(tmp, ax, ay, az, -h, pt, 0.02, 0.02, 0.7); ib.add(tmp, 0xb8b8b0, M.METAL, 0, 0, 1); }

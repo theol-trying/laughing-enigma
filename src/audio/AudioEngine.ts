@@ -174,6 +174,8 @@ export class AudioEngine {
   thunder(): void { this.burst(120, 'lowpass', 2.2, 0.9); }
   ui(): void { this.tone(880, 0.06, 0.08, 'square'); }
   chime(): void { this.tone(660, 0.15, 0.1, 'triangle'); this.tone(990, 0.2, 0.1, 'triangle', 0, undefined, 0.12); }
+  /** talent appris, point de talent gagné : arpège ascendant */
+  talent(): void { this.tone(523, 0.14, 0.1, 'triangle'); this.tone(659, 0.14, 0.1, 'triangle', 0, undefined, 0.09); this.tone(988, 0.3, 0.12, 'triangle', 0, undefined, 0.18); this.burst(4200, 'highpass', 0.12, 0.05, 1, undefined, 0.2); }
 
   // ---------------------------------------------------------------- créatures (spatialisées)
   /** Cri d'une créature : alerte (elle vous a repéré), attaque ou mort. */

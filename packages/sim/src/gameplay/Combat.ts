@@ -53,7 +53,7 @@ export function hitPlayer(host: CombatHost, amount: number, src: Entity, element
   const front = (dx * Math.sin(p.heading) - dz * Math.cos(p.heading)) / d > 0.3;
   let dmg = amount, blocked = false;
   if (p.blocking && front && p.stamina > 0) {
-    p.stamina = Math.max(0, p.stamina - amount * 1.2);
+    p.stamina = Math.max(0, p.stamina - amount * p.blockCost);
     dmg *= p.guard; blocked = true;
     host.events.emit('message', { text: 'Coup paré !', color: 0x9ad0ff });
   }

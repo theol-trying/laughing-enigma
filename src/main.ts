@@ -102,7 +102,7 @@ function startGame(seed: string, macro?: MacroWorld, civ?: Civilization): Game {
   };
   applyOptions();
   g.events.emit('message', { text: `Bienvenue dans les ${g.world.macro.worldName}. Vous arrivez à ${g.world.civ.start.name}.`, color: C.title });
-  g.events.emit('message', { text: 'Clic : capturer la souris · ZQSD : marcher · E : interagir · Tab : sac · M : carte · J : journal', color: C.dim });
+  g.events.emit('message', { text: 'Clic : capturer la souris · ZQSD : marcher · E : interagir · Tab : sac · M : carte · J : journal · P : fiche · K : talents', color: C.dim });
   return g;
 }
 
@@ -200,6 +200,7 @@ function tick(now: number) {
     else if (input.key('m')) screens.open(new MapScreen(g));
     else if (input.key('j')) screens.open(new JournalScreen(g));
     else if (input.key('p')) screens.open(new StatsScreen(g));
+    else if (input.key('k')) screens.open(new StatsScreen(g, 'talents'));
     else if (input.key('Escape')) pause();
     else if (input.key('Enter') && g.coop) screens.open(new ChatScreen(input, (t) => g.coop?.chat(t)));
     if (input.key('F3')) hud.debug = !hud.debug;

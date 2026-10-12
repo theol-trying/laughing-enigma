@@ -147,12 +147,12 @@ export function missing(inv: Inventory, r: Recipe, n: number): { ing: Ingredient
   return r.ins.map((g) => ({ ing: g, lack: g.qty * n - have(inv, g) })).filter((x) => x.lack > 0);
 }
 export function outQty(r: Recipe, skill: number): number { return r.qty + (r.perSkill ? Math.floor(skill / r.perSkill) : 0); }
-/** Chance de pièce de qualité : +2 % par point d'artisanat au-dessus du requis, 60 % au plus. */
-export function qualityChance(r: Recipe, skill: number): number { return r.quality ? Math.max(0, Math.min(0.6, (skill - r.skill) * 0.02)) : 0; }
+/** Chance de pièce de qualité : +2 % par point d'artisanat au-dessus du requis, 60 % au plus ; `bonus` (talents) s'y ajoute, 90 % au plus. */
+export function qualityChance(r: Recipe, skill: number, bonus = 0): number { return r.quality ? Math.min(0.9, Math.max(0, Math.min(0.6, (skill - r.skill) * 0.02)) + bonus) : 0; }
 /** Recettes faisables tout de suite dans ces onglets (indication [E]). */
 export function craftableCount(inv: Inventory, tabs: CraftTab[], skill: number): number { return RECIPES.filter((r) => tabs.includes(r.tab) && maxBatch(inv, r, skill) > 0).length; }
 /** Fabrique n fois (borné au possible) ; la pratique est à la charge de l'appelant. */
-export function craft(inv: Inventory, r: Recipe, n: number, skill: number, rnd: () => number = Math.random): CraftResult | null {
+export function craft(inv: Inventory, r: Recipe, n: number, skill: number, rnd: () => number = Math.random, qBonus = 0): CraftResult | null {
   n = Math.min(n, maxBatch(inv, r, skill));
   if (n <= 0) return null;
   const used: [string, number][] = [];
@@ -160,7 +160,7 @@ export function craft(inv: Inventory, r: Recipe, n: number, skill: number, rnd: 
     let need = g.qty * n;
     for (const id of g.ids) { const take = Math.min(inv.count(id), need); if (take > 0) { inv.remove(id, take); used.push([id, take]); need -= take; } }
   }
-  const per = outQty(r, skill), q = qualityChance(r, skill);
+  const per = outQty(r, skill), q = qualityChance(r, skill, qBonus);
   let good = 0;
   if (r.quality) for (let i = 0; i < n; i++) if (rnd() < q) good++;
   inv.add(r.out, (n - good) * per);

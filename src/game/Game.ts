@@ -14,6 +14,7 @@ import type { Entity } from '@ascii-fort/sim/entities/Entity';
 import { MONSTERS } from '@ascii-fort/sim/entities/Monster';
 import { type CombatHost } from '@ascii-fort/sim/gameplay/Combat';
 import { Character, type Slot } from '@ascii-fort/sim/gameplay/Character';
+import { talentPointsTotal } from '@ascii-fort/sim/gameplay/Talents';
 import { PlayerCombat , projectileLook } from '@ascii-fort/sim/gameplay/PlayerCombat';
 import { WorldState, type Dropped } from '@ascii-fort/sim/gameplay/WorldState';
 import { item, baseId, durOf, FISH, QUALITY } from '@ascii-fort/sim/gameplay/Items';
@@ -100,7 +101,7 @@ export class Game {
   /** objets récupérés récemment (affichés à droite de l'écran) */
   lootFeed: { text: string; color: number; t: number }[] = [];
   /** bandeau central (montée de niveau…) */
-  banner: { text: string; sub: string; t: number; color?: number } | null = null;
+  banner: { text: string; sub: string; t: number; color?: number; sub2?: string } | null = null;
   /** dernier rappel « arme hors d'usage » */
   private brokenMsgT = -100;
   private lastLevel = 1;
@@ -242,6 +243,7 @@ export class Game {
     p.maxHp = ch.maxHp; p.maxStamina = ch.maxStamina; p.maxMana = ch.maxMana;
     if (refill) { p.hp = p.maxHp; p.stamina = p.maxStamina; p.mana = p.maxMana; }
     p.hp = Math.min(p.hp, p.maxHp);
+    p.mana = Math.min(p.mana, p.maxMana); p.stamina = Math.min(p.stamina, p.maxStamina); // un maximum qui baisse (remise à zéro des talents)
   }
 
   onPlayerDeath(): void {
@@ -405,7 +407,7 @@ export class Game {
   }
 
   /** Bruit de la fouille d'un contenant : on ouvre plus discrètement accroupi. */
-  private theftNoise(): number { return this.player.crouch ? 0.12 : 0.5; }
+  private theftNoise(): number { return (this.player.crouch ? 0.12 : 0.5) * this.player.noiseMul; }
   private theftT = -1; private theftN = 0;
   private theftWitnesses(): number {
     if (this.elapsed - this.theftT >= 0.25) { this.theftT = this.elapsed; this.theftN = this.witnesses(this.theftNoise()).length; }
@@ -538,7 +540,7 @@ export class Game {
   private craftRecipe(r: Recipe, n: number, pos: Pos): Feedback {
     const ch = this.character, skill = ch.skills.artisanat;
     if (skill < r.skill) return { text: `Artisanat ${r.skill} requis (vous : ${skill}). Chaque fabrication fait progresser.`, color: 0xf09040 };
-    const res = craft(ch.inv, r, n, skill);
+    const res = craft(ch.inv, r, n, skill, Math.random, ch.qualityBonus());
     if (!res) {
       const m = missing(ch.inv, r, 1)[0], src = m ? SOURCES[m.ing.ids[0]] : '';
       this.audio.ui();
@@ -695,10 +697,10 @@ export class Game {
 
   /** Sorts de bonus. */
   private castBonus(id: string): void {
-    if (id === 'bouclier de mana') { this.addBuff({ id: 'bouclier', name: 'Bouclier de mana', t: 60, armor: 6 }); this.tintFlash = { c: [0.5, 0.6, 1], t: 0.6 }; this.events.emit('message', { text: 'Une aura bleutée vous enveloppe (armure +6).', color: 0x7a9ae8 }); }
-    else if (id === 'lumière') { this.addBuff({ id: 'lumière', name: 'Lumière', t: 120 }); this.events.emit('message', { text: 'Un globe de lumière s’allume au-dessus de vous.', color: 0xf0e0a0 }); }
-    else if (id === 'invisibilité') { this.addBuff({ id: 'invisible', name: 'Invisible', t: 20 }); this.events.emit('message', { text: 'Votre corps s’efface… Personne ne vous voit (attaquer ou voler y met fin).', color: 0xb0c0d8 }); }
-    else if (id === 'pas feutrés') { this.addBuff({ id: 'feutré', name: 'Pas feutrés', t: 45 }); this.events.emit('message', { text: 'Vos pas deviennent silencieux.', color: 0x9a9ab0 }); }
+    if (id === 'bouclier de mana') { this.addBuff({ id: 'bouclier', name: 'Bouclier de mana', t: this.character.spellTime(60), armor: 6 }); this.tintFlash = { c: [0.5, 0.6, 1], t: 0.6 }; this.events.emit('message', { text: 'Une aura bleutée vous enveloppe (armure +6).', color: 0x7a9ae8 }); }
+    else if (id === 'lumière') { this.addBuff({ id: 'lumière', name: 'Lumière', t: this.character.spellTime(120) }); this.events.emit('message', { text: 'Un globe de lumière s’allume au-dessus de vous.', color: 0xf0e0a0 }); }
+    else if (id === 'invisibilité') { this.addBuff({ id: 'invisible', name: 'Invisible', t: this.character.spellTime(20) }); this.events.emit('message', { text: 'Votre corps s’efface… Personne ne vous voit (attaquer ou voler y met fin).', color: 0xb0c0d8 }); }
+    else if (id === 'pas feutrés') { this.addBuff({ id: 'feutré', name: 'Pas feutrés', t: this.character.spellTime(45) }); this.events.emit('message', { text: 'Vos pas deviennent silencieux.', color: 0x9a9ab0 }); }
     this.audio.chime();
   }
 
@@ -711,10 +713,10 @@ export class Game {
       { x: p.x, z: p.z, y: p.y, stealth: p.crouch ? Math.max(0.35, this.character.stealth()) : 0, noise: playerNoise(p) }, { night: this.atmoNight, fog: this.fog() });
   }
 
-  /** Attaque sournoise : accroupi, sur une cible qui ne vous a pas repéré → ×3 au corps à corps, ×2 à distance. */
+  /** Attaque sournoise : accroupi, sur une cible qui ne vous a pas repéré → ×3 au corps à corps, ×2 à distance (+ talents). */
   private sneakMult(e: Entity, ranged: boolean): number {
     if (!this.player.crouch || !e.alive || this.aware(e)) return 1;
-    return ranged ? 2 : 3;
+    return (ranged ? 2 : 3) + this.character.sneakBonus();
   }
 
   /** Vol à la tire : réussite selon la furtivité et l'agilité ; un échec est un délit. */
@@ -723,7 +725,7 @@ export class Game {
     this.reveal();
     if (this.state.flags.get(key) as unknown === this.time.day) { this.events.emit('message', { text: `Les poches de ${n.first} sont vides pour aujourd'hui.`, color: 0x9a9a90 }); return; }
     this.state.flags.set(key, this.time.day as unknown as boolean);
-    const chance = Math.min(0.9, 0.45 + ch.skills.furtivité * 0.006 + (ch.stats.AGI - 5) * 0.03);
+    const chance = ch.pickpocketChance();
     if (Math.random() < chance) {
       const gold = Math.min(n.wealth, 3 + Math.floor(Math.random() * 16));
       n.wealth -= gold;
@@ -745,6 +747,13 @@ export class Game {
     this.events.emit('message', { text: `${n.first} ${n.last} vous surprend la main dans sa poche !`, color: 0xe05040 });
     this.events.emit('player:crime', { type: 'vol', settlementId: n.sid, factionId: n.factionId, witnesses: [...new Set([e.id, ...w.map((x) => x.id)])], value: 10 });
     this.alertGuards(n.sid);
+  }
+
+  /** Première fois qu'un point de talent est disponible : explique la touche K (drapeau sauvegardé). */
+  private talentHint(): void {
+    if (this.character.talentPoints() <= 0 || this.state.flags.get('astuce:talents')) return;
+    this.state.flags.set('astuce:talents', true);
+    this.events.emit('message', { text: 'Astuce : la touche K ouvre les arbres de talents (un point tous les 3 niveaux).', color: 0x60d0e0 });
   }
 
   /** Rompt l'invisibilité (attaque, tir, sort offensif, vol). */
@@ -771,7 +780,7 @@ export class Game {
       picks: () => ch.inv.count('crochet'),
       breakPick: () => { ch.inv.remove('crochet'); },
       practice: (n) => { ch.practice('furtivité', n); },
-    }, (ok) => { if (ok) { this.events.emit('message', { text: 'Le verrou cède.', color: 0x60d070 }); onOpen(); } }));
+    }, (ok) => { if (ok) { this.events.emit('message', { text: 'Le verrou cède.', color: 0x60d070 }); onOpen(); } }, ch.lockOpts()));
   }
 
   private bannerCache = new Map<number, { x: number; y: number; z: number; yaw: number }[]>();
@@ -915,7 +924,8 @@ export class Game {
     let dmg = 0, armor = 0, regen = 0, stam = 0;
     for (const b of this.buffs) { b.t -= dt; dmg += b.dmg ?? 0; armor += b.armor ?? 0; regen += b.regen ?? 0; stam += b.stam ?? 0; }
     this.buffs = this.buffs.filter((b) => b.t > 0);
-    ch.bonusDmg = dmg; ch.bonusArmor = armor; p.staminaRegen = 1 + stam;
+    ch.bonusDmg = dmg; ch.bonusArmor = armor; p.staminaRegen = (1 + stam) * ch.staRegenMult();
+    p.noiseMul = ch.noiseMul(); p.stealthBonus = ch.talentFx('stealth');
     p.quiet = this.buffs.some((b) => b.id === 'feutré');
     p.invisible = this.buffs.some((b) => b.id === 'invisible');
     p.warm = this.buffs.some((b) => b.id === 'réchauffé');
@@ -1024,14 +1034,17 @@ export class Game {
     this.wetness += (wetTarget - this.wetness) * Math.min(1, dt * (wetTarget > this.wetness ? 0.08 : 0.015));
     this.updateBuffs(dt);
     if (this.character.level !== this.lastLevel) {
-      const gained = this.character.level - this.lastLevel;
+      const prev = this.lastLevel, gained = this.character.level - prev;
       this.lastLevel = this.character.level;
       if (gained > 0) {
+        // un point de talent tous les 3 niveaux (plusieurs niveaux d'un coup : on compte les paliers franchis)
+        const tg = talentPointsTotal(this.character.level) - talentPointsTotal(prev);
         this.syncStats(true);
-        this.banner = { text: `NIVEAU ${this.character.level}`, sub: `PV, endurance, mana et dégâts augmentent · +${gained} point${gained > 1 ? 's' : ''} à dépenser (touche P)`, t: 5 };
+        this.banner = { text: `NIVEAU ${this.character.level}`, sub: `PV, endurance, mana et dégâts augmentent · +${gained} point${gained > 1 ? 's' : ''} à dépenser (touche P)`, t: tg > 0 ? 7 : 5, sub2: tg > 0 ? `◆ +${tg} point${tg > 1 ? 's' : ''} de talent : touche K ◆` : undefined };
         this.tintFlash = { c: [1, 0.9, 0.5], t: 0.8 };
-        this.audio.chime();
-        this.events.emit('message', { text: `Niveau ${this.character.level} ! Appuyez sur P pour dépenser vos points de caractéristique.`, color: 0xf0d060 });
+        if (tg > 0) this.audio.talent(); else this.audio.chime();
+        this.events.emit('message', { text: tg > 0 ? `Niveau ${this.character.level} ! P : caractéristiques · K : talents (+${tg} point${tg > 1 ? 's' : ''}).` : `Niveau ${this.character.level} ! Appuyez sur P pour dépenser vos points de caractéristique.`, color: 0xf0d060 });
+        if (tg > 0) this.talentHint();
       }
     }
     if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
@@ -1326,7 +1339,7 @@ export class Game {
     return {
       format: 1, game: GAME_VERSION, generator: GENERATOR_VERSION, seed: this.seed.text, savedAt: Date.now(), label, time: this.time.minutes,
       player: { x: p.x, y: p.y, z: p.z, heading: p.heading, pitch: p.pitch, hp: p.hp, stamina: p.stamina, mana: p.mana, dungeon: this.dungeon ? this.dungeon.layout.id : -1, ret: this.dungeon ? this.dungeon.ret : null },
-      character: { stats: { ...ch.stats }, skills: { ...ch.skills }, skillXp: { ...ch.skillXp }, level: ch.level, xp: ch.xp, statPoints: ch.statPoints, inv: [...ch.inv.items], gold: ch.inv.gold, equip: { ...ch.equip }, spells: [...ch.spells], spellR: ch.spellR, spellF: ch.spellF },
+      character: { stats: { ...ch.stats }, skills: { ...ch.skills }, skillXp: { ...ch.skillXp }, level: ch.level, xp: ch.xp, statPoints: ch.statPoints, inv: [...ch.inv.items], gold: ch.inv.gold, equip: { ...ch.equip }, spells: [...ch.spells], spellR: ch.spellR, spellF: ch.spellF, talents: { ...ch.talents } },
       state: { opened: [...st.opened], dropped: st.dropped, flags: [...st.flags].filter(([k, v]) => !k.startsWith('cueilli:') || v === this.time.day), discovered: [...st.discovered], explored: packBits(st.explored) },
       npcs,
       rep: { global: this.rep.global, faction: [...this.rep.faction], local: [...this.rep.local], bounty: [...this.rep.bounty] },
@@ -1346,6 +1359,8 @@ export class Game {
     this.time.minutes = d.time; this.lastDay = this.time.day;
     Object.assign(ch.stats, d.character.stats); Object.assign(ch.skills, d.character.skills); Object.assign(ch.skillXp, d.character.skillXp);
     ch.level = d.character.level; ch.xp = d.character.xp; ch.statPoints = d.character.statPoints;
+    this.lastLevel = ch.level; // sinon la première image affiche un faux « NIVEAU N » et soigne complètement
+    ch.setTalents(d.character.talents); // remplace toujours : champ absent = aucun talent (le Game est réutilisé si la seed est la même)
     ch.inv.items.clear(); for (const [id, n] of d.character.inv) ch.inv.items.set(id, n);
     ch.inv.gold = d.character.gold; Object.assign(ch.equip, d.character.equip);
     if (d.character.spells) { ch.spells = [...d.character.spells]; ch.spellR = d.character.spellR ?? 'trait de feu'; ch.spellF = d.character.spellF ?? 'soin'; }
@@ -1375,6 +1390,7 @@ export class Game {
     this.syncStats();
     p.hp = d.player.hp; p.stamina = d.player.stamina; p.mana = d.player.mana;
     this.lastHp = p.hp;
+    this.talentHint();
   }
 
   render(viewMode = 0): void {

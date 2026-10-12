@@ -3,7 +3,7 @@ import type { Screen, UICtx } from './UI';
 import type { DialogueNode } from '@ascii-fort/sim/gameplay/Dialogue';
 import type { Entity } from '@ascii-fort/sim/entities/Entity';
 import type { Character } from '@ascii-fort/sim/gameplay/Character';
-import type { Economy } from '@ascii-fort/sim/gameplay/Economy';
+import { sellCap, type Economy } from '@ascii-fort/sim/gameplay/Economy';
 import type { Reputation } from '@ascii-fort/sim/gameplay/Reputation';
 import type { EventBus } from '@ascii-fort/core/Events';
 import { item, baseId, wearable, wearState, wearFactor, type ItemDef } from '@ascii-fort/sim/gameplay/Items';
@@ -117,8 +117,9 @@ export class TradeScreen implements Screen {
     const n = this.e.npc!, h = this.h, ch = h.character;
     const f = h.rep.priceFactor(n);
     const buy = h.stockOf(this.e).filter((s) => s.qty > 0).map((s) => ({ id: s.id, qty: s.qty, price: h.economy.price(item(s.id), n.sid, true, ch.priceMult(true), f) }));
+    // la revente ne dépasse jamais 90 % du prix d'achat du même objet chez ce marchand (pas de gain à acheter puis revendre)
     const sell = ch.inv.list().filter((l) => l.def.cat !== 'quête' && l.def.cat !== 'clé' && !(ch.isEquipped(l.id) && l.qty === 1))
-      .map((l) => ({ id: l.id, qty: l.qty - (ch.isEquipped(l.id) ? 1 : 0), price: h.economy.price(l.def, n.sid, false, ch.priceMult(false), f) }));
+      .map((l) => ({ id: l.id, qty: l.qty - (ch.isEquipped(l.id) ? 1 : 0), price: sellCap(h.economy.price(l.def, n.sid, false, ch.priceMult(false), f), h.economy.price(l.def, n.sid, true, ch.priceMult(true), f)) }));
     return [buy, sell];
   }
 

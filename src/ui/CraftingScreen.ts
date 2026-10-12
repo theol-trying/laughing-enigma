@@ -202,7 +202,7 @@ export class CraftingScreen implements Screen {
       for (const ing of r.ins) ingredient(ing.label ?? item(ing.ids[0]).name, ing.qty * this.qty, have(ch.inv, ing), SOURCES[ing.ids[0]]);
       if (skill < r.skill) line(`Artisanat requis : ${r.skill} (vous : ${skill})`, C.red);
       else if (r.skill > 0) line(`Artisanat requis : ${r.skill}`, C.dim);
-      if (r.quality) line(`Qualité : ${Math.round(qualityChance(r, skill) * 100)} % de chance (meilleure, plus solide)`, C.cyan);
+      if (r.quality) line(`Qualité : ${Math.round(qualityChance(r, skill, ch.qualityBonus()) * 100)} % de chance (meilleure, plus solide)`, C.cyan);
       line(`Pratique : +${num(r.xp)} par fabrication`, C.dim);
       yy = Math.min(yy + 1, bottom - 2); limit = bottom;
       let bx = dx;

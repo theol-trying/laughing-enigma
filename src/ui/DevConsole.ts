@@ -9,6 +9,7 @@ import { GENERATOR_VERSION } from '../version';
 import { blockAt } from '@ascii-fort/sim/ai/Schedule';
 import { MACRO } from '@ascii-fort/worldgen/constants';
 import type { WeatherState } from '@ascii-fort/sim/gameplay/Weather';
+import { TREES, TALENTS, findTalent, refusalText } from '@ascii-fort/sim/gameplay/Talents';
 
 // Console de développement (F1) : téléportation, temps, god mode, IA figée, apparitions,
 // vues de débogage, informations sur les PNJ, météo, objets…
@@ -22,6 +23,7 @@ const HELP = [
   'chunks | seed | npc | quests | reveal   bords de chunks, seed, PNJ visé, quêtes, carte entière',
   'weather <clair|couvert|pluie|brouillard|orage|neige|auto>',
   'give <objet[~état]> [n] | gold <n> | xp <n> | usure <0-100>   objets, or, expérience, état de l’équipement porté',
+  'talents [liste|reset] | talent <id|nom> [force]   talents : bilan, ids, remise à zéro, apprendre (xp 400 = niveau 3 = 1 point)',
 ];
 
 export class DevConsole implements Screen {
@@ -115,6 +117,27 @@ export class DevConsole implements Screen {
       case 'usure': { const v = Math.max(0, Math.min(100, +args[0] || 0)); for (const s of SLOTS) { const id = g.character.equip[s]; if (id && wearable(item(id))) g.character.setDur(id, v); } this.print(`équipement porté : ${v} %`); break; }
       case 'gold': g.character.inv.gold += +args[0] || 100; this.print(`${g.character.inv.gold} or`); break;
       case 'xp': { const ups = g.character.gainXp(+args[0] || 100); g.syncStats(); this.print(`niveau ${g.character.level}${ups ? ` (+${ups})` : ''}`); break; }
+      case 'talent': {
+        const force = args[args.length - 1]?.toLowerCase() === 'force', m = findTalent(args.filter((a) => a.toLowerCase() !== 'force').join(' '));
+        if (m.length !== 1) { this.print(m.length ? 'ambigu : ' + m.map((t) => t.id).join(', ') : 'talent inconnu (talents liste)', C.red); break; }
+        const t = m[0], ch = g.character;
+        if (force) { ch.talents[t.id] = t.max; this.print(`${t.name} : ${t.max}/${t.max} (forcé)`); }
+        else {
+          const chk = ch.canLearnTalent(t.id);
+          if (!chk.ok) { this.print(refusalText(chk, t), C.red); break; }
+          ch.learnTalent(t.id); this.print(`Talent appris : ${t.name} (${ch.talentRank(t.id)}/${t.max})`);
+        }
+        g.syncStats();
+        break;
+      }
+      case 'talents': {
+        const ch = g.character, sub = args[0]?.toLowerCase();
+        if (sub === 'reset') { ch.resetTalents(); g.syncStats(); this.print('talents remis à zéro'); break; }
+        if (sub === 'liste') { for (const tr of TREES) this.print(`${tr.name} : ` + TALENTS.filter((t) => t.tree === tr.id).map((t) => `${t.id}(${t.max})`).join(' '), C.dim); break; }
+        this.print(`niveau ${ch.level} · ${ch.talentPoints()} point(s) disponible(s)`);
+        for (const tr of TREES) this.print(`${tr.short} : ` + (TALENTS.filter((t) => t.tree === tr.id && ch.talentRank(t.id)).map((t) => `${t.id} ${ch.talentRank(t.id)}/${t.max}`).join(', ') || '-'), C.dim);
+        break;
+      }
       case '': break;
       default: this.print('commande inconnue (help)', C.red);
     }

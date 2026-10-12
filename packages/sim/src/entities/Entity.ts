@@ -27,7 +27,7 @@ export interface MonsterState {
 }
 
 /** Autre joueur vu par la simulation (multijoueur) : cible possible des créatures. */
-export interface RemoteTarget { id: string; x: number; y: number; z: number; dead: boolean; crouch: boolean; sprint: boolean }
+export interface RemoteTarget { id: string; x: number; y: number; z: number; dead: boolean; crouch: boolean; sprint: boolean; noiseMul?: number; stealthBonus?: number }
 
 export class Entity {
   x = 0; y = 0; z = 0;

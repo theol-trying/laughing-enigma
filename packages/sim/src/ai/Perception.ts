@@ -24,10 +24,10 @@ export function lineOfSight(chunks: ChunkManager<any>, ax: number, az: number, b
   return true;
 }
 
-/** Bruit d'un joueur : course 1, marche 0,35, immobile 0,05 ; accroupi : 0,06 en avançant, rien à l'arrêt. */
-export function playerNoise(p: { sprinting: boolean; moving: boolean; crouch: boolean; quiet?: boolean }): number {
+/** Bruit d'un joueur : course 1, marche 0,35, immobile 0,05 ; accroupi : 0,06 en avançant, rien à l'arrêt. `noiseMul` : talents (× bruit). */
+export function playerNoise(p: { sprinting: boolean; moving: boolean; crouch: boolean; quiet?: boolean; noiseMul?: number }): number {
   const n = p.sprinting ? 1 : p.crouch ? (p.moving ? 0.06 : 0) : p.moving ? 0.35 : 0.05;
-  return p.quiet ? n * 0.25 : n;
+  return n * (p.quiet ? 0.25 : 1) * (p.noiseMul ?? 1);
 }
 
 export function perceives(chunks: ChunkManager<any>, o: Observer, s: Stimulus, env: Env): boolean {

@@ -14,6 +14,9 @@ export const GOOD_NAMES: Record<Good, string> = {
   sel: 'le sel', vin: 'le vin', pierre: 'la pierre', gibier: 'le gibier', outils: 'les outils', étoffe: "l'étoffe",
 };
 
+/** Prix de revente plafonné à 90 % du prix d'achat du même objet chez le même marchand : acheter puis revendre ne rapporte jamais ; 1 au minimum. */
+export function sellCap(sell: number, buy: number): number { return Math.max(1, Math.min(sell, Math.floor(buy * 0.9))); }
+
 export interface Shortage { good: Good; supply: number; roadId: number; from: number }
 
 export class Economy {

@@ -29,7 +29,8 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
   const worst = ch.worstEquipped();
   const status = [p.poison > 0 ? 'empoisonné' : '', p.frost > 0 ? 'gelé' : '', p.burn > 0 ? 'brûlé' : '', p.diving ? 'en plongée' : p.swimming ? 'à la nage' : p.depth > 0.3 ? 'dans l\'eau' : '', p.crouch && !p.swimming ? 'accroupi' : '', ch.inv.weight() > ch.carryMax() ? 'surchargé' : '',
     worst <= 0 ? 'équipement hors d’usage' : worst < 25 ? 'équipement très usé' : ''].filter(Boolean).join(' · ');
-  g.text(1, by - 1, ` Niv ${ch.level} · ${ch.xp}/${ch.xpForNext()} XP · ${ch.inv.gold} or${ch.statPoints ? ' · +' + ch.statPoints + ' pt (P)' : ''} ${status ? '· ' + status : ''} `, C.gold, C.panel, 0.55);
+  const tp = ch.talentPoints();
+  g.text(1, by - 1, ` Niv ${ch.level} · ${ch.xp}/${ch.xpForNext()} XP · ${ch.inv.gold} or${ch.statPoints ? ' · +' + ch.statPoints + ' pt (P)' : ''}${tp ? ' · +' + tp + ' talent' + (tp > 1 ? 's' : '') + ' (K)' : ''} ${status ? '· ' + status : ''} `, C.gold, C.panel, 0.55);
   g.text(1, rows - 1, ` ${ch.equip.arme ? item(ch.equip.arme).name : 'Poings'}${ch.weapon?.weapon?.kind === 'arc' ? ` (${ch.inv.count('flèche')} flèches)` : ''} · H potion (${ch.inv.count('potion de soin')}) · R ${spell(ch.spellR)?.name ?? '—'} · F ${spell(ch.spellF)?.name ?? '—'} `, C.dim, C.panel, 0.45);
 
   // boussole
@@ -129,7 +130,7 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
     g.center(mid + 5, txt, by ? C.red : C.green, C.panel);
   }
   if (!st.locked && !p.dead) g.center(mid + 7, ' Cliquez dans le jeu pour reprendre la souris ', C.white, C.panel);
-  if (ch.weapon?.weapon?.kind === 'arc' && game.fight.charge > 0) g.bar(Math.floor(cols / 2) - 5, mid + 1, 10, Math.min(1, game.fight.charge / 0.8), C.gold, C.faint);
+  if (ch.weapon?.weapon?.kind === 'arc' && game.fight.charge > 0) g.bar(Math.floor(cols / 2) - 5, mid + 1, 10, Math.min(1, game.fight.charge / ch.bowDrawTime()), C.gold, C.faint);
 
   // bonus temporaires
   if (game.buffs.length) {
@@ -144,6 +145,7 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
     const yb = Math.floor(rows * 0.2);
     g.center(yb, `  ◆ ${game.banner.text} ◆  `, game.banner.color ?? C.gold, C.panel);
     g.center(yb + 1, ` ${game.banner.sub} `.slice(0, cols - 2), C.text, C.panel);
+    if (game.banner.sub2) g.center(yb + 2, ` ${game.banner.sub2} `.slice(0, cols - 2), Math.floor(now / 400) % 2 ? C.yellow : C.cyan, C.panel);
   }
 
   // messages
