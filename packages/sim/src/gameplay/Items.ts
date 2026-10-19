@@ -1,5 +1,6 @@
 import type { Good } from '@ascii-fort/worldgen/civilization/types';
 import { SPELLS, scrollId } from './Spells';
+import type { FxKey } from './Talents';
 
 // Catalogue des objets. Les clés de donjon et objets de quête sont créés dynamiquement
 // (« clé:3 », « quête:relique:7 »…) mais partagent la même interface.
@@ -34,7 +35,12 @@ export interface ItemDef {
   dur?: number;
   /** pièce « de qualité » (forgée par un bon artisan) */
   quality?: boolean;
+  /** effets portés (objets épiques) : mêmes clés que les talents, ajoutés tant que la pièce est équipée et pas hors d'usage */
+  fx?: Partial<Record<FxKey, number>>;
 }
+
+/** Butin unique des boss des chaînes de quêtes, par archétype (objets épiques du catalogue). */
+export const EPICS = ['écorcheuse', 'croc-de-lune', 'heaume royal', 'linceul des cendres', 'glas', 'fend-montagne', 'arc de la tisseuse', 'pavois du veilleur'] as const;
 
 /** Poissons crus (à griller sur un feu). */
 export const FISH = ['truite', 'carpe', 'brochet', 'saumon', 'anguille', 'hareng', 'bar', 'morue'];
@@ -128,6 +134,15 @@ const D: ItemDef[] = [
   { id: 'outils', name: 'Outils', cat: 'matériau', value: 15, weight: 2, desc: '', good: 'outils' },
   { id: 'cuir', name: 'Cuir tanné', cat: 'matériau', value: 7, weight: 0.6, desc: 'Peau tannée à l’établi. Armures légères, poignées, réparations.', good: 'étoffe' },
   { id: 'champignon', name: 'Champignons', cat: 'matériau', value: 3, weight: 0.1, desc: 'Cèpes et girolles : ragoût, tourte, potion de mana.', good: 'herbes' },
+  // butin unique des boss des chaînes de quêtes (épique : effets portés, usure comme les autres armes et armures)
+  { id: 'écorcheuse', name: 'Écorcheuse', cat: 'arme', value: 650, weight: 2, rarity: 'épique', wear: 450, desc: 'L’épée du Seigneur-Brigand : elle achève sans pitié.', weapon: { kind: 'épée', damage: 18, speed: 1.0, reach: 2.3, stamina: 10 }, fx: { melee: 0.1, execute: 0.3 } },
+  { id: 'croc-de-lune', name: 'Croc-de-Lune', cat: 'arme', value: 560, weight: 0.5, rarity: 'épique', wear: 450, desc: 'Taillée dans le croc d’un loup géant, froide comme une nuit d’hiver.', weapon: { kind: 'dague', damage: 10, speed: 1.6, reach: 1.8, stamina: 5, element: 'givre' }, fx: { atkSpeed: 0.1, sneak: 0.5 } },
+  { id: 'heaume royal', name: 'Heaume du Roi des galeries', cat: 'armure', value: 600, weight: 2.5, rarity: 'épique', wear: 450, desc: 'Une couronne de fer martelée par des mains gobelines.', armor: { slot: 'tête', value: 5 }, fx: { armorPct: 0.1, carry: 15 } },
+  { id: 'linceul des cendres', name: 'Linceul des cendres', cat: 'armure', value: 700, weight: 3, rarity: 'épique', wear: 450, repair: 'étoffe', desc: 'Le suaire d’un seigneur mort, tissé de fils d’argent.', armor: { slot: 'corps', value: 6 }, fx: { manaMax: 25, manaRegen: 0.5, spell: 0.1 } },
+  { id: 'glas', name: 'Glas', cat: 'arme', value: 680, weight: 3, rarity: 'épique', wear: 450, desc: 'La masse du Roi déchu : chaque coup sonne comme un glas.', weapon: { kind: 'masse', damage: 19, speed: 0.85, reach: 2.0, stamina: 12, element: 'feu' }, fx: { heavy: 0.4 } },
+  { id: 'fend-montagne', name: 'Fend-Montagne', cat: 'arme', value: 720, weight: 3.2, rarity: 'épique', wear: 450, desc: 'Une hache de troll retaillée pour une main d’homme.', weapon: { kind: 'hache', damage: 22, speed: 0.78, reach: 2.1, stamina: 13 }, fx: { melee: 0.08, staCost: 0.15 } },
+  { id: 'arc de la tisseuse', name: 'Arc de la Tisseuse', cat: 'arme', value: 680, weight: 1.3, rarity: 'épique', wear: 450, desc: 'Sa corde de soie d’araignée ne se détend jamais ; ses flèches empoisonnent.', weapon: { kind: 'arc', damage: 17, speed: 1.0, reach: 85, stamina: 8, element: 'poison' }, fx: { bowRate: 0.15, bow: 0.1 } },
+  { id: 'pavois du veilleur', name: 'Pavois du Veilleur', cat: 'bouclier', value: 600, weight: 5, rarity: 'épique', wear: 450, desc: 'Le bouclier d’un champion mort : il ne recule jamais.', shield: { block: 0.92 }, fx: { guard: 0.15, blockSta: 0.2 } },
   // valeurs
   { id: 'pièces anciennes', name: 'Pièces anciennes', cat: 'valeur', value: 25, weight: 0.1, desc: 'Frappées d’un royaume oublié.' },
   { id: 'bague en or', name: 'Bague en or', cat: 'valeur', value: 60, weight: 0.05, desc: '' },
@@ -188,7 +203,9 @@ export function item(id: string): ItemDef {
   if (id.startsWith('clé:')) return { id, name: `Clé de fer (${id.split(':')[2] ?? 'donjon'})`, cat: 'clé', value: 0, weight: 0.05, desc: 'Ouvre une porte quelque part sous terre.' };
   if (id.startsWith('quête:')) {
     const [, kind, , label] = id.split(':');
-    const names: Record<string, string> = { marchandises: 'Marchandises volées', relique: 'Relique sacrée', journal: 'Journal de l’expédition', trophée: 'Trophée de chasse' };
+    const names: Record<string, string> = { marchandises: 'Marchandises volées', relique: 'Relique sacrée', journal: 'Journal de l’expédition', trophée: 'Trophée de chasse',
+      // objets des chaînes de quêtes
+      registre: 'Registre des rançons', carnet: 'Carnet du chasseur disparu', plan: 'Plan des galeries', grimoire: 'Grimoire noir', sceau: 'Sceau royal brisé', fiole: 'Fiole de venin pur', étendard: 'Étendard en lambeaux' };
     return { id, name: label ? `${names[kind] ?? kind} (${label})` : names[kind] ?? kind, cat: 'quête', value: 0, weight: 1, desc: 'Objet de quête.' };
   }
   const at = id.lastIndexOf(WEAR_SEP);

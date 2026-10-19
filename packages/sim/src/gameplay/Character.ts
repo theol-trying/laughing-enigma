@@ -63,8 +63,14 @@ export class Character {
   carryMax(): number { return 60 + this.stats.FOR * 6 + this.talentFx('carry'); }
 
   // ------------------------------------------------------------------ talents
-  /** Effet total d'une clé de talent (somme rang × valeur par rang). */
-  talentFx(k: FxKey): number { return fxTotal(this.talents, k); }
+  /** Effet total d'une clé : talents (somme rang × valeur par rang) et pièces épiques portées (equipFx). */
+  talentFx(k: FxKey): number { return fxTotal(this.talents, k) + this.equipFx(k); }
+  /** Effets des pièces portées (objets épiques), tant qu'elles ne sont pas hors d'usage. */
+  equipFx(k: FxKey): number {
+    let s = 0;
+    for (const sl of SLOTS) { const id = this.equip[sl]; if (!id) continue; const v = item(id).fx?.[k]; if (v && durOf(id) > 0) s += v; }
+    return Math.round(s * 1e6) / 1e6;
+  }
   talentRank(id: string): number { return Math.min(3, Math.max(0, Math.floor(this.talents[id]) || 0)); }
   /** Points de talent à dépenser : floor(niveau / 3) moins les rangs déjà pris (rétroactif, jamais négatif). */
   talentPoints(): number { return Math.max(0, talentPointsTotal(this.level) - ranksSpent(this.talents)); }

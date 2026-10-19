@@ -2,6 +2,7 @@ import type { EventBus } from '@ascii-fort/core/Events';
 import type { Civilization } from '@ascii-fort/worldgen/civilization/Civilization';
 import type { NPCData } from '../entities/NPC';
 import { factionOf } from '@ascii-fort/worldgen/civilization/History';
+import { dealOf } from './Persuasion';
 
 // Réputation (globale, par faction, locale) et mémoire des PNJ. Les événements du jeu
 // modifient l'opinion → dialogues, prix, quêtes, hostilité des gardes.
@@ -82,8 +83,13 @@ export class Reputation {
     return Math.max(-100, Math.min(100, o));
   }
 
-  /** Multiplicateur de prix selon l'opinion (amis : moins cher). */
-  priceFactor(n: NPCData): number { return Math.max(0.8, Math.min(1.5, 1 - this.opinion(n) / 250)); }
+  /** Remises et majorations du jour obtenues chez un marchand (persuasion, intimidation, échec) : id → { jour, multiplicateur }. */
+  readonly deals = new Map<string, { day: number; mult: number }>();
+  /** Multiplicateur du jour chez ce PNJ (1 : aucun marchandage aujourd'hui). */
+  dealMult(n: NPCData): number { return dealOf(this.deals, n.id, this.day()); }
+
+  /** Multiplicateur de prix selon l'opinion (amis : moins cher), puis le marchandage du jour. */
+  priceFactor(n: NPCData): number { return Math.max(0.8, Math.min(1.5, 1 - this.opinion(n) / 250)) * this.dealMult(n); }
 
   mood(n: NPCData): 'hostile' | 'méfiant' | 'neutre' | 'amical' {
     const o = this.opinion(n);

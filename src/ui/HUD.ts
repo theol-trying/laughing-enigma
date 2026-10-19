@@ -55,7 +55,7 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
   const head = deg(p.heading);
   const marks = new Map<number, [string, number]>();
   for (let i = 0; i < 8; i++) marks.set(i * 45, [DIRS[i], i % 2 ? C.dim : C.white]);
-  const q = game.quests.quests.find((x) => x.status === 'active' && x.target);
+  const q = game.quests.trackedQuest();
   const put = (worldX: number, worldZ: number, ch2: string, col: number) => {
     const a = deg(Math.atan2(worldX - p.x, -(worldZ - p.z)));
     let d = a - head; if (d > 180) d -= 360; if (d < -180) d += 360;
@@ -66,7 +66,7 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
     const near = [...marks.keys()].find((k) => Math.abs(((a - k + 540) % 360) - 180) < 60 / cw * 1.01);
     g.text(cx0 + i, 1, near !== undefined ? marks.get(near)![0][0] : i % 4 === 0 ? '·' : ' ', near !== undefined ? marks.get(near)![1] : C.faint, C.panel, 0.6);
   }
-  if (q && !game.dungeon) put(q.target!.x, q.target!.z, '!', C.yellow);
+  if (q?.target && !game.dungeon) put(q.target.x, q.target.z, '!', C.yellow);
   g.text(cx0 - 1, 1, '[', C.dim, C.panel, 0.6); g.text(cx0 + cw, 1, ']', C.dim, C.panel, 0.6);
 
   // en ligne : salon, joueurs, noms au-dessus des têtes
@@ -88,16 +88,18 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
     }
   }
 
-  // suivi de la quête en cours : titre, étape, distance et direction
-  const tq = game.quests.quests.find((x) => x.status === 'active');
+  // suivi de la quête choisie (la dernière acceptée ou avancée, ou celle suivie depuis le journal) : titre, étape, distance et direction
+  const tq = game.quests.trackedQuest();
   if (tq && !st.debug) {
-    const ty = coop ? 3 : 2, tw = Math.min(46, cols - 4);
-    g.text(1, ty, ` ◆ ${tq.title} `.slice(0, tw), C.yellow, C.panel, 0.65);
-    g.text(1, ty + 1, `   ${tq.stages[tq.stage] ?? ''} `.slice(0, tw), C.text, C.panel, 0.55);
+    const ty = coop ? 3 : 2, tw = Math.min(50, cols - 4), n = tq.stages.length;
+    g.text(1, ty, ` ${tq.kind === 'chaîne' ? '‡' : '◆'} ${tq.title}${n > 2 ? ` · ${Math.min(n, tq.stage + 1)}/${n}` : ''} `.slice(0, tw), tq.kind === 'chaîne' ? C.magenta : C.yellow, C.panel, 0.65);
+    // l'étape passe sur deux lignes plutôt que d'être coupée (« Affronter Morgath, fléau des marais, au Camp des… »)
+    const stage = TextGrid.wrap(tq.stages[tq.stage] ?? '', tw - 5).slice(0, 2);
+    stage.forEach((l, i) => g.text(1, ty + 1 + i, `   ${l} `.slice(0, tw), C.text, C.panel, 0.55));
     if (tq.target && !game.dungeon) {
       const dx = tq.target.x - p.x, dz = tq.target.z - p.z, dist = Math.hypot(dx, dz);
       const card = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'][Math.round(((Math.atan2(dx, -dz) * 180 / Math.PI + 360) % 360) / 45) % 8];
-      g.text(1, ty + 2, `   → ${dist > 1000 ? (dist / 1000).toFixed(1) + ' km' : Math.round(dist) + ' m'} ${card} · ${tq.target.label} `.slice(0, tw), C.dim, C.panel, 0.55);
+      g.text(1, ty + 1 + stage.length, `   → ${dist > 1000 ? (dist / 1000).toFixed(1) + ' km' : Math.round(dist) + ' m'} ${card} · ${tq.target.label} `.slice(0, tw), C.dim, C.panel, 0.55);
     }
   }
 
@@ -124,6 +126,13 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
     const f = game.focus;
     if (f.t === 'entity' && f.hint) g.center(mid + 3, ` ${f.hint} `, C.cyan, C.panel);
     if ((f.t === 'prop' || f.t === 'bush') && f.hint) g.center(mid + 3, ` ${f.hint} `, f.t === 'prop' && f.danger ? C.red : f.t === 'bush' || (f.t === 'prop' && f.muted) ? C.dim : C.green, C.panel);
+    if (f.t === 'action' && f.hint) g.center(mid + 3, ` ${f.hint} `, f.muted ? C.dim : C.green, C.panel);
+  }
+  // bandit blessé ou isolé (ou lieutenant affaibli) devant soi : I pour le sommer de se rendre
+  const it = p.dead ? null : game.exploits.intimidation();
+  if (it) {
+    const hinted = !!game.focus && 'hint' in game.focus && !!game.focus.hint;
+    g.center(mid + (hinted ? 4 : 3) + (hinted && game.poss.hint() ? 1 : 0), ` [I] ${it.lieutenant ? 'Faire parler' : 'Sommer de se rendre'} : ${it.e.name} (${it.c.chance} %) `, C.magenta, C.panel);
   }
   // monture : invite à monter, allure, essoufflement
   const mh = game.poss.hint();

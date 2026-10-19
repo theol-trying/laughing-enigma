@@ -294,13 +294,13 @@ function bird(color: number, wing: number, s: number, letter: string): ModelDef 
   return R.done(letter, 0.38 * s, 0.2 * s, true, 'côté');
 }
 
-function spider(color: number, s: number): ModelDef {
+function spider(color: number, s: number, eyes = 0xff4030, letter = 'a'): ModelDef {
   const R = new Rig();
   const body = R.bone(0, 0, 0.5 * s, 0, (p, t, r) => { r.dy = abs(sin(p.walk * 1.3)) * 0.02 * s; });
   R.part(body, SHAPE.SPHERE, 0, 0.1 * s, 0.32 * s, 0.7 * s, 0.56 * s, 0.8 * s, color, M.FUR);
   R.part(body, SHAPE.SPHERE, 0, 0, -0.2 * s, 0.42 * s, 0.3 * s, 0.42 * s, 0x2a2020, M.FUR);
   for (const side of [-1, 1]) {
-    R.part(body, SHAPE.SPHERE, side * 0.06 * s, 0.08 * s, -0.4 * s, 0.05 * s, 0.05 * s, 0.04 * s, 0xff4030, M.GLOW);
+    R.part(body, SHAPE.SPHERE, side * 0.06 * s, 0.08 * s, -0.4 * s, 0.05 * s, 0.05 * s, 0.04 * s, eyes, M.GLOW);
     R.part(body, SHAPE.CONE, side * 0.06 * s, -0.12 * s, -0.4 * s, 0.05 * s, 0.14 * s, 0.05 * s, 0x1a1414, M.BONE, { pitch: PI });
   }
   for (let i = 0; i < 4; i++) for (const side of [-1, 1]) {
@@ -314,15 +314,60 @@ function spider(color: number, s: number): ModelDef {
     const knee = R.bone(hip, 0, -0.42 * s, 0, (p, t, r) => { r.roll = -side * p.dead * 1.3; }, { roll: -side * 1.75 });
     R.limb(knee, 0.82 * s, 0.05 * s, 0.05 * s, color, M.FUR);
   }
-  return R.done('a', 0.8 * s, 0.7 * s, true, 'dos');
+  return R.done(letter, 0.8 * s, 0.7 * s, true, 'dos');
 }
 
 const MODEL_CACHE = new Map<string, ModelDef>();
+
+/** Apparence des créatures humanoïdes (modèles de base, et variantes uniques des boss). */
+const HUMAN_LOOKS: Record<string, HumanLook> = {
+  gobelin: { skin: 0x5a8a3a, shirt: 0x5a4a2a, pants: 0x3a3020, hair: 0x2a2a1a, scale: 0.62, weapon: 'dague', letter: 'g', hunch: true, ears: true, nose: true, eyes: 0xffd040 },
+  'chef gobelin': { skin: 0x4a7a2a, shirt: 0x7a2a2a, pants: 0x3a3020, hair: 0x2a2a1a, scale: 0.85, weapon: 'hache', shield: true, letter: 'G', hunch: true, ears: true, nose: true, eyes: 0xffd040, crown: true },
+  squelette: { skin: 0xd8d0b8, shirt: 0xc8c0a8, pants: 0xc8c0a8, hair: 0xd8d0b8, build: 'squelette', weapon: 'épée', letter: 's', scale: 0.95, eyes: 0x60d0ff },
+  'roi-squelette': { skin: 0xe0d8c0, shirt: 0xc8c0a8, pants: 0xc8c0a8, hair: 0xd8b040, build: 'squelette', weapon: 'épée', shield: IRON, helmet: false, crown: true, cape: 0x4a3a6a, letter: 'S', scale: 1.15, eyes: 0x60d0ff },
+  'gardien des tombes': { skin: 0xe0d8c0, shirt: 0xc8c0a8, pants: 0xc8c0a8, hair: 0xd8b040, build: 'squelette', weapon: 'épée', shield: IRON, helmet: true, crown: false, cape: 0x4a3a6a, letter: 'S', scale: 1.15, eyes: 0x60d0ff },
+  spectre: { skin: 0x9ab0c8, shirt: 0x8aa0b8, pants: 0x8aa0b8, hair: 0xb0c8d8, hood: true, hoodColor: 0x6a7a90, noLegs: true, letter: 'W', eyes: 0x80e8ff },
+  troll: { skin: 0x6a7a5a, shirt: 0x5a4a32, pants: 0x4a3a28, hair: 0x2a2a20, scale: 1.75, weapon: 'massue', letter: 'T', build: 'massif', hunch: true, tusks: true, nose: true },
+  bandit: { skin: 0xc89870, shirt: 0x4a3a2a, pants: 0x2e2a24, hair: 0x2a1a10, hood: true, hoodColor: 0x3a3428, weapon: 'épée', letter: 'B' },
+  'chef bandit': { skin: 0xc89870, shirt: 0x6a2a2a, pants: 0x2e2a24, hair: 0x2a1a10, helmet: true, weapon: 'hache', shield: true, cape: 0x5a1a1a, beard: true, letter: 'B', scale: 1.08 },
+};
+
+/** Variante d'une créature existante pour un boss ou une bête nommée : échelle, teinte, cape, couronne, yeux luisants. */
+export interface UniqueLook { scale: number; tint?: number; cape?: number; crown?: boolean; eyes?: number }
+const UNIQUE_CACHE = new Map<string, ModelDef>();
+
+/** Modèle distinct d'une créature unique (variante d'un type existant), mis en cache par apparence. */
+export function uniqueModel(base: string, l: UniqueLook): ModelDef {
+  const key = `${base}|${l.scale}|${l.tint ?? ''}|${l.cape ?? ''}|${l.crown ? 1 : 0}|${l.eyes ?? ''}`;
+  let m = UNIQUE_CACHE.get(key);
+  if (m) return m;
+  const h = HUMAN_LOOKS[base];
+  // yeux luisants des quadrupèdes : deux petites sphères de lumière de part et d'autre du museau
+  const glow = (s: number) => (R: Rig, head: number) => { if (l.eyes !== undefined) for (const side of [-1, 1]) R.part(head, SHAPE.SPHERE, side * 0.075 * s, 0.05 * s, -0.13 * s, 0.05 * s, 0.05 * s, 0.04 * s, l.eyes, M.GLOW); };
+  if (h) {
+    m = humanoid({ ...h, scale: (h.scale ?? 1) * l.scale, shirt: l.tint ?? h.shirt, cape: l.cape ?? h.cape, crown: l.crown || h.crown, eyes: l.eyes ?? h.eyes, letter: (h.letter ?? '@').toUpperCase() });
+  } else if (base === 'loup') {
+    const s = l.scale, c = l.tint ?? 0x6a6a66;
+    m = quadruped(c, s, 'W', M.FUR, l.cape ?? 0x4a4a46, 0x2a2622, glow(s));
+  } else if (base === 'sanglier') {
+    const s = 0.82 * l.scale;
+    m = quadruped(l.tint ?? 0x4a3a2c, s, 'B', M.FUR, l.cape ?? 0x2e241c, 0x6a4a40, (R, head) => {
+      const k = l.scale;   // défenses plus longues que celles du sanglier ordinaire
+      for (const side of [-1, 1]) R.part(head, SHAPE.CONE, side * 0.06 * k, -0.04 * k, -0.27 * k, 0.04 * k, 0.14 * k, 0.04 * k, 0xf0e8d0, M.BONE, { pitch: -0.5 });
+      glow(s)(R, head);
+    }, 0.8);
+  } else if (base === 'araignée') m = spider(l.tint ?? 0x2e2a26, 1.1 * l.scale, l.eyes, 'A');
+  else m = creatureModel(base);
+  UNIQUE_CACHE.set(key, m);
+  return m;
+}
 
 /** Modèles des créatures (les humains passent par humanoid() avec leurs couleurs). */
 export function creatureModel(type: string): ModelDef {
   let m = MODEL_CACHE.get(type);
   if (m) return m;
+  const hl = HUMAN_LOOKS[type];
+  if (hl) { m = humanoid(hl); MODEL_CACHE.set(type, m); return m; }
   switch (type) {
     case 'loup': m = quadruped(0x6a6a66, 1, 'w', M.FUR, 0x5a5a56); break;
     case 'araignée': m = spider(0x2e2a26, 1.1); break;
@@ -338,14 +383,6 @@ export function creatureModel(type: string): ModelDef {
       for (const side of [-1, 1]) R.part(head, SHAPE.CONE, side * 0.06, -0.04, -0.27, 0.03, 0.1, 0.03, 0xe8e0c8, M.BONE, { pitch: -0.5 });
     }, 0.8); break;
     case 'perdrix': m = bird(0x8a7458, 0x6a5a48, 1, 'p'); break;
-    case 'gobelin': m = humanoid({ skin: 0x5a8a3a, shirt: 0x5a4a2a, pants: 0x3a3020, hair: 0x2a2a1a, scale: 0.62, weapon: 'dague', letter: 'g', hunch: true, ears: true, nose: true, eyes: 0xffd040 }); break;
-    case 'chef gobelin': m = humanoid({ skin: 0x4a7a2a, shirt: 0x7a2a2a, pants: 0x3a3020, hair: 0x2a2a1a, scale: 0.85, weapon: 'hache', shield: true, letter: 'G', hunch: true, ears: true, nose: true, eyes: 0xffd040, crown: true }); break;
-    case 'squelette': m = humanoid({ skin: 0xd8d0b8, shirt: 0xc8c0a8, pants: 0xc8c0a8, hair: 0xd8d0b8, build: 'squelette', weapon: 'épée', letter: 's', scale: 0.95, eyes: 0x60d0ff }); break;
-    case 'roi-squelette': case 'gardien des tombes': m = humanoid({ skin: 0xe0d8c0, shirt: 0xc8c0a8, pants: 0xc8c0a8, hair: 0xd8b040, build: 'squelette', weapon: 'épée', shield: IRON, helmet: type === 'gardien des tombes', crown: type === 'roi-squelette', cape: 0x4a3a6a, letter: 'S', scale: 1.15, eyes: 0x60d0ff }); break;
-    case 'spectre': m = humanoid({ skin: 0x9ab0c8, shirt: 0x8aa0b8, pants: 0x8aa0b8, hair: 0xb0c8d8, hood: true, hoodColor: 0x6a7a90, noLegs: true, letter: 'W', eyes: 0x80e8ff }); break;
-    case 'troll': m = humanoid({ skin: 0x6a7a5a, shirt: 0x5a4a32, pants: 0x4a3a28, hair: 0x2a2a20, scale: 1.75, weapon: 'massue', letter: 'T', build: 'massif', hunch: true, tusks: true, nose: true }); break;
-    case 'bandit': m = humanoid({ skin: 0xc89870, shirt: 0x4a3a2a, pants: 0x2e2a24, hair: 0x2a1a10, hood: true, hoodColor: 0x3a3428, weapon: 'épée', letter: 'B' }); break;
-    case 'chef bandit': m = humanoid({ skin: 0xc89870, shirt: 0x6a2a2a, pants: 0x2e2a24, hair: 0x2a1a10, helmet: true, weapon: 'hache', shield: true, cape: 0x5a1a1a, beard: true, letter: 'B', scale: 1.08 }); break;
     default: m = humanoid({ skin: 0xc89870, shirt: 0x6a6a6a, pants: 0x3a3a3a, hair: 0x2a1a10 });
   }
   MODEL_CACHE.set(type, m);

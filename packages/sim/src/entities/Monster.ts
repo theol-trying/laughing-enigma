@@ -1,5 +1,5 @@
 import { Entity, type MonsterState } from './Entity';
-import { creatureModel } from './Models';
+import { creatureModel, uniqueModel, type UniqueLook } from './Models';
 import type { Civilization } from '@ascii-fort/worldgen/civilization/Civilization';
 import type { WorldSeed } from '@ascii-fort/core/Seed';
 import { B } from '@ascii-fort/worldgen/terrain/Biomes';
@@ -110,6 +110,44 @@ export function makeMonster(id: string, type: string, x: number, z: number, home
   e.mon.damage = Math.round(d.damage * (1 + 0.14 * (lv - 1)) * 10) / 10;
   e.mon.armor = d.armor + Math.floor((lv - 1) / 2);
   e.mon.xp = Math.round(d.xp * (1 + 0.3 * (lv - 1)));
+  return e;
+}
+
+/**
+ * Créature unique nommée (boss d'une chaîne de quêtes, lieutenant, bête d'une prime) : variante d'un type existant,
+ * statistiques renforcées. Sa mort est un fait partagé (`killed:<key>`) : elle ne réapparaît pas.
+ */
+export interface FoeDef {
+  /** clé d'unicité (fait partagé « killed: ») */
+  key: string;
+  /** « Morgath » et « fléau des marais » ; fem : accords au féminin */
+  name: string; title: string; fem: boolean;
+  /** type de créature existant (IA, attaque, sons) */
+  base: string;
+  look: UniqueLook;
+  level: number; hpMul: number; dmgMul: number; armor: number; xpMul: number;
+  /** objet unique remis à sa mort */
+  loot?: string;
+  /** peut se rendre si on l'intimide (humains, gobelins) */
+  canYield: boolean;
+}
+
+const BEASTS = new Set(['loup', 'sanglier', 'araignée', 'cerf', 'perdrix']);
+
+/** Incarne une créature unique (hors zone d'autorité : l'appelant la pose et lui donne son id). */
+export function makeUnique(id: string, f: FoeDef, x: number, z: number, territory: number): Entity {
+  const e = makeMonster(id, f.base, x, z, x, z, territory, { unique: f.key, leader: true, boss: true, level: f.level, aggro: 1 });
+  e.model = uniqueModel(f.base, f.look);
+  e.radius = e.model.radius;
+  e.name = `${f.name}, ${f.title}`;
+  e.hp = e.maxHp = Math.round(e.maxHp * f.hpMul);
+  const m = e.mon!;
+  m.damage = Math.round(m.damage * f.dmgMul * 10) / 10;
+  m.armor += f.armor;
+  m.xp = Math.round(m.xp * f.xpMul);
+  m.perception = Math.max(m.perception, 26);
+  // une bête garde son butin de bête (peaux, crocs) ; les humanoïdes et les morts portent le trésor d'un boss
+  if (!BEASTS.has(f.base)) m.loot = 'boss';
   return e;
 }
 

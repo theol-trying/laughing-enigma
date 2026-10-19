@@ -58,8 +58,10 @@ export function thinkMonster(e: Entity, ctx: MonsterCtx): void {
     m.state = ctx.env.night > 0.65 ? 'repos' : 'errance';
     return;
   }
-  // fuite quand la vie est basse (les morts-vivants ne fuient pas)
-  if (d.flee > 0 && e.hp < e.maxHp * d.flee) { m.state = 'fuite'; return; }
+  // rendu (intimidé) : ne combat plus, s'éloigne du joueur
+  if (m.yielded) { m.state = 'fuite'; m.targetId = 'player'; m.alerted = false; return; }
+  // fuite quand la vie est basse (les morts-vivants et les créatures uniques ne fuient pas)
+  if (d.flee > 0 && !m.boss && e.hp < e.maxHp * d.flee) { m.state = 'fuite'; return; }
   // trop loin du territoire : on rentre et on oublie la proie
   if (homeD > roam * 1.8 && m.state !== 'fuite') { m.state = 'retour'; m.targetId = null; m.alerted = false; return; }
   const asleep = m.nocturnal && ctx.env.night < 0.3 && !m.alerted && homeD < 20;

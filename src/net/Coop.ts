@@ -32,6 +32,8 @@ type Direct =
   | { k: 'dmg'; id: string; a: number; el?: Element }                    // coup sur une entité dont le destinataire est propriétaire
   | { k: 'hurt'; a: number; x: number; z: number; el?: Element; by: string } // une créature frappe le destinataire
   | { k: 'kill'; id: string; type: string; kind: 'npc' | 'monster'; sid?: number; fid?: number; camp?: number; x: number; z: number }
+  // un bandit de la zone du destinataire se rend (intimidation) : il cesse de combattre et s'enfuit (PROTOCOL inchangé : un ancien client l'ignore)
+  | { k: 'cède'; id: string }
   // échanges entre joueurs
   | { k: 'trade-ask' } | { k: 'trade-answer'; ok: boolean } | { k: 'trade-cancel' }
   | { k: 'trade-offer'; items: [string, number][]; gold: number; v: number }
@@ -240,6 +242,9 @@ export class Coop implements EntityNet {
       if (!g.god) hitPlayer(g.combat, d.a, { x: d.x, z: d.z } as Entity, d.el);
     } else if (d.k.startsWith('trade')) {
       this.onTrade(from, d);
+    } else if (d.k === 'cède') {
+      const e = g.entities.entities.find((x) => x.id === d.id);
+      if (e?.alive && e.mon && e.type === 'bandit' && g.entities.zoneOf(e) && this.owns(g.entities.zoneOf(e)!)) g.exploits.applyYield(e);
     } else if (d.k === 'kill') {
       // crédit du coup fatal : rejoué localement comme si l'entité était simulée ici
       g.events.emit('entity:killed', { victimId: d.id, killerId: 'player', kind: d.kind, type: d.type, factionId: d.fid, settlementId: d.sid, campId: d.camp, x: d.x, z: d.z });
@@ -424,6 +429,11 @@ export class Coop implements EntityNet {
   }
 
   private direct(to: string, d: Direct) { this.net.send({ t: 'to', to, d }); }
+  /** Intimidation d'un bandit simulé par un autre joueur : on demande au propriétaire de sa zone de le faire se rendre. */
+  askYield(e: Entity): void {
+    const z = this.game.entities.zoneOf(e), owner = z ? this.owners.get(z) : undefined;
+    if (owner) this.direct(owner, { k: 'cède', id: e.id });
+  }
 
   // ---------------------------------------------------------------- boucle
   update(dt: number): void {

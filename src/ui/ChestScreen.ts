@@ -110,7 +110,7 @@ export class ChestScreen implements Screen {
         g.text(x + 2, yy + 1, 'Une bourse laissée au coffre ne se perd pas à la mort et ne se vole pas.'.slice(0, w - 4), C.text);
       } else {
         const d = item(cur.id);
-        g.text(x + 2, yy, d.name.slice(0, w - 4), d.rarity === 'rare' ? C.magenta : C.title);
+        g.text(x + 2, yy, d.name.slice(0, w - 4), d.rarity === 'épique' ? C.gold : d.rarity === 'rare' ? C.magenta : C.title);
         g.text(x + 2 + Math.min(30, d.name.length + 2), yy, `${d.cat}${ch.isEquipped(d.id) ? ' · équipé' : ''}`, C.dim);
         g.text(x + 2, yy + 1, [...itemStats(d), TextGrid.wrap(d.desc || '', w)[0] ?? ''].filter(Boolean).join(' · ').slice(0, w - 4), C.text);
       }

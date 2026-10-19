@@ -5,7 +5,7 @@ import type { Reputation } from './Reputation';
 import type { Economy } from './Economy';
 import { GOOD_NAMES } from './Economy';
 import type { Rumors } from './Rumors';
-import type { QuestSystem } from './QuestSystem';
+import type { QuestSystem, Quest } from './QuestSystem';
 import type { GameTime } from '@ascii-fort/core/Time';
 import type { WorldState } from './WorldState';
 import { hash2i } from '@ascii-fort/core/RNG';
@@ -16,7 +16,24 @@ import { de } from '@ascii-fort/worldgen/civilization/Names';
 // et des quêtes. Un fermier parle de ce qu'un fermier du coin peut savoir.
 
 export interface DialogueOption { label: string; go: () => DialogueNode | null }
-export interface DialogueNode { speaker: string; sub: string; mood: string; lines: string[]; options: DialogueOption[] }
+export interface DialogueNode {
+  speaker: string; sub: string; mood: string; lines: string[]; options: DialogueOption[];
+  /** compte rendu hors réplique (réussite ou échec d'une persuasion, effet obtenu), affiché sous les répliques */
+  note?: { text: string; color: number };
+}
+
+/**
+ * Ajouts du jeu aux dialogues (chaînes de quêtes, marchandage, persuasion du garde). Chaque crochet renvoie des options
+ * dont le go() construit ses nœuds avec DialogueSystem.node / again / arrestNode ; un go() qui renvoie null ferme l'écran.
+ */
+export interface DialogueHooks {
+  /** options ajoutées au menu principal d'un PNJ (après les quêtes) */
+  menu?(e: Entity): DialogueOption[];
+  /** répliques et options ajoutées à l'offre d'une quête (négocier la récompense) ; replace : les répliques remplacent le résumé */
+  offer?(e: Entity, q: Quest): { lines: string[]; options: DialogueOption[]; replace?: boolean; note?: DialogueNode['note'] };
+  /** options ajoutées à l'arrestation (persuader ou intimider le garde) */
+  arrest?(e: Entity, bounty: number): DialogueOption[];
+}
 
 /** Service proposé par l'aubergiste ou le fermier : cheval, mercenaire (engagement ou renouvellement), maison. */
 export interface ServiceOffer {
@@ -44,6 +61,8 @@ export interface DialogueHost {
   estateOffers?(n: NPCData): ServiceOffer[];
   /** conclut l'achat (or déduit, bien livré) et renvoie la réplique du PNJ ; un refus est une réplique, jamais une exception */
   estateBuy?(n: NPCData, id: ServiceOffer['id']): string;
+  /** chaînes de quêtes, marchandage, persuasion et intimidation */
+  hooks?: DialogueHooks;
 }
 
 const DIRS = ['au nord', 'au nord-est', "à l'est", 'au sud-est', 'au sud', 'au sud-ouest', "à l'ouest", 'au nord-ouest'];
@@ -76,7 +95,8 @@ export class DialogueSystem {
     return { ...this.head(e, mood), lines, options: this.menu(e) };
   }
 
-  private head(e: Entity, mood: string) {
+  /** En-tête d'un nœud : nom, métier, lieu, âge et humeur. */
+  head(e: Entity, mood: string) {
     const n = e.npc!;
     const s = this.h.world.civ.settlements[n.sid];
     return { speaker: `${n.first} ${n.last}`, sub: `${n.profession}${n.profession === 'voyageur' ? '' : ' · ' + s.name} · ${n.age} ans`, mood };
@@ -100,16 +120,23 @@ export class DialogueSystem {
     const offer = h.quests.offerFor(n.id), active = h.quests.activeFor(n.id);
     if (offer) opts.push({ label: 'Tu as l\'air soucieux…', go: () => this.questOffer(e) });
     if (active) opts.push({ label: h.quests.canTurnIn(active) ? `À propos de « ${active.title} »… c'est réglé.` : `À propos de « ${active.title} »…`, go: () => this.questProgress(e) });
-    opts.push({ label: 'Parle-moi de toi.', go: () => this.node(e, this.about(n), back) });
-    opts.push({ label: 'Comment vont les affaires ?', go: () => this.node(e, this.job(n), back) });
-    opts.push({ label: 'Quelles nouvelles ?', go: () => this.node(e, this.news(n), back) });
-    opts.push({ label: 'Que sais-tu des environs ?', go: () => this.node(e, this.surroundings(n), back) });
-    if (n.knowledge.some((k) => k.startsWith('event:'))) opts.push({ label: 'Raconte-moi le passé de la région.', go: () => this.node(e, this.past(n), back) });
+    opts.push(...(h.hooks?.menu?.(e) ?? []));
+    const talk: DialogueOption[] = [
+      { label: 'Parle-moi de toi.', go: () => this.node(e, this.about(n), back) },
+      { label: 'Comment vont les affaires ?', go: () => this.node(e, this.job(n), back) },
+      { label: 'Quelles nouvelles ?', go: () => this.node(e, this.news(n), back) },
+      { label: 'Que sais-tu des environs ?', go: () => this.node(e, this.surroundings(n), back) },
+    ];
+    if (n.knowledge.some((k) => k.startsWith('event:'))) talk.push({ label: 'Raconte-moi le passé de la région.', go: () => this.node(e, this.past(n), back) });
+    // dix réponses au plus (touches 1 à 9 puis 0) : au-delà, la conversation à bâtons rompus passe dans un sous-menu
+    if (opts.length + talk.length + 1 > 10) opts.push({ label: 'Discutons un peu…', go: () => ({ ...this.head(e, h.rep.mood(n)), lines: [this.pick(n, 13, ['De quoi veux-tu parler ?', 'Je t’écoute.'])], options: [...talk, { label: 'Autre chose…', go: back }] }) });
+    else opts.push(...talk);
     opts.push({ label: 'Au revoir.', go: () => null });
     return opts;
   }
 
-  private again(e: Entity): DialogueNode {
+  /** Retour au menu principal du PNJ (« Autre chose ? »). */
+  again(e: Entity): DialogueNode {
     return { ...this.head(e, this.h.rep.mood(e.npc!)), lines: [this.pick(e.npc!, 9, ['Autre chose ?', 'Oui ?', 'Je t\'écoute.'])], options: this.menu(e) };
   }
 
@@ -146,8 +173,9 @@ export class DialogueSystem {
     };
   }
 
-  private node(e: Entity, lines: string[], back: () => DialogueNode | null): DialogueNode {
-    return { ...this.head(e, this.h.rep.mood(e.npc!)), lines, options: [{ label: 'Autre chose…', go: back }, { label: 'Au revoir.', go: () => null }] };
+  /** Nœud simple : répliques, puis « Autre chose… » et « Au revoir. » (options en tête si données, compte rendu facultatif). */
+  node(e: Entity, lines: string[], back: () => DialogueNode | null, extra: DialogueOption[] = [], note?: DialogueNode['note']): DialogueNode {
+    return { ...this.head(e, this.h.rep.mood(e.npc!)), lines, options: [...extra, { label: 'Autre chose…', go: back }, { label: 'Au revoir.', go: () => null }], ...(note ? { note } : {}) };
   }
 
   private about(n: NPCData): string[] {
@@ -254,14 +282,24 @@ export class DialogueSystem {
     return [`${e.title} (${e.year}). ${intro}`, e.text];
   }
 
-  private questOffer(e: Entity): DialogueNode {
-    const q = this.h.quests.offerFor(e.npc!.id)!;
+  /**
+   * Offre d'une quête (le jeu peut y ajouter des répliques et des options : négocier la récompense). `lead` : réplique qui
+   * remplace la requête (réponse à une négociation) ; `note` : compte rendu affiché sous les répliques.
+   */
+  questOffer(e: Entity, note?: DialogueNode['note'], lead?: string[]): DialogueNode {
+    const n = e.npc!, q = this.h.quests.offerFor(n.id);
+    if (!q) return this.again(e);
+    const extra = this.h.hooks?.offer?.(e, q);
+    const lines = lead ?? (extra?.replace ? extra.lines : [q.summary, ...(extra?.lines ?? [])]);
+    const shown = note ?? extra?.note;
     return {
-      ...this.head(e, this.h.rep.mood(e.npc!)), lines: [q.summary, 'Tu pourrais m\'aider ? Je saurai me montrer reconnaissant.'],
+      ...this.head(e, this.h.rep.mood(n)), lines: [...lines, `Tu pourrais m'aider ? Je saurai me montrer ${n.sex === 'f' ? 'reconnaissante' : 'reconnaissant'}.`],
       options: [
         { label: `Accepter : « ${q.title} »`, go: () => { this.h.quests.accept(q); return this.node(e, ['Merci ! Reviens me voir quand ce sera fait.'], () => this.again(e)); } },
+        ...(extra?.options ?? []),
         { label: 'Pas maintenant.', go: () => this.again(e) },
       ],
+      ...(shown ? { note: shown } : {}),
     };
   }
 
@@ -271,14 +309,19 @@ export class DialogueSystem {
     return this.node(e, [`Alors, où en es-tu ? (${q.stages[q.stage]})`, 'Fais attention à toi.'], () => this.again(e));
   }
 
-  private arrest(e: Entity, bounty: number): DialogueNode {
+  private arrest(e: Entity, bounty: number): DialogueNode { return this.arrestNode(e, bounty); }
+
+  /** Arrestation : payer l'amende ou résister (le jeu ajoute persuasion et intimidation) ; lignes et compte rendu remplaçables. */
+  arrestNode(e: Entity, bounty: number, lines?: string[], note?: DialogueNode['note']): DialogueNode {
     const n = e.npc!, h = this.h;
     return {
-      ...this.head(e, 'hostile'), lines: [`Halte ! Tu es recherché${de(h.world.civ.settlements[n.sid].name).replace(/^d/, ' d')} pour tes méfaits.`, `L'amende est de ${bounty} pièces. Paie, ou suis-moi.`],
+      ...this.head(e, 'hostile'), lines: lines ?? [`Halte ! Tu es recherché${de(h.world.civ.settlements[n.sid].name).replace(/^d/, ' d')} pour tes méfaits.`, `L'amende est de ${bounty} pièces. Paie, ou suis-moi.`],
       options: [
         { label: `Payer l'amende (${bounty} or)`, go: () => (h.payFine(n.sid) ? this.node(e, ['Bien. Que je ne t\'y reprenne pas.'], () => this.again(e)) : this.node(e, ['Tu n\'as pas de quoi payer ? Alors…'], () => { h.resistArrest(n.sid); return null; })) },
+        ...(h.hooks?.arrest?.(e, bounty) ?? []),
         { label: 'Résister', go: () => { h.resistArrest(n.sid); return null; } },
       ],
+      ...(note ? { note } : {}),
     };
   }
 }

@@ -25,6 +25,10 @@ export interface MonsterState {
   windup: number;           // élan de l'attaque en cours (s)
   level: number;            // niveau (danger du lieu)
   lair: string;             // repaire d'origine
+  /** créature unique (boss d'une chaîne, lieutenant, bête d'une prime) : ne fuit jamais quand elle est blessée */
+  boss?: boolean;
+  /** s'est rendue (intimidation) : ne combat plus, s'enfuit */
+  yielded?: boolean;
 }
 
 /** Autre joueur vu par la simulation (multijoueur) : cible possible des créatures. */

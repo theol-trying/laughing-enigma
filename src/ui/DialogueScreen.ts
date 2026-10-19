@@ -9,6 +9,7 @@ import type { EventBus } from '@ascii-fort/core/Events';
 import { item, baseId, wearable, wearState, wearFactor, type ItemDef } from '@ascii-fort/sim/gameplay/Items';
 import type { NPCData } from '@ascii-fort/sim/entities/NPC';
 import type { Input } from '@ascii-fort/ascii-engine/Input';
+import { FX_META, type FxKey } from '@ascii-fort/sim/gameplay/Talents';
 
 const MOOD_COLOR: Record<string, number> = { amical: C.green, neutre: C.text, méfiant: C.orange, hostile: C.red };
 
@@ -43,9 +44,11 @@ export function itemStats(d: ItemDef): string[] {
   const out: string[] = [];
   const b = d.dur !== undefined ? item(baseId(d.id)) : null;
   const was = (v: number, w?: number) => (w !== undefined && w !== v ? ` (${w} en parfait état)` : '');
-  if (d.weapon) out.push(`Dégâts ${d.weapon.damage}${was(d.weapon.damage, b?.weapon?.damage)} · vitesse ${d.weapon.speed} · allonge ${d.weapon.reach} m`);
+  if (d.weapon) out.push(`Dégâts ${d.weapon.damage}${was(d.weapon.damage, b?.weapon?.damage)} · vitesse ${d.weapon.speed} · allonge ${d.weapon.reach} m${d.weapon.element ? ' · ' + d.weapon.element : ''}`);
   if (d.armor) out.push(`Armure +${d.armor.value}${was(d.armor.value, b?.armor?.value)} (${d.armor.slot})`);
   if (d.shield) out.push(`Parade ${Math.round(d.shield.block * 100)} %`);
+  // effets portés des objets épiques (mêmes libellés que les talents)
+  if (d.fx) out.push('Porté : ' + (Object.keys(d.fx) as FxKey[]).map((k) => `${FX_META[k].label} ${FX_META[k].fmt(d.fx![k]!)}`).join(' · ') + (d.dur === 0 ? ' (sans effet hors d’usage)' : ''));
   if (wearable(d)) { const s = d.dur ?? 100; out.push(s <= 0 ? 'Hors d’usage : aucun effet avant réparation (enclume, forgeron)' : `État ${s} % · ${wearState(s)}${s < 50 ? ` (efficacité ${Math.round(wearFactor(s) * 100)} %)` : ''}`); }
   if (d.use) out.push([d.use.hp ? `+${d.use.hp} PV` : '', d.use.stamina ? `+${d.use.stamina} END` : '', d.use.mana ? `+${d.use.mana} MANA` : '', d.use.cure ? 'soigne le poison' : '',
     d.use.buff ? `${d.use.buff.name} ${Math.round(d.use.buff.t / 60)} min` : '', d.use.warm ? `réchauffe ${d.use.warm} min` : '', d.use.meal ? `rassasie ${Math.round(d.use.meal.t / 60)} min` : ''].filter(Boolean).join(' · '));
@@ -62,13 +65,16 @@ export class DialogueScreen implements Screen {
     const g = ctx.grid, n = this.node;
     const w = Math.min(g.cols - 4, 96);
     const lines = n.lines.flatMap((l) => TextGrid.wrap(`« ${l} »`, w - 6));
-    const h = lines.length + n.options.length + 6;
+    const note = n.note ? TextGrid.wrap(n.note.text, w - 6) : [], gap = note.length ? note.length + 1 : 0;
+    const h = lines.length + n.options.length + 6 + gap;
     const x = Math.floor((g.cols - w) / 2), y = Math.max(0, g.rows - h - 1);
     g.box(x, y, w, h, { title: n.speaker, double: true });
     g.text(x + 3 + n.speaker.length + 2, y, ` ${n.sub} `, C.dim, C.panel);
     g.text(x + w - 12, y, ` ${n.mood} `, MOOD_COLOR[n.mood] ?? C.text, C.panel);
     lines.forEach((l, i) => g.text(x + 3, y + 2 + i, l, C.white));
-    this.optY = y + 3 + lines.length; this.optX = x + 3; this.optW = w - 6;
+    // compte rendu (persuasion réussie ou ratée, effet obtenu), hors des guillemets
+    note.forEach((l, i) => g.text(x + 3, y + 3 + lines.length + i, l, n.note!.color));
+    this.optY = y + 3 + lines.length + gap; this.optX = x + 3; this.optW = w - 6;
     n.options.forEach((o, i) => {
       const yy = this.optY + i, over = ctx.mouseCell.y === yy && ctx.mouseCell.x >= this.optX && ctx.mouseCell.x < this.optX + this.optW;
       g.text(this.optX, yy, `${(i + 1) % 10}. ${o.label}`.slice(0, this.optW).padEnd(this.optW), over ? 0xffffff : C.yellow, over ? C.sel : -1);
@@ -139,6 +145,9 @@ export class TradeScreen implements Screen {
     const w = Math.min(g.cols - 2, 110), h = Math.min(g.rows - 2, 32);
     const x = Math.floor((g.cols - w) / 2), y = Math.floor((g.rows - h) / 2);
     g.box(x, y, w, h, { title: `Commerce — ${n.first} ${n.last} (${n.profession})`, double: true });
+    // marchandage du jour (persuasion, intimidation ou échec) : rappel sur le cadre
+    const deal = this.h.rep.dealMult(n);
+    if (deal !== 1) { const t = deal < 1 ? ` Remise du jour : -${Math.round((1 - deal) * 100)} % ` : ` Prix majorés aujourd’hui : +${Math.round((deal - 1) * 100)} % `; g.text(x + w - t.length - 2, y, t, deal < 1 ? C.green : C.red, C.panel); }
     const [buy, sell] = this.rows();
     const cw = Math.floor((w - 5) / 2), colX = [x + 2, x + 3 + cw];
     g.text(colX[0], y + 1, `Il vend · sa bourse : ${n.wealth} or`, C.title);
@@ -168,7 +177,7 @@ export class TradeScreen implements Screen {
     if (cur) {
       const d = item(cur.id), max = this.maxQty();
       this.qty = Math.max(1, Math.min(this.qty, Math.max(1, max)));
-      g.text(x + 2, yy, `${d.name}`.slice(0, w - 4), d.rarity === 'rare' ? C.magenta : C.title);
+      g.text(x + 2, yy, `${d.name}`.slice(0, w - 4), d.rarity === 'épique' ? C.gold : d.rarity === 'rare' ? C.magenta : C.title);
       g.text(x + 2 + Math.min(30, d.name.length + 2), yy, `${d.cat}${ch.isEquipped(d.id) ? ' · équipé' : ''}`, C.dim);
       yy++;
       const stats = itemStats(d), cmp = compareWithEquipped(ch, d);

@@ -13,6 +13,8 @@ import { W_LAKE, W_RIVER, W_SEA } from '@ascii-fort/worldgen/terrain/Hydrology';
 import { GENERATOR_VERSION } from '../version';
 import { TalentPanel } from './TalentPanel';
 import { frNum } from '@ascii-fort/sim/gameplay/Talents';
+import { MAX_BOUNTIES } from '@ascii-fort/sim/gameplay/Bounties';
+import type { Quest } from '@ascii-fort/sim/gameplay/QuestSystem';
 
 export function frame(g: TextGrid, title: string, wMax = 110, hMax = 34) {
   const w = Math.min(g.cols - 2, wMax), h = Math.min(g.rows - 2, hMax);
@@ -71,14 +73,14 @@ export class InventoryScreen implements Screen {
       const eq = ch.isEquipped(l.id) ? '■ ' : '  ';
       const name = fitName(l.id, lw - 22, eq).padEnd(lw - 22);
       const s = durOf(l.id), wr = wearable(l.def);
-      const col = wr && s <= 0 ? C.red : wr && s < 25 ? C.orange : l.def.rarity === 'rare' ? C.magenta : l.def.quality ? C.green : l.def.cat === 'quête' || l.def.cat === 'clé' ? C.gold : l.def.cat === 'parchemin' ? C.cyan : C.text;
+      const col = wr && s <= 0 ? C.red : wr && s < 25 ? C.orange : l.def.rarity === 'épique' ? C.gold : l.def.rarity === 'rare' ? C.magenta : l.def.quality ? C.green : l.def.cat === 'quête' || l.def.cat === 'clé' ? C.gold : l.def.cat === 'parchemin' ? C.cyan : C.text;
       g.text(x + 2, yy, `${name}${String(l.qty).padStart(3)}  ${(l.def.weight * l.qty).toFixed(1).padStart(5)}  ${String(l.def.value).padStart(6)}`, k === this.sel ? 0xffffff : col, k === this.sel ? C.sel : -1);
     });
     // détails et comparaison
     const d = list[this.sel]?.def;
     let yy = y + 3;
     if (d) {
-      g.text(dx, yy++, d.name.slice(0, dw), d.rarity === 'rare' ? C.magenta : C.title);
+      g.text(dx, yy++, d.name.slice(0, dw), d.rarity === 'épique' ? C.gold : d.rarity === 'rare' ? C.magenta : C.title);
       g.text(dx, yy++, `${d.cat}${d.rarity ? ' · ' + d.rarity : ''}${ch.isEquipped(d.id) ? ' · équipé' : ''}`, C.dim);
       const id = list[this.sel].id, info: string[] = [];
       info.push(...itemStats(d));
@@ -165,36 +167,78 @@ export class InventoryScreen implements Screen {
 }
 
 // ------------------------------------------------------------------ journal
+interface JLine { text: string; color: number; indent: number; q?: Quest }
+
+/** Journal : histoires, quêtes, primes, biens, quêtes terminées ; on choisit la quête suivie à l'écran (Entrée ou clic). */
 export class JournalScreen implements Screen {
   modal = true;
+  private sel = 0;
+  private scroll = 0;
+  private first = true;
   constructor(private game: Game) {}
-  draw(ctx: UICtx): void {
-    const g = ctx.grid, { x, y, w, h } = frame(g, 'Journal', 100);
-    let yy = y + 2;
-    const qs = this.game.quests.quests;
-    const active = qs.filter((q) => q.status === 'active'), done = qs.filter((q) => q.status === 'terminée');
-    g.text(x + 2, yy++, 'Quêtes en cours', C.title);
-    if (!active.length) g.text(x + 4, yy++, 'Aucune. Parlez aux habitants : certains ont des soucis.', C.dim);
-    for (const q of active) {
-      if (yy > y + h - 6) break;
-      g.text(x + 3, yy++, `◆ ${q.title}`, C.yellow);
-      for (const l of TextGrid.wrap(q.summary, w - 10).slice(0, 2)) g.text(x + 6, yy++, l, C.dim);
-      q.stages.forEach((s, i) => { if (yy < y + h - 5) g.text(x + 6, yy++, `${i < q.stage ? '√' === '√' ? '√' : 'x' : i === q.stage ? '►' : '·'} ${s}`, i < q.stage ? C.green : i === q.stage ? C.white : C.faint); });
-      yy++;
+
+  private build(w: number): JLine[] {
+    const game = this.game, qs = game.quests.quests, out: JLine[] = [], W = w - 10, tracked = game.quests.trackedQuest();
+    const head = (text: string) => out.push({ text, color: C.title, indent: 2 });
+    const dim = (text: string) => { for (const l of TextGrid.wrap(text, W)) out.push({ text: l, color: C.dim, indent: 4 }); };
+    const blank = () => out.push({ text: '', color: C.dim, indent: 0 });
+    const quest = (q: Quest, tag: string) => {
+      const on = q === tracked;
+      out.push({ text: `${on ? '►' : '◆'} ${q.title}${tag}${on ? ' (suivie)' : ''}`, color: on ? C.white : q.kind === 'chaîne' ? C.magenta : C.yellow, indent: 3, q });
+      for (const l of TextGrid.wrap(q.summary, W).slice(0, 3)) out.push({ text: l, color: C.dim, indent: 6 });
+      q.stages.forEach((s, i) => TextGrid.wrap(s, W - 2).forEach((l, k) => out.push({ text: `${k ? ' ' : i < q.stage ? '√' : i === q.stage ? '►' : '·'} ${l}`, color: i < q.stage ? C.green : i === q.stage ? C.white : C.faint, indent: 6 })));
+      blank();
+    };
+    const chains = qs.filter((q) => q.kind === 'chaîne' && q.status === 'active');
+    head('Histoires');
+    if (!chains.length) {
+      const towns = game.exploits.rumorTowns();
+      dim(towns.length ? `On parle de graves ennuis à ${towns.slice(0, 4).join(', ')}. Les habitants en diront plus.` : 'Aucune. Certains habitants ont de graves ennuis : écoutez-les.');
+      blank();
     }
-    const goods = this.game.poss.journalLines();
-    if (goods.length && yy < y + h - 4) {
-      g.text(x + 2, yy++, 'Biens et compagnons', C.title);
-      for (const l of goods) if (yy < y + h - 3) g.text(x + 4, yy++, l.text.slice(0, w - 8), l.color);
-      yy++;
-    }
-    if (done.length && yy < y + h - 4) {
-      g.text(x + 2, yy++, 'Quêtes terminées', C.title);
-      for (const q of done) if (yy < y + h - 3) g.text(x + 4, yy++, `√ ${q.title}`, C.green);
-    }
-    g.text(x + 2, y + h - 2, `${this.game.state.discovered.size} lieux découverts · J/Échap : fermer`, C.dim);
+    for (const q of chains) quest(q, ` · danger ${game.exploits.chain(q.id)?.danger ?? '?'}`);
+    const sys = qs.filter((q) => q.kind !== 'chaîne' && q.kind !== 'prime' && q.status === 'active');
+    head('Quêtes en cours');
+    if (!sys.length) { dim('Aucune. Parlez aux habitants : certains ont des soucis.'); blank(); }
+    for (const q of sys) quest(q, '');
+    const pr = qs.filter((q) => q.kind === 'prime' && q.status === 'active'), done = game.exploits.done;
+    head(`Primes (${pr.length}/${MAX_BOUNTIES})${done ? ` · ${done} réclamée${done > 1 ? 's' : ''}` : ''}`);
+    if (!pr.length) { dim('Aucune. Le tableau des primes se trouve sur la place des villages et des villes.'); blank(); }
+    for (const q of pr) { const st = game.exploits.bountyOf(q)?.st; quest(q, ` · ${q.reward.gold} or${st === 'remplie' ? ' · à réclamer' : st === 'caduque' ? ' · caduque' : ''}`); }
+    const goods = game.poss.journalLines();
+    if (goods.length) { head('Biens et compagnons'); for (const l of goods) out.push({ text: l.text.slice(0, w - 8), color: l.color, indent: 4 }); blank(); }
+    const fin = qs.filter((q) => q.status === 'terminée' && q.kind !== 'prime');
+    if (fin.length) { head('Terminées'); for (const q of fin) out.push({ text: `√ ${q.title}`, color: q.kind === 'chaîne' ? C.magenta : C.green, indent: 4 }); }
+    return out;
   }
-  input(ctx: UICtx): void { if (ctx.input.key('Escape') || ctx.input.key('j')) ctx.close(); }
+
+  draw(ctx: UICtx): void {
+    const g = ctx.grid, game = this.game, { x, y, w, h } = frame(g, 'Journal', 100);
+    const lines = this.build(w), view = h - 4, picks = lines.map((l, i) => (l.q ? i : -1)).filter((i) => i >= 0);
+    if (this.first) { this.first = false; const t = game.quests.trackedQuest(), i = lines.findIndex((l) => l.q && l.q === t); this.sel = Math.max(0, picks.indexOf(i)); }
+    this.sel = Math.max(0, Math.min(this.sel, picks.length - 1));
+    const cur = picks[this.sel] ?? -1;
+    if (cur >= 0) { if (cur < this.scroll) this.scroll = Math.max(0, cur - 1); if (cur >= this.scroll + view) this.scroll = cur - view + 4; }
+    this.scroll = Math.max(0, Math.min(this.scroll, lines.length - view));
+    lines.slice(this.scroll, this.scroll + view).forEach((l, k) => {
+      const i = this.scroll + k, yy = y + 1 + k, on = i === cur, over = !!l.q && ctx.mouseCell.y === yy && ctx.mouseCell.x > x && ctx.mouseCell.x < x + w - 1;
+      g.text(x + l.indent, yy, l.text.slice(0, w - l.indent - 2), on ? 0xffffff : l.color, on ? C.sel : over ? C.panel2 : -1);
+      if (over && ctx.clicked) { this.sel = picks.indexOf(i); game.quests.tracked = l.q!.id; }
+    });
+    if (lines.length > view) { const pos = ` ${this.scroll + 1}-${Math.min(lines.length, this.scroll + view)}/${lines.length} `; g.text(x + w - pos.length - 2, y, pos, C.dim, C.panel); }
+    g.text(x + 2, y + h - 2, `↑↓ choisir · Entrée ou clic : suivre à l’écran · PgPréc/PgSuiv · ${game.state.discovered.size} lieux découverts · J/Échap : fermer`.slice(0, w - 4), C.dim);
+  }
+  input(ctx: UICtx): void {
+    const i = ctx.input, game = this.game;
+    if (i.key('Escape') || i.key('j')) { ctx.close(); return; }
+    const lines = this.build(Math.min(ctx.grid.cols - 2, 100)), picks = lines.filter((l) => l.q);
+    if (i.pressed('ArrowUp')) this.sel = Math.max(0, this.sel - 1);
+    if (i.pressed('ArrowDown')) this.sel = Math.min(picks.length - 1, this.sel + 1);
+    // la liste suit la quête choisie : PgPréc/PgSuiv et la molette sautent de deux quêtes
+    if (i.pressed('PageUp') || i.wheel < 0) this.sel = Math.max(0, this.sel - 2);
+    if (i.pressed('PageDown') || i.wheel > 0) this.sel = Math.min(picks.length - 1, this.sel + 2);
+    if ((i.pressed('Enter') || i.pressed('NumpadEnter')) && picks[this.sel]) { game.quests.tracked = picks[this.sel].q!.id; game.events.emit('message', { text: `Quête suivie : ${picks[this.sel].q!.title}`, color: C.yellow }); }
+  }
 }
 
 // ------------------------------------------------------------------ carte
@@ -255,11 +299,16 @@ export class MapScreen implements Screen {
     for (const s of civ.settlements) if (st.discovered.has(`settlement:${s.id}`)) { const [gl, col] = SET_GLYPH[s.type]; label(s.x, s.z, gl, col, this.zoom >= 2 || s.type === 'capitale' || s.type === 'ville' || s.id === civ.startId ? s.name : undefined); }
     for (const p of civ.pois) if (st.discovered.has(`poi:${p.id}`)) label(p.x, p.z, p.dungeonId >= 0 ? 'Ω' : p.kind === 'camp de bandits' ? 'x' : '¤', p.kind === 'camp de bandits' ? C.red : C.cyan, this.zoom >= 3 ? p.name : undefined);
     for (const m of game.poss.markers()) label(m.x, m.z, m.glyph, m.color, this.zoom >= 2 ? m.name : undefined, true);
-    for (const q of game.quests.quests) if (q.status === 'active' && q.target && Math.floor(performance.now() / 400) % 2) label(q.target.x, q.target.z, '!', C.yellow);
+    const bosses = game.exploits.markers();
+    for (const m of bosses) label(m.x, m.z, m.glyph, m.color, this.zoom >= 2 ? m.name : undefined, true);
+    // cibles des quêtes en cours (la quête suivie clignote en blanc)
+    const tracked = game.quests.trackedQuest();
+    for (const q of game.quests.quests) if (q.status === 'active' && q.target && Math.floor(performance.now() / 400) % 2) label(q.target.x, q.target.z, '!', q === tracked ? C.white : C.yellow);
     const arrows = ['▲', '►', '▼', '◄'];
     label(game.player.x, game.player.z, Math.floor(performance.now() / 300) % 2 ? '@' : arrows[((Math.round(game.player.heading / (Math.PI / 2)) % 4) + 4) % 4], C.white);
     // légende : coupée par morceaux entiers (jamais au milieu d'un mot) quand la fenêtre est étroite
     const legend: [string, string][] = [[`+/- zoom (×${this.zoom})`, ''], ['flèches : déplacer', ' · '], ['Espace : recentrer', ' · '], ['M/Échap : fermer', ' · '], ['◙ capitale', ' · '], ['■ ville', ' '], ['⌂ village', ' '], ['╬ château', ' '], ['Ω souterrain', ' '], ['x bandits', ' '], ['! quête', ' ']];
+    if (bosses.length) legend.push(['‡ boss', ' ']);
     if (game.poss.markers().length) legend.push(['♥ maison', ' '], ['h cheval', ' '], ['☻ mercenaire', ' ']);
     let help = '';
     for (const [t, sep] of legend) { const next = help ? help + sep + t : t; if (next.length > w - 4) break; help = next; }

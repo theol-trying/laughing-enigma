@@ -25,6 +25,7 @@ import type { Coop } from '../net/Coop';
 import { hashString } from '@ascii-fort/core/RNG';
 import { LockpickScreen } from '../ui/LockpickScreen';
 import { Possessions } from './Possessions';
+import { Exploits } from './Exploits';
 import { CraftingScreen, type Feedback } from '../ui/CraftingScreen';
 import { Particles } from './Particles';
 import { Birds } from './Birds';
@@ -39,7 +40,7 @@ import { Reputation } from '@ascii-fort/sim/gameplay/Reputation';
 import { Economy } from '@ascii-fort/sim/gameplay/Economy';
 import { Rumors } from '@ascii-fort/sim/gameplay/Rumors';
 import { QuestSystem } from '@ascii-fort/sim/gameplay/QuestSystem';
-import { DialogueSystem, type DialogueNode, type ServiceOffer } from '@ascii-fort/sim/gameplay/Dialogue';
+import { DialogueSystem, type DialogueNode, type ServiceOffer, type DialogueHooks } from '@ascii-fort/sim/gameplay/Dialogue';
 import { Camera } from '@ascii-fort/ascii-engine/Camera';
 import { Weather, type WeatherState } from '@ascii-fort/sim/gameplay/Weather';
 import { AudioEngine, type Surface } from '../audio/AudioEngine';
@@ -61,7 +62,9 @@ export type Focus =
   | { t: 'entity'; e: Entity; label: string; pick?: boolean; hint?: string }
   | { t: 'drop'; d: Dropped; label: string }
   | { t: 'player'; id: string; label: string }
-  | { t: 'fish'; label: string };
+  | { t: 'fish'; label: string }
+  /** action du jeu (tableau des primes, objet de quête) : go() s'exécute sur [E] */
+  | { t: 'action'; label: string; hint?: string; muted?: boolean; go: () => void };
 
 /** Partie en cours : monde, joueur, temps et systèmes. */
 export class Game {
@@ -84,6 +87,10 @@ export class Game {
   readonly dialogue: DialogueSystem;
   /** maison, coffre personnel, cheval et mercenaire du joueur */
   readonly poss: Possessions;
+  /** chaînes de quêtes, tableau des primes, persuasion et intimidation */
+  readonly exploits: Exploits;
+  /** ajouts du jeu aux dialogues (lus par DialogueSystem) */
+  hooks: DialogueHooks | undefined;
   readonly weatherSys: Weather;
   readonly audio = new AudioEngine();
   wx: { mix: WeatherMix; state: WeatherState; flash: number } = { mix: CLEAR_WEATHER, state: 'clair', flash: 0 };
@@ -108,7 +115,7 @@ export class Game {
   /** dernier rappel « arme hors d'usage » */
   private brokenMsgT = -100;
   private lastLevel = 1;
-  private tintFlash: { c: [number, number, number]; t: number } | null = null;
+  tintFlash: { c: [number, number, number]; t: number } | null = null;
   /** humidité des surfaces (0..1) : monte sous la pluie, sèche lentement */
   wetness = 0;
   private swimT = 0;
@@ -172,6 +179,8 @@ export class Game {
     this.quests = new QuestSystem(this);
     this.dialogue = new DialogueSystem(this);
     this.poss = new Possessions(this);
+    this.exploits = new Exploits(this);
+    this.hooks = this.exploits.hooks;
     this.weatherSys = new Weather(this.world.macro);
     this.events.on('entity:damaged', (d) => {
       if (d.sourceId === 'player' || d.sourceId?.startsWith('ally:')) this.audio.hit();
@@ -364,6 +373,9 @@ export class Game {
       const label = this.propLabel(pr);
       if (label && d - facing < bs && see(pr.x, pr.z)) { bs = d - facing; best = { t: 'prop', prop: pr, label }; }
     }
+    // tableau des primes, objet de quête à ramasser
+    const xf = this.exploits.focus();
+    if (xf && xf.d < bs) { bs = xf.d; best = xf.f; }
     // vol : on montre s'il y a des témoins
     if (best?.t === 'prop' && /^(coffre|tonneau|caisse)$/.test(best.prop.kind) && this.isOwned(best.prop)) {
       const n = this.theftWitnesses();
@@ -440,6 +452,7 @@ export class Game {
     const f = this.focus, ch = this.character, p = this.player;
     if (this.fishing) { this.reelIn(); return; }
     if (!f) return;
+    if (f.t === 'action') { f.go(); return; }
     if (f.t === 'fish') { this.castLine(); return; }
     if (f.t === 'entity') {
       const e = f.e;
@@ -1001,6 +1014,7 @@ export class Game {
     this.applyDoor();
     this.entities.clear();
     this.entities.spawnDungeon(layout);
+    this.exploits.onWorldChange();
     p.bounded = false;
     p.x = layout.entrance.x; p.z = layout.entrance.z; p.y = 0.05; p.vx = p.vz = p.vy = 0;
     p.heading = 0;
@@ -1017,6 +1031,7 @@ export class Game {
     p.bounded = true;
     p.x = dg.ret.x; p.z = dg.ret.z; p.heading = dg.ret.heading; p.vx = p.vz = p.vy = 0;
     this.dungeon = null;
+    this.exploits.onWorldChange();
     this.world.chunks.update(p.x, p.z, -1);
     p.y = this.world.heightAt(p.x, p.z) + 0.1;
   }
@@ -1118,6 +1133,7 @@ export class Game {
     }
     if (!this.dungeon) this.world.chunks.update(p.x, p.z, 5);
     this.entities.update(dt);
+    this.exploits.tick(dt);
     this.coop?.update(dt);
     if (!this.wasGround && p.onGround && this.prevVy < -7 && !this.dungeon) this.particles.emit('poussière', p.x, p.y + 0.05, p.z, 10);
     this.wasGround = p.onGround; this.prevVy = p.vy;
@@ -1130,6 +1146,7 @@ export class Game {
     this.focus = p.dead ? null : this.findFocus();
     if (input.key('e')) this.interact();
     if (input.key('t')) this.tradeWithFocus();
+    if (input.key('i') && !p.dead) this.exploits.intimidate();   // sommer un bandit blessé ou isolé de se rendre
     // découverte des lieux et brouillard de la carte
     this.discoverT -= dt;
     if (this.discoverT <= 0 && !this.dungeon) {
@@ -1359,7 +1376,7 @@ export class Game {
       if (e) n.hp = e.alive ? e.hp : 0;
       npcs.push({ id: n.id, alive: n.alive, hp: n.hp, wealth: n.wealth, memories: n.memories });
     }
-    const est = this.poss.toSave();
+    const est = this.poss.toSave(), ex = this.exploits.toSave();
     return {
       format: 1, game: GAME_VERSION, generator: GENERATOR_VERSION, seed: this.seed.text, savedAt: Date.now(), label, time: this.time.minutes,
       player: { x: p.x, y: p.y, z: p.z, heading: p.heading, pitch: p.pitch, hp: p.hp, stamina: p.stamina, mana: p.mana, dungeon: this.dungeon ? this.dungeon.layout.id : -1, ret: this.dungeon ? this.dungeon.ret : null },
@@ -1368,12 +1385,13 @@ export class Game {
       npcs,
       rep: { global: this.rep.global, faction: [...this.rep.faction], local: [...this.rep.local], bounty: [...this.rep.bounty] },
       economy: [...this.economy.supply].map(([k, v]) => [k, { ...v }]),
-      quests: this.quests.quests.filter((q) => q.status !== 'disponible').map((q) => ({ id: q.id, status: q.status, stage: q.stage, killed: q.data.killed ?? 0 })),
+      quests: this.quests.quests.filter((q) => q.status !== 'disponible' && q.kind !== 'prime').map((q) => ({ id: q.id, status: q.status, stage: q.stage, killed: q.data.killed ?? 0 })),
       rumors: this.rumors.list.map((r) => ({ text: r.text, origin: r.origin, day: r.day, reach: [...r.reach], tag: r.tag })),
       lairs: this.entities.lairs.map((l) => ({ key: l.key, alive: l.alive, leaderAlive: l.leaderAlive })),
       killed: [...this.entities.killed], clearedCamps: [...this.entities.clearedCamps],
       removed: [...this.world.chunks.removed],
       ...(est ? { estate: est } : {}),   // maison, coffre, cheval, mercenaire : absents si rien n'est possédé
+      ...(ex ? { exploits: ex } : {}),   // primes, récompenses négociées, persuasions du jour : absents si rien n'est en cours
     };
   }
 
@@ -1381,6 +1399,7 @@ export class Game {
     if (this.dungeon) this.exitDungeon();
     this.entities.clear();
     this.poss.reset();   // le Game est réutilisé si la seed est la même : champ absent = rien de possédé
+    this.exploits.reset();   // idem : histoires disponibles, aucune prime, aucune persuasion du jour
     const ch = this.character, st = this.state, p = this.player;
     this.time.minutes = d.time; this.lastDay = this.time.day;
     Object.assign(ch.stats, d.character.stats); Object.assign(ch.skills, d.character.skills); Object.assign(ch.skillXp, d.character.skillXp);
@@ -1417,6 +1436,7 @@ export class Game {
     p.hp = d.player.hp; p.stamina = d.player.stamina; p.mana = d.player.mana;
     this.lastHp = p.hp;
     try { this.poss.load(d.estate); } catch { this.poss.reset(); }   // en dernier et protégé : Coop.welcome avale les exceptions en laissant un état partiel
+    try { this.exploits.load(d.exploits); } catch { this.exploits.reset(); }
     this.talentHint();
   }
 
@@ -1460,6 +1480,7 @@ export class Game {
     this.entities.render(this.instances, c.x, c.z, this.target && this.target.alive ? this.target.id : null);
     this.coop?.render(this.instances, c.x, c.z);
     this.particles.render(this.instances, c.x, c.z);
+    this.exploits.render(this.instances, c.x, c.z, this.elapsed);   // tableaux des primes, objets de quête
     if (!dg) { this.renderBanners(c.x, c.z); this.birds.render(this.instances, c.x, c.z); this.renderFishing(); }
     if (dg && dg.layout.lockedDoor && !this.state.flags.get(`door:dj${dg.layout.id}`)) {
       const d = dg.layout.lockedDoor;

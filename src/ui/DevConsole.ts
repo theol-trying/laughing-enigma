@@ -29,6 +29,11 @@ const HELP = [
   'mercenaire [ko|jours <n>|retire]        engage un mercenaire (niveau du joueur moins 1, 7 jours), le met à terre, règle son contrat, le renvoie',
   'maison [aller|retire]                   possède la maison à vendre de l’implantation éligible la plus proche (aller : s’y téléporter)',
   'coffre | biens                          ouvre le coffre personnel ; résumé maison, coffre, cheval, mercenaire',
+  'chaines | chaine <n> [accepter|avance|étape <k>|fin|aller|reset]   histoires : liste, détail, faire progresser, s’y rendre',
+  'boss <n> [lieutenant]                   fait apparaître le boss (ou le lieutenant) de l’histoire n devant vous',
+  'primes [prendre <k>|remplir|réclamer|tableau|jour <j>]   avis du tableau le plus proche, accepter, remplir, réclamer, ouvrir',
+  'jet <persuader|intimider> [ok|raté]     force un jet sur le PNJ visé (marchandage, ou garde si amende) ou sur un bandit blessé',
+  'persuasion [reset]                      chances face au PNJ visé ; reset : oublie les tentatives et marchandages du jour',
 ];
 
 export class DevConsole implements Screen {
@@ -151,6 +156,12 @@ export class DevConsole implements Screen {
         const res = g.poss.dev(c, args);
         for (const l of res) this.print(l.text, l.err ? C.red : C.text);
         if (c === 'coffre' && !res.some((l) => l.err)) this.leave();   // le coffre s'est ouvert par-dessus : la console s'efface
+        break;
+      }
+      case 'chaines': case 'chaînes': case 'chaine': case 'chaîne': case 'boss': case 'primes': case 'jet': case 'persuasion': {
+        const res = g.exploits.dev(c, args);
+        for (const l of res) this.print(l.text, l.err ? C.red : C.text);
+        if (c === 'primes' && args[0]?.toLowerCase() === 'tableau' && !res.some((l) => l.err)) this.leave();   // le tableau s'est ouvert par-dessus
         break;
       }
       case '': break;

@@ -15,7 +15,8 @@ import { item } from './Items';
 // pénurie chez un marchand ; tanière près d'un troupeau ; relique dans une crypte ; expédition
 // disparue ; gobelins dans une mine) et leur résolution modifie le monde en retour.
 
-export type QuestKind = 'bandits' | 'loups' | 'relique' | 'expédition' | 'mine';
+/** Quêtes systémiques, plus les chaînes de quêtes (« chaîne », voir Chains.ts) et les primes acceptées au tableau (« prime »). */
+export type QuestKind = 'bandits' | 'loups' | 'relique' | 'expédition' | 'mine' | 'chaîne' | 'prime';
 export interface Quest {
   id: string; kind: QuestKind; giver: string; sid: number;
   title: string; summary: string;
@@ -23,8 +24,12 @@ export interface Quest {
   status: 'disponible' | 'active' | 'terminée';
   target: { x: number; z: number; label: string } | null;
   reward: { gold: number; xp: number; item?: string };
-  data: { campSid?: number; roadId?: number; lairKey?: string; dungeonId?: number; item?: string; count?: number; killed?: number; good?: string; poiId?: number };
+  data: { campSid?: number; roadId?: number; lairKey?: string; dungeonId?: number; item?: string; count?: number; killed?: number; good?: string; poiId?: number;
+    /** chaîne de quêtes : remerciements du commanditaire à la fin */
+    thanks?: string };
 }
+/** Quêtes que le système génère lui-même (les chaînes et les primes sont gérées par le jeu). */
+const SYSTEMIC = new Set<QuestKind>(['bandits', 'loups', 'relique', 'expédition', 'mine']);
 
 export interface QuestHost {
   world: World<any>; events: EventBus; character: Character; rep: Reputation; economy: Economy;
@@ -33,6 +38,8 @@ export interface QuestHost {
 
 export class QuestSystem {
   quests: Quest[] = [];
+  /** quête suivie à l'écran (HUD, boussole) : la dernière acceptée ou avancée, ou celle choisie dans le journal */
+  tracked: string | null = null;
 
   constructor(private h: QuestHost) {
     this.generate();
@@ -164,10 +171,18 @@ export class QuestSystem {
   activeFor(npcId: string): Quest | undefined { return this.quests.find((q) => q.giver === npcId && q.status === 'active'); }
   canTurnIn(q: Quest): boolean { return q.status === 'active' && q.stage === q.stages.length - 1; }
 
+  /** Quête affichée par le HUD et la boussole : celle qu'on suit si elle est en cours, sinon la première en cours. */
+  trackedQuest(): Quest | undefined {
+    const t = this.tracked ? this.quests.find((q) => q.id === this.tracked && q.status === 'active') : undefined;
+    return t ?? this.quests.find((q) => q.status === 'active');
+  }
+
   accept(q: Quest): void {
     q.status = 'active'; q.stage = 0;
+    this.tracked = q.id;
     this.h.events.emit('quest:started', { questId: q.id });
     this.h.events.emit('message', { text: `Nouvelle quête : ${q.title}`, color: 0xf0d060 });
+    if (!SYSTEMIC.has(q.kind)) return;
     // l'objet a peut-être déjà été trouvé
     if (q.data.item && this.h.character.inv.count(q.data.item)) this.setStage(q, q.kind === 'bandits' ? 2 : 1);
     if (q.kind === 'bandits' && q.data.campSid !== undefined && this.h.entities.clearedCamps.has(q.data.campSid)) this.setStage(q, 2);
@@ -175,8 +190,9 @@ export class QuestSystem {
 
   setStage(q: Quest, s: number): void {
     q.stage = s;
+    this.tracked = q.id;
     if (s >= q.stages.length - 1) {
-      const giver = this.h.entities.findNpc(q.giver);
+      const giver = q.giver.startsWith('n') ? this.h.entities.findNpc(q.giver) : undefined;   // prime : pas de PNJ (tableau)
       if (giver) { const st = this.h.world.civ.settlements[giver.sid]; q.target = { x: st.x, z: st.z, label: `${giver.first} (${st.name})` }; }
     }
     this.h.events.emit('quest:updated', { questId: q.id });
@@ -190,7 +206,7 @@ export class QuestSystem {
     q.status = status; q.stage = stage; q.data.killed = killed;
     if (q.kind === 'loups') q.stages[0] = `Abattre les loups de la tanière (${Math.min(killed, q.data.count!)}/${q.data.count})`;
     if (stage >= q.stages.length - 1) {
-      const giver = this.h.entities.findNpc(q.giver);
+      const giver = q.giver.startsWith('n') ? this.h.entities.findNpc(q.giver) : undefined;   // prime : pas de PNJ (tableau)
       if (giver) { const st = this.h.world.civ.settlements[giver.sid]; q.target = { x: st.x, z: st.z, label: `${giver.first} (${st.name})` }; }
     }
   }
@@ -218,6 +234,7 @@ export class QuestSystem {
     events.emit('quest:completed', { questId: q.id });
     events.emit('message', { text: `Quête terminée : ${q.title} (+${q.reward.gold} or, +${q.reward.xp} XP${q.reward.item ? ', ' + item(q.reward.item).name : ''})`, color: 0xf0d060 });
     if (ups) events.emit('message', { text: `Niveau ${ch.level} !`, color: 0xf0d060 });
+    if (q.data.thanks) return q.data.thanks;
     return q.kind === 'bandits' ? 'Les convois vont pouvoir reprendre. Les prix redescendront d\'ici quelques jours. Merci, vraiment.'
       : q.kind === 'loups' ? 'Mes bêtes vont enfin dormir tranquilles. Prends ça, tu l\'as mérité.'
       : q.kind === 'relique' ? 'Les anciens seigneurs vont enfin reposer en paix. Que la lumière te garde.'

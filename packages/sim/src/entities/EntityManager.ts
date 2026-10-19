@@ -241,7 +241,7 @@ export class EntityManager {
 
   private deactivateLair(l: Lair) {
     const ents = this.activeLairs.get(l.key) ?? [];
-    l.alive = ents.filter((e) => e.alive && !e.mon?.leader).length;
+    l.alive = ents.filter((e) => e.alive && !e.mon?.leader && !e.mon?.yielded).length;
     l.leaderAlive = ents.some((e) => e.alive && e.mon?.leader);
     this.remove(ents);
     this.activeLairs.delete(l.key);
@@ -251,6 +251,36 @@ export class EntityManager {
   clear(): void {
     for (const sid of [...this.zones.keys()]) this.deactivate(sid);
     for (const l of this.lairs) if (this.activeLairs.has(l.key)) this.deactivateLair(l);
+  }
+
+  // ---------------------------------------------------------------- entités propres au joueur, redditions
+  /** Créature propre au joueur (boss d'une chaîne, lieutenant, bête d'une prime) : simulée ici, hors de toute zone d'autorité. */
+  addLocal(e: Entity): void { e.zoneKey = ''; if (!this.entities.includes(e)) this.entities.push(e); }
+  /** L'entité est-elle encore dans la simulation ? */
+  has(e: Entity): boolean { return this.entities.includes(e); }
+  /**
+   * Retire une entité (créature propre au joueur qui s'éloigne, bandit rendu qui a pris la fuite). Un camp dont il ne reste
+   * que des morts est démantelé, comme à la mort du dernier bandit.
+   */
+  dismiss(e: Entity): void {
+    this.remove([e]);
+    const lk = e.mon?.lair;
+    const ents = lk ? this.activeLairs.get(lk) : undefined;
+    if (!ents) return;
+    const i = ents.indexOf(e);
+    if (i >= 0) ents.splice(i, 1);
+    const l = this.lairs.find((x) => x.key === lk);
+    if (l && l.sid >= 0 && ents.every((x) => !x.alive) && !this.clearedCamps.has(l.sid)) {
+      this.clearedCamps.add(l.sid);
+      l.alive = 0; l.leaderAlive = false;
+      this.host.events.emit('camp:cleared', { campId: l.sid });
+    }
+  }
+  /** Membres vivants d'un repaire (hors chef) : comptés sur les créatures incarnées si le repaire est actif. */
+  lairAlive(key: string): number {
+    const ents = this.activeLairs.get(key);
+    if (ents) return ents.filter((e) => e.alive && !e.mon?.leader && !e.mon?.yielded).length;
+    return this.lairs.find((l) => l.key === key)?.alive ?? 0;
   }
 
   // ---------------------------------------------------------------- compagnons du joueur
@@ -744,7 +774,7 @@ export class EntityManager {
     for (const l of this.lairs) {
       const ents = this.activeLairs.get(l.key);
       if (!ents) continue;
-      l.alive = ents.filter((e) => e.alive && !e.mon?.leader).length;
+      l.alive = ents.filter((e) => e.alive && !e.mon?.leader && !e.mon?.yielded).length;
       l.leaderAlive = ents.some((e) => e.alive && e.mon?.leader);
     }
   }
