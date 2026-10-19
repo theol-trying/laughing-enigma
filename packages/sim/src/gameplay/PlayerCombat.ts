@@ -76,7 +76,7 @@ export class PlayerCombat {
     p.shield = !!ch.shield;
     p.guard = ch.guard(); p.blockCost = ch.blockCost();
     // esquive : V ou double appui d'une direction
-    if ((input.key('v') || input.doubleTapped) && p.stamina >= 20 && this.dashT <= 0 && p.onGround) {
+    if ((input.key('v') || input.doubleTapped) && p.stamina >= 20 && this.dashT <= 0 && p.onGround && !p.mounted) {   // pas d'esquive à cheval
       let dx = 0, dz = 0;
       const sh = Math.sin(p.heading), chh = Math.cos(p.heading);
       const code = input.doubleTapped ?? (input.isDown('KeyA') ? 'KeyA' : input.isDown('KeyD') ? 'KeyD' : input.isDown('KeyW') ? 'KeyW' : 'KeyS');
@@ -94,10 +94,14 @@ export class PlayerCombat {
     const free = !this.lockUntilRelease;
     const noArrow = bow && !ch.inv.count('flèche');
     if (noArrow && input.mouseClicked(0) && this.cooldown <= 0) { w.events.emit('message', { text: 'Plus de flèches ! (B : arme de mêlée)', color: 0xe05040 }); this.cooldown = 0.6; }
-    if (free && !noArrow && input.mouseDown(0)) this.charge += dt;
+    // à cheval : pas de mêlée (la charge ne monte pas) ; l'arc se bande 40 % plus lentement au galop
+    if (free && !noArrow && input.mouseDown(0) && !(p.mounted && !bow)) this.charge += dt * (p.mounted && p.sprinting ? 0.6 : 1);
     if (free && !noArrow && input.mouseReleased(0) && this.cooldown <= 0) {
       if (bow) this.fireArrow(w, Math.min(1, this.charge / ch.bowDrawTime()));
-      else {
+      else if (p.mounted) {
+        w.events.emit('message', { text: 'On ne manie pas l’arme du haut d’un cheval : arc, sorts, ou descendez (G).', color: 0xf09040 });
+        this.cooldown = 0.8;
+      } else {
         const heavy = this.charge > 0.42;
         const cost = weapon.stamina * (heavy ? 2 : 1) * ch.staCostMult();
         if (p.stamina >= cost * 0.5) {
@@ -153,7 +157,7 @@ export class PlayerCombat {
     const fx = Math.sin(p.heading), fz = -Math.cos(p.heading);
     let best: Entity | null = null, bd = Infinity;
     for (const e of w.entities) {
-      if (!e.alive) continue;
+      if (!e.alive || e.ally) continue;   // jamais de tir ami sur le cheval ou le mercenaire
       const dx = e.x - p.x, dz = e.z - p.z, d = Math.hypot(dx, dz);
       if (d > reach + e.radius || d < 0.01) continue;
       if ((dx * fx + dz * fz) / d < 0.62) continue;
@@ -202,7 +206,7 @@ export class PlayerCombat {
       if (pr.kind === 'flèche') pr.vy -= 9.8 * dt;
       const nx = pr.x + pr.vx * dt, ny = pr.y + pr.vy * dt, nz = pr.z + pr.vz * dt;
       for (const e of w.entities) {
-        if (!e.alive) continue;
+        if (!e.alive || e.ally) continue;
         // distance du segment parcouru à l'axe vertical de l'entité
         const ex = e.x - pr.x, ez = e.z - pr.z, sx = nx - pr.x, sz = nz - pr.z, l2 = sx * sx + sz * sz || 1;
         const t = Math.max(0, Math.min(1, (ex * sx + ez * sz) / l2));

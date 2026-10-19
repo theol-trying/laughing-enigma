@@ -1,6 +1,7 @@
 import type { Entity } from '../entities/Entity';
 import type { Player } from '../entities/Player';
 import type { EventBus } from '@ascii-fort/core/Events';
+import { MERC } from './Companions';
 
 // Résolution des dégâts : armure, blocage, esquive, effets élémentaires, mort.
 
@@ -20,7 +21,10 @@ export type Element = 'poison' | 'feu' | 'givre' | undefined;
 /** Dégâts infligés à une entité ; renvoie les dégâts réels. */
 export function hitEntity(host: CombatHost, e: Entity, amount: number, sourceId: string | null, element?: Element): number {
   if (!e.alive) return 0;
-  if (sourceId === 'player' && host.forward?.(e, amount, element)) {
+  if (e.ally) return hitAlly(host, e, amount, sourceId);
+  // les coups d'un compagnon comptent pour le joueur : XP, quêtes, réputation, transfert au propriétaire de la zone en ligne
+  const credit = sourceId?.startsWith('ally:') ? 'player' : sourceId;
+  if (credit === 'player' && host.forward?.(e, amount, element)) {
     e.flash = 0.18;
     host.events.emit('entity:damaged', { targetId: e.id, sourceId, amount });
     return amount;
@@ -37,10 +41,32 @@ export function hitEntity(host: CombatHost, e: Entity, amount: number, sourceId:
     e.hp = 0; e.alive = false; e.deadT = 0;
     if (e.npc) { e.npc.alive = false; e.npc.hp = 0; }
     host.events.emit('entity:killed', {
-      victimId: e.id, killerId: sourceId, kind: e.kind === 'npc' ? 'npc' : 'monster', type: e.type,
+      victimId: e.id, killerId: credit, kind: e.kind === 'npc' ? 'npc' : 'monster', type: e.type,
       factionId: e.npc?.factionId, settlementId: e.npc?.sid ?? (e.mon && e.mon.campId >= 0 ? e.mon.campId : undefined),
       campId: e.mon && e.mon.campId >= 0 ? e.mon.campId : undefined, x: e.x, z: e.z,
     });
+  }
+  return dmg;
+}
+
+/**
+ * Dégâts reçus par un compagnon (cheval, mercenaire) : armure, pas de tir ami, aucun « entity:killed » (ni fait partagé, ni
+ * réputation, ni quête). Le mercenaire tombe à terre (KO) et se relève ; le cheval meurt pour de bon.
+ */
+function hitAlly(host: CombatHost, e: Entity, amount: number, sourceId: string | null): number {
+  const a = e.ally!;
+  if (a.ko > 0 || a.dormant || sourceId === 'player' || sourceId?.startsWith('ally:')) return 0;
+  const dmg = Math.max(1, Math.round(amount * (1 - a.armor / (a.armor + 12))));
+  e.hp -= dmg; e.flash = 0.18; a.lastHurt = 0;
+  host.events.emit('entity:damaged', { targetId: e.id, sourceId, amount: dmg });
+  if (e.hp > 0) return dmg;
+  e.hp = 0;
+  if (a.kind === 'merc') {
+    a.ko = MERC.koSeconds; e.foe = null; e.path = null; e.target = null;
+    host.events.emit('message', { text: `${e.name} s’effondre, hors de combat.`, color: 0xe05040 });
+  } else {
+    e.alive = false; e.deadT = 0; e.looted = true; a.mounted = false;
+    host.events.emit('message', { text: `${e.name}, votre cheval, est mort.`, color: 0xe05040 });
   }
   return dmg;
 }

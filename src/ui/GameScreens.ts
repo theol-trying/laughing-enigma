@@ -14,7 +14,7 @@ import { GENERATOR_VERSION } from '../version';
 import { TalentPanel } from './TalentPanel';
 import { frNum } from '@ascii-fort/sim/gameplay/Talents';
 
-function frame(g: TextGrid, title: string, wMax = 110, hMax = 34) {
+export function frame(g: TextGrid, title: string, wMax = 110, hMax = 34) {
   const w = Math.min(g.cols - 2, wMax), h = Math.min(g.rows - 2, hMax);
   const x = Math.floor((g.cols - w) / 2), y = Math.floor((g.rows - h) / 2);
   g.box(x, y, w, h, { title, double: true });
@@ -22,7 +22,7 @@ function frame(g: TextGrid, title: string, wMax = 110, hMax = 34) {
 }
 
 /** Nom d'un exemplaire tenant en `width` colonnes : le nom de base est coupé, jamais l'état (« (62 %) », « (HS) »). */
-function fitName(id: string, width: number, prefix = ''): string {
+export function fitName(id: string, width: number, prefix = ''): string {
   const s = durOf(id), st = wearable(item(id)) && s < 100 ? (s > 0 ? ` (${s} %)` : ' (HS)') : '';
   return `${prefix}${item(baseId(id)).name}`.slice(0, Math.max(0, width - st.length)) + st;
 }
@@ -182,6 +182,12 @@ export class JournalScreen implements Screen {
       q.stages.forEach((s, i) => { if (yy < y + h - 5) g.text(x + 6, yy++, `${i < q.stage ? '√' === '√' ? '√' : 'x' : i === q.stage ? '►' : '·'} ${s}`, i < q.stage ? C.green : i === q.stage ? C.white : C.faint); });
       yy++;
     }
+    const goods = this.game.poss.journalLines();
+    if (goods.length && yy < y + h - 4) {
+      g.text(x + 2, yy++, 'Biens et compagnons', C.title);
+      for (const l of goods) if (yy < y + h - 3) g.text(x + 4, yy++, l.text.slice(0, w - 8), l.color);
+      yy++;
+    }
     if (done.length && yy < y + h - 4) {
       g.text(x + 2, yy++, 'Quêtes terminées', C.title);
       for (const q of done) if (yy < y + h - 3) g.text(x + 4, yy++, `√ ${q.title}`, C.green);
@@ -230,18 +236,34 @@ export class MapScreen implements Screen {
       g.text(x + 1 + i, y + 1 + j, ch, col, 0x0a0c0e);
     }
     const toCell = (wx: number, wz: number) => ({ i: Math.floor((wx - ox) / sx), j: Math.floor((wz - oz) / sz) });
-    const label = (wx: number, wz: number, glyph: string, col: number, name?: string) => {
+    // cases déjà écrites (glyphes et noms) : un nom de marqueur ne s'écrit pas par-dessus un autre (clé = rangée × 4096 + colonne)
+    const used = new Set<number>();
+    const label = (wx: number, wz: number, glyph: string, col: number, name?: string, apart = false) => {
       const { i, j } = toCell(wx, wz);
       if (i < 0 || j < 0 || i >= mw || j >= mh) return;
       g.text(x + 1 + i, y + 1 + j, glyph, col, 0x0a0c0e);
-      if (name && i + name.length + 2 < mw) g.text(x + 3 + i, y + 1 + j, name, col, 0x0a0c0e, 0.6);
+      used.add(j * 4096 + i);
+      if (!name || i + name.length + 2 >= mw) return;
+      // « apart » : même rangée si elle est libre, sinon celle du dessous, puis celle du dessus ; à défaut le nom n'est pas écrit
+      for (const jj of apart ? [j, j + 1, j - 1] : [j]) {
+        if (jj < 0 || jj >= mh || (apart && Array.from({ length: name.length }, (_, k) => jj * 4096 + i + 2 + k).some((c) => used.has(c)))) continue;
+        g.text(x + 3 + i, y + 1 + jj, name, col, 0x0a0c0e, 0.6);
+        for (let k = 0; k < name.length; k++) used.add(jj * 4096 + i + 2 + k);
+        break;
+      }
     };
     for (const s of civ.settlements) if (st.discovered.has(`settlement:${s.id}`)) { const [gl, col] = SET_GLYPH[s.type]; label(s.x, s.z, gl, col, this.zoom >= 2 || s.type === 'capitale' || s.type === 'ville' || s.id === civ.startId ? s.name : undefined); }
     for (const p of civ.pois) if (st.discovered.has(`poi:${p.id}`)) label(p.x, p.z, p.dungeonId >= 0 ? 'Ω' : p.kind === 'camp de bandits' ? 'x' : '¤', p.kind === 'camp de bandits' ? C.red : C.cyan, this.zoom >= 3 ? p.name : undefined);
+    for (const m of game.poss.markers()) label(m.x, m.z, m.glyph, m.color, this.zoom >= 2 ? m.name : undefined, true);
     for (const q of game.quests.quests) if (q.status === 'active' && q.target && Math.floor(performance.now() / 400) % 2) label(q.target.x, q.target.z, '!', C.yellow);
     const arrows = ['▲', '►', '▼', '◄'];
     label(game.player.x, game.player.z, Math.floor(performance.now() / 300) % 2 ? '@' : arrows[((Math.round(game.player.heading / (Math.PI / 2)) % 4) + 4) % 4], C.white);
-    g.text(x + 2, y + h - 2, `+/- zoom (×${this.zoom}) · flèches : déplacer · Espace : recentrer · M/Échap : fermer · ◙ capitale ■ ville ⌂ village ╬ château Ω souterrain x bandits ! quête`.slice(0, w - 4), C.dim);
+    // légende : coupée par morceaux entiers (jamais au milieu d'un mot) quand la fenêtre est étroite
+    const legend: [string, string][] = [[`+/- zoom (×${this.zoom})`, ''], ['flèches : déplacer', ' · '], ['Espace : recentrer', ' · '], ['M/Échap : fermer', ' · '], ['◙ capitale', ' · '], ['■ ville', ' '], ['⌂ village', ' '], ['╬ château', ' '], ['Ω souterrain', ' '], ['x bandits', ' '], ['! quête', ' ']];
+    if (game.poss.markers().length) legend.push(['♥ maison', ' '], ['h cheval', ' '], ['☻ mercenaire', ' ']);
+    let help = '';
+    for (const [t, sep] of legend) { const next = help ? help + sep + t : t; if (next.length > w - 4) break; help = next; }
+    g.text(x + 2, y + h - 2, help, C.dim);
   }
 
   input(ctx: UICtx): void {

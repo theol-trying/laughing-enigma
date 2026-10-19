@@ -3,6 +3,7 @@ import type { Player } from '../entities/Player';
 import { MONSTERS } from '../entities/Monster';
 import { perceives, playerNoise, type Env } from './Perception';
 import { hitEntity, hitPlayer, type CombatHost } from '../gameplay/Combat';
+import { allyTargetable } from '../gameplay/Companions';
 import type { ChunkManager } from '@ascii-fort/worldgen/ChunkManager';
 import type { CircleCollider, SegCollider, Platform } from '@ascii-fort/worldgen/Chunk';
 import { segDist } from '@ascii-fort/core/math';
@@ -29,7 +30,7 @@ function targetPos(id: string, ctx: MonsterCtx): { x: number; z: number; y: numb
   if (id === 'player') { const p = ctx.player; return { x: p.x, z: p.z, y: p.y, alive: !p.dead, ent: null }; }
   if (id.startsWith('p:')) { const o = ctx.others.find((x) => x.id === id); return o ? { x: o.x, z: o.z, y: o.y, alive: !o.dead, ent: null } : null; }
   const t = ctx.ents.find((e) => e.id === id);
-  return t ? { x: t.x, z: t.z, y: t.y, alive: t.alive, ent: t } : null;
+  return t ? { x: t.x, z: t.z, y: t.y, alive: t.alive && (!t.ally || allyTargetable(t.ally)), ent: t } : null;   // un compagnon à terre, gelé ou monté n'est plus une cible
 }
 
 export function thinkMonster(e: Entity, ctx: MonsterCtx): void {
@@ -72,7 +73,7 @@ export function thinkMonster(e: Entity, ctx: MonsterCtx): void {
     const cands: { id: string; x: number; z: number; y: number; stealth: number; noise: number; invisible?: boolean }[] = [];
     if (!p.dead) cands.push({ id: 'player', x: p.x, z: p.z, y: p.y, stealth: p.crouch ? Math.min(0.95, 0.75 + p.stealthBonus) : 0, noise: playerNoise(p), invisible: p.invisible });
     for (const o of ctx.others) if (!o.dead) cands.push({ id: o.id, x: o.x, z: o.z, y: o.y, stealth: o.crouch ? Math.min(0.95, 0.75 + (o.stealthBonus ?? 0)) : 0, noise: (o.sprint ? 1 : o.crouch ? 0 : 0.25) * (o.noiseMul ?? 1) });
-    if (HOSTILE_TO_VILLAGERS.has(m.def)) for (const o of ctx.ents) if (o.npc && o.alive && Math.hypot(o.x - e.x, o.z - e.z) < m.perception) cands.push({ id: o.id, x: o.x, z: o.z, y: o.y, stealth: 0, noise: 0.2 });
+    if (HOSTILE_TO_VILLAGERS.has(m.def)) for (const o of ctx.ents) if ((o.npc || (o.ally && allyTargetable(o.ally))) && o.alive && Math.hypot(o.x - e.x, o.z - e.z) < m.perception) cands.push({ id: o.id, x: o.x, z: o.z, y: o.y, stealth: 0, noise: 0.2 });
     cands.sort((a, b) => Math.hypot(a.x - e.x, a.z - e.z) - Math.hypot(b.x - e.x, b.z - e.z));
     for (const c of cands) {
       if (Math.hypot(c.x - e.x, c.z - e.z) > m.perception * 1.2) break;

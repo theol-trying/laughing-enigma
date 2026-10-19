@@ -177,6 +177,29 @@ export class AudioEngine {
   /** talent appris, point de talent gagné : arpège ascendant */
   talent(): void { this.tone(523, 0.14, 0.1, 'triangle'); this.tone(659, 0.14, 0.1, 'triangle', 0, undefined, 0.09); this.tone(988, 0.3, 0.12, 'triangle', 0, undefined, 0.18); this.burst(4200, 'highpass', 0.12, 0.05, 1, undefined, 0.2); }
 
+  // ---------------------------------------------------------------- cheval, coffre, achats
+  /** Sabots : trot (2 temps) ou galop (3 temps, plus rapprochés), claquants sur la pierre, sourds sur l'herbe et la neige. */
+  hoof(gallop: boolean, s: Surface): void {
+    const hard = s === 'pierre' || s === 'bois', f = s === 'pierre' ? 2000 : s === 'bois' ? 520 : s === 'neige' ? 800 : 620;
+    const beats = gallop ? 3 : 2;
+    for (let i = 0; i < beats; i++) this.burst(f * (i === beats - 1 ? 1.15 : 1), hard ? 'bandpass' : 'lowpass', 0.05, hard ? 0.2 : 0.17, 2, undefined, i * (gallop ? 0.07 : 0.1));
+  }
+  /** Hennissement : appel (au sifflet), cri (blessé) ou mort. */
+  whinny(kind: 'appel' | 'cri' | 'mort', p?: Pos): void {
+    const dead = kind === 'mort', base = dead ? 520 : 700, dur = kind === 'appel' ? 0.7 : 0.45;
+    this.tone(base, dur, 0.22, 'sawtooth', 0.55, p);
+    this.tone(base * 1.5, dur * 0.8, 0.1, 'triangle', 0.5, p, 0.05);
+    this.burst(1400, 'bandpass', dur * 0.6, 0.06, 2, p);
+  }
+  /** Sifflet du cavalier : deux notes montantes. */
+  whistle(): void { this.tone(1500, 0.18, 0.12, 'sine', 1.5); this.tone(2200, 0.3, 0.1, 'sine', 0.8, undefined, 0.2); }
+  /** On se met en selle ou on descend : cuir qui craque, petit choc. */
+  mount(): void { this.burst(380, 'bandpass', 0.1, 0.25, 2); this.tone(110, 0.1, 0.2, 'triangle', 0.6); }
+  /** Couvercle du coffre : grincement à l'ouverture, claquement à la fermeture. */
+  chest(open: boolean): void { if (open) { this.tone(170, 0.3, 0.12, 'sawtooth', 1.6); this.burst(300, 'lowpass', 0.15, 0.2); } else { this.burst(250, 'lowpass', 0.12, 0.3); this.tone(120, 0.1, 0.18, 'triangle', 0.6); } }
+  /** Pièces qui tombent dans une main (achat). */
+  coin(): void { this.tone(1320, 0.08, 0.1, 'triangle'); this.tone(1760, 0.18, 0.1, 'triangle', 0, undefined, 0.07); }
+
   // ---------------------------------------------------------------- créatures (spatialisées)
   /** Cri d'une créature : alerte (elle vous a repéré), attaque ou mort. */
   creature(type: string, kind: 'alerte' | 'attaque' | 'mort', p: Pos): void {
@@ -191,6 +214,9 @@ export class AudioEngine {
         break;
       case 'cerf':
         this.tone(dead ? 380 : 520, dead ? 0.5 : 0.18, 0.18, 'sawtooth', 0.5, p);
+        break;
+      case 'cheval':
+        this.whinny(dead ? 'mort' : kind === 'attaque' ? 'cri' : 'appel', p);
         break;
       case 'sanglier':
         for (let i = 0; i < (dead ? 4 : 2); i++) this.burst(240, 'lowpass', 0.12, 0.4, 2, p, i * 0.15);

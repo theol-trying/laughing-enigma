@@ -24,9 +24,9 @@ export function lineOfSight(chunks: ChunkManager<any>, ax: number, az: number, b
   return true;
 }
 
-/** Bruit d'un joueur : course 1, marche 0,35, immobile 0,05 ; accroupi : 0,06 en avançant, rien à l'arrêt. `noiseMul` : talents (× bruit). */
-export function playerNoise(p: { sprinting: boolean; moving: boolean; crouch: boolean; quiet?: boolean; noiseMul?: number }): number {
-  const n = p.sprinting ? 1 : p.crouch ? (p.moving ? 0.06 : 0) : p.moving ? 0.35 : 0.05;
+/** Bruit d'un joueur : course 1, marche 0,35 (trot à cheval 0,6), immobile 0,05 ; accroupi : 0,06 en avançant, rien à l'arrêt. `noiseMul` : talents (× bruit). */
+export function playerNoise(p: { sprinting: boolean; moving: boolean; crouch: boolean; quiet?: boolean; noiseMul?: number; mounted?: boolean }): number {
+  const n = p.sprinting ? 1 : p.crouch ? (p.moving ? 0.06 : 0) : p.moving ? (p.mounted ? 0.6 : 0.35) : 0.05;   // à cheval au trot : 0,6 (sabots)
   return n * (p.quiet ? 0.25 : 1) * (p.noiseMul ?? 1);
 }
 

@@ -3,6 +3,7 @@ import type { World } from '@ascii-fort/worldgen/World';
 import type { CircleCollider, SegCollider, Platform } from '@ascii-fort/worldgen/Chunk';
 import { clamp, segDist } from '@ascii-fort/core/math';
 import { WORLD } from '@ascii-fort/worldgen/constants';
+import { insideRect, type Rect } from '../gameplay/Estate';
 
 /** Joueur : contrôleur à la première personne, gravité, pentes, nage, collisions. */
 /** hauteur franchie d'un pas (marches, pierres basses) */
@@ -52,6 +53,10 @@ export class Player {
   dashT = 0; dashX = 0; dashZ = 0;
   /** sous un toit (plancher de bâtiment) : pas de pluie à l'écran */
   underRoof = false;
+  /** à cheval (posé chaque image par Possessions) : allures (m/s), hauteur d'œil ajoutée (lissée), rayon, cheval essoufflé (pas de galop) */
+  mounted = false; mountLift = 0; mountTrot = 8; mountGallop = 12.5; mountRadius = 0.6; mountTired = false;
+  /** empreintes de bâtiments fermées au cheval ; raisons du dernier refus d'avancer */
+  keepOut: Rect[] | null = null; blockedBuilding = false; blockedWater = false;
 
   /** Effets dans le temps : poison, brûlure, givre (ralentit), régénération d'endurance. */
   /** multiplicateur de récupération d'endurance (bonus temporaires) */
@@ -64,7 +69,7 @@ export class Player {
     if (this.invuln > 0) this.invuln -= dt;
     if (this.hurt > 0) this.hurt -= dt;
     if (this.hitT > 0) this.hitT -= dt;
-    const regen = this.blocking ? 4 : this.sprinting ? -14 : 16 * this.staminaRegen;
+    const regen = this.blocking ? 4 : this.sprinting && !this.mounted ? -14 : 16 * this.staminaRegen;   // à cheval, c'est le cheval qui s'épuise
     this.stamina = Math.max(0, Math.min(this.maxStamina, this.stamina + regen * dt));
     if (dmg > 0) { this.hp -= dmg; if (this.hp <= 0) { this.hp = 0; this.dead = true; } }
     return dmg;
@@ -73,7 +78,7 @@ export class Player {
   private segs: SegCollider[] = [];
   private plats: Platform[] = [];
 
-  get eyeY(): number { return this.y + (this.crouch ? 1.05 : this.eye); }
+  get eyeY(): number { return this.y + this.mountLift + (this.crouch ? 1.05 : this.eye); }
 
   look(input: Input, sens = 0.0022): void {
     if (!input.locked) return;
@@ -99,14 +104,19 @@ export class Player {
   update(dt: number, input: Input, world: World<any>, speedMul = 1): void {
     const f = input.isDown('KeyW') ? 1 : 0, b = input.isDown('KeyS') ? 1 : 0;
     const l = input.isDown('KeyA') ? 1 : 0, r = input.isDown('KeyD') ? 1 : 0;
-    if (input.pressed('KeyC') && !this.noclip) this.crouch = !this.crouch;
-    if (input.isDown('ShiftLeft') && f > 0) this.crouch = false;
+    if (input.pressed('KeyC') && !this.noclip && !this.mounted) this.crouch = !this.crouch;
+    if (this.mounted || (input.isDown('ShiftLeft') && f > 0)) this.crouch = false;
     const sh = Math.sin(this.heading), ch = Math.cos(this.heading);
     let mx = (f - b) * sh + (r - l) * ch, mz = -(f - b) * ch + (r - l) * sh;
     const ml = Math.hypot(mx, mz);
     if (ml > 0) { mx /= ml; mz /= ml; }
     this.moving = ml > 0;
-    this.sprinting = input.isDown('ShiftLeft') && f > 0 && !this.crouch && this.stamina > 2;
+    if (this.mounted && ml > 0) {
+      // à cheval : on avance bien, on se déporte à peine (×0,6) et on recule mal (×0,4) — après la normalisation, sinon elle l'annulerait
+      const fw = mx * sh - mz * ch, sd = mx * ch + mz * sh, kf = fw >= 0 ? 1 : 0.4;
+      mx = fw * kf * sh + sd * 0.6 * ch; mz = -fw * kf * ch + sd * 0.6 * sh;
+    }
+    this.sprinting = input.isDown('ShiftLeft') && f > 0 && !this.crouch && (this.mounted ? !this.mountTired : this.stamina > 2);
 
     if (this.noclip) {
       const sp = (this.sprinting ? 60 : 15) * dt;
@@ -119,8 +129,8 @@ export class Player {
 
     // dans l'eau jusqu'aux genoux ou à la taille : on avance difficilement
     const wade = !this.swimming && this.depth > 0.2 ? 1 - Math.min(1, this.depth) * 0.45 : 1;
-    const speed = (this.swimming ? 2.4 : this.sprinting ? 7 : this.crouch ? 2 : 4.2) * speedMul * wade * (this.frost > 0 ? 0.6 : 1) * (this.blocking ? 0.55 : 1);
-    const acc = this.onGround || this.swimming ? 12 : 2.5;
+    const speed = (this.swimming ? 2.4 : this.mounted ? (this.sprinting ? this.mountGallop : this.mountTrot) : this.sprinting ? 7 : this.crouch ? 2 : 4.2) * speedMul * wade * (this.frost > 0 ? 0.6 : 1) * (this.blocking ? 0.55 : 1);
+    const acc = this.onGround || this.swimming ? (this.mounted ? 4 : 12) : 2.5;   // le cheval prend de l'élan
     const k = Math.min(1, acc * dt);
     this.vx += (mx * speed - this.vx) * k;
     this.vz += (mz * speed - this.vz) * k;
@@ -153,23 +163,35 @@ export class Player {
         if (grade > 1.15) { this.vx -= ex * 9 * dt; this.vz -= ez * 9 * dt; nx -= ex * 1.5 * dt; nz -= ez * 1.5 * dt; }
       }
     }
-    // collisions horizontales (troncs, rochers, murs)
+    // collisions horizontales (troncs, rochers, murs) ; monté, le rayon est celui du cheval
+    const rad = this.mounted ? this.mountRadius : this.radius;
     for (let it = 0; it < 2; it++) {
       for (const c of this.circles) {
         if (this.y + 1.7 < c.bottom || this.y > c.top - 0.2 || c.top - this.y <= STEP) continue;
-        const dx = nx - c.x, dz = nz - c.z, d = Math.hypot(dx, dz), min = c.r + this.radius;
+        const dx = nx - c.x, dz = nz - c.z, d = Math.hypot(dx, dz), min = c.r + rad;
         if (d < min && d > 1e-5) { nx = c.x + (dx / d) * min; nz = c.z + (dz / d) * min; }
       }
       for (const s of this.segs) {
         if (this.y + 1.7 < s.bottom || this.y > s.top - 0.3 || s.top - this.y <= STEP) continue;
         const { d, t } = segDist(nx, nz, s.ax, s.az, s.bx, s.bz);
-        const min = s.r + this.radius;
+        const min = s.r + rad;
         if (d < min) {
           const px = s.ax + (s.bx - s.ax) * t, pz = s.az + (s.bz - s.az) * t;
           const dx = nx - px, dz = nz - pz, dl = Math.hypot(dx, dz) || 1;
           nx = px + (dx / dl) * min; nz = pz + (dz / dl) * min;
         }
       }
+    }
+    // à cheval : ni dans un bâtiment (la porte est trop étroite pour la monture), ni dans l'eau profonde (> 0,9 m)
+    this.blockedBuilding = false; this.blockedWater = false;
+    if (this.mounted) {
+      const inKeep = (x: number, z: number) => !!this.keepOut?.some((r) => insideRect(r, x, z));
+      if (inKeep(nx, nz)) { this.blockedBuilding = true; if (!inKeep(nx, oz)) nz = oz; else if (!inKeep(ox, nz)) nx = ox; else { nx = ox; nz = oz; } }
+      // profondeur mesurée depuis le sol réel (plateformes comprises) : le tablier d'un pont n'est pas de l'eau profonde
+      const deep = (x: number, z: number) => { const w = world.waterAt(x, z); return Number.isNaN(w) ? 0 : Math.max(0, w - this.groundAt(world, x, z, this.y)); };
+      const dn = deep(nx, nz);
+      if (dn > 0.9 && dn > this.depth) { this.blockedWater = true; nx = ox; nz = oz; }
+      if (this.blockedBuilding || this.blockedWater) { this.vx *= 0.2; this.vz *= 0.2; }
     }
     if (this.bounded) { this.x = clamp(nx, 2, WORLD - 2); this.z = clamp(nz, 2, WORLD - 2); } else { this.x = nx; this.z = nz; }
 

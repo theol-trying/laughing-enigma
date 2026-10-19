@@ -11,9 +11,10 @@ export const meta = {
   ],
 }
 
-const ROOT = '.'
-const GLYPH = 'node scripts/glyphcheck.mjs'
-const RULES = `Contexte : projet ASCII FORT, dossier du projet = répertoire courant (RPG 3D procédural rendu en caractères ; TypeScript, Vite, WebGL2 ; monorepo npm : packages/core, packages/ascii-engine, packages/worldgen, packages/sim, packages/net ; application dans src/ (game/, ui/, audio/, net/) ; serveur Cloudflare dans server/worker.ts ; imports en sous-chemins @ascii-fort/<pkg>/<module>).
+// dossier du projet : args.root (chemin absolu, passé à l'appel) ou répertoire courant
+const ROOT = (args && args.root) || '.'
+const GLYPH = `node ${ROOT}/scripts/glyphcheck.mjs`
+const RULES = `Contexte : projet ASCII FORT dans le dossier ${ROOT} (RPG 3D procédural rendu en caractères ; TypeScript, Vite, WebGL2 ; monorepo npm : packages/core, packages/ascii-engine, packages/worldgen, packages/sim, packages/net ; application dans src/ (game/, ui/, audio/, net/) ; serveur Cloudflare dans server/worker.ts ; imports en sous-chemins @ascii-fort/<pkg>/<module>).
 Règles impératives :
 - NE PAS lancer d'autosave, NE PAS faire de commit/push/checkpoint, NE PAS modifier PROGRESS.md, README.md ni CLAUDE.md, NE PAS lancer de serveur ni de navigateur : l'orchestrateur s'en charge.
 - Textes du jeu en français. Tout caractère non ASCII affiché doit exister dans l'atlas (packages/ascii-engine/src/GlyphAtlas.ts) : vérifier avec \`${GLYPH}\` (sortie vide = OK).

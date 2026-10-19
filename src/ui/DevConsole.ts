@@ -24,6 +24,11 @@ const HELP = [
   'weather <clair|couvert|pluie|brouillard|orage|neige|auto>',
   'give <objet[~état]> [n] | gold <n> | xp <n> | usure <0-100>   objets, or, expérience, état de l’équipement porté',
   'talents [liste|reset] | talent <id|nom> [force]   talents : bilan, ids, remise à zéro, apprendre (xp 400 = niveau 3 = 1 point)',
+  'cheval [bidet|palefroi|destrier|bai|alezan|gris|noir|palomino|blanc|soin|tue|retire]   donne un cheval (4 m devant vous), le soigne, le tue, le retire',
+  'monture                                 monte ou descend sans condition de distance',
+  'mercenaire [ko|jours <n>|retire]        engage un mercenaire (niveau du joueur moins 1, 7 jours), le met à terre, règle son contrat, le renvoie',
+  'maison [aller|retire]                   possède la maison à vendre de l’implantation éligible la plus proche (aller : s’y téléporter)',
+  'coffre | biens                          ouvre le coffre personnel ; résumé maison, coffre, cheval, mercenaire',
 ];
 
 export class DevConsole implements Screen {
@@ -45,7 +50,11 @@ export class DevConsole implements Screen {
     };
   }
   private closing = false;
+  /** fermeture de cet écran par identité (mémorisée à chaque image) : valable même si un autre écran s'est ouvert par-dessus */
+  private closeNow: (() => void) | null = null;
   private close() { this.inp.textSink = null; this.closing = true; this.onClose(); }
+  /** Ferme la console tout de suite : un écran ouvert depuis elle (coffre) resterait sinon sans clavier, son textSink avalant les touches. */
+  private leave() { this.close(); if (this.closeNow) { this.closing = false; this.closeNow(); } }
   private print(text: string, color = C.text) { this.out.push({ text, color }); if (this.out.length > 200) this.out.shift(); }
 
   private run(cmd: string) {
@@ -138,6 +147,12 @@ export class DevConsole implements Screen {
         for (const tr of TREES) this.print(`${tr.short} : ` + (TALENTS.filter((t) => t.tree === tr.id && ch.talentRank(t.id)).map((t) => `${t.id} ${ch.talentRank(t.id)}/${t.max}`).join(', ') || '-'), C.dim);
         break;
       }
+      case 'cheval': case 'monture': case 'mercenaire': case 'maison': case 'coffre': case 'biens': {
+        const res = g.poss.dev(c, args);
+        for (const l of res) this.print(l.text, l.err ? C.red : C.text);
+        if (c === 'coffre' && !res.some((l) => l.err)) this.leave();   // le coffre s'est ouvert par-dessus : la console s'efface
+        break;
+      }
       case '': break;
       default: this.print('commande inconnue (help)', C.red);
     }
@@ -150,5 +165,5 @@ export class DevConsole implements Screen {
     lines.forEach((l, i) => g.text(3, 1 + i, l.text.slice(0, w - 4), l.color));
     g.text(3, h - 2, `> ${this.line}${Math.floor(performance.now() / 500) % 2 ? '▌' : ' '}`.slice(0, w - 4), C.white);
   }
-  input(ctx: UICtx): void { if (this.closing) { this.closing = false; ctx.close(); } }
+  input(ctx: UICtx): void { this.closeNow = ctx.close; if (this.closing) { this.closing = false; ctx.close(); } }
 }

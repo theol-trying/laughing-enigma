@@ -1,6 +1,7 @@
 import { M } from '@ascii-fort/ascii-engine/Materials';
 import { SHAPE } from '@ascii-fort/ascii-engine/Shapes';
 import type { InstanceBuffer } from '@ascii-fort/ascii-engine/Renderer';
+import { COATS, type MercArch } from '../gameplay/Companions';
 
 // Modèles procéduraux animés : un squelette (hanches, genoux, épaules, coudes, cou, mâchoire,
 // queue…) habillé de volumes arrondis — sphères, troncs de cône, cylindres, cônes, boîtes.
@@ -248,7 +249,7 @@ export function humanoid(l: HumanLook): ModelDef {
 
 // ---------------------------------------------------------------- quadrupèdes et araignées
 
-function quadruped(color: number, s: number, letter: string, mat: number = M.FUR, mane = color, snoutC = 0x3a3632, extra?: (R: Rig, head: number) => void, legK = 1): ModelDef {
+function quadruped(color: number, s: number, letter: string, mat: number = M.FUR, mane = color, snoutC = 0x3a3632, extra?: (R: Rig, head: number, body: number, neck: number, tail: number) => void, legK = 1): ModelDef {
   const R = new Rig();
   const k = (p: Pose) => 1 - p.dead;
   const body = R.bone(0, 0, 0.62 * s * legK, 0, (p, t, r) => { r.dy = abs(sin(p.walk)) * 0.03 * s * k(p); r.pitch = sin(p.walk * 2) * 0.03 * k(p); });
@@ -274,7 +275,7 @@ function quadruped(color: number, s: number, letter: string, mat: number = M.FUR
   }
   const tail = R.bone(body, 0, 0.1 * s, 0.55 * s, (p, t, r) => { r.yaw = sin(t * 7 + s) * 0.25 * k(p); r.pitch = -sin(p.walk) * 0.1 * k(p); }, { pitch: 2.0 });
   R.part(tail, SHAPE.TAPER, 0, 0.19 * s, 0, 0.11 * s, 0.4 * s * (legK > 1 ? 0.4 : 1), 0.11 * s, color, mat);
-  extra?.(R, head);
+  extra?.(R, head, body, neck, tail);
   return R.done(letter, 1.0 * s * legK, 0.45 * s, true, 'côté');
 }
 
@@ -348,6 +349,56 @@ export function creatureModel(type: string): ModelDef {
     default: m = humanoid({ skin: 0xc89870, shirt: 0x6a6a6a, pants: 0x3a3a3a, hair: 0x2a1a10 });
   }
   MODEL_CACHE.set(type, m);
+  return m;
+}
+
+// ---------------------------------------------------------------- compagnons : cheval sellé, mercenaire
+
+const HORSE_CACHE = new Map<number, ModelDef>();
+const LEATHER_BROWN = 0x5a3a22, SADDLE_CLOTH = 0x8a2a2a, TACK = 0x3a2a1c;
+
+/** Cheval de selle (une robe par modèle, mis en cache) : plus grand que le cerf (dos à 1,5 m), crinière, longue queue, selle, étriers, bride. */
+export function horseModel(coat: number): ModelDef {
+  const c = ((Math.floor(coat) % COATS.length) + COATS.length) % COATS.length;
+  let m = HORSE_CACHE.get(c);
+  if (m) return m;
+  const { body: color, mane } = COATS[c], s = 1.45;
+  m = quadruped(color, s, 'h', M.FUR, color, 0x2a2420, (R, head, bodyBone, neck, tail) => {
+    // crinière le long du cou, toupet, queue longue
+    R.part(neck, SHAPE.BOX, 0, 0.17 * s, -0.04 * s, 0.05 * s, 0.3 * s, 0.1 * s, mane, M.FUR, { pitch: -1.0 });
+    R.part(head, SHAPE.BOX, 0, 0.14 * s, 0, 0.05 * s, 0.1 * s, 0.1 * s, mane, M.FUR);
+    R.part(tail, SHAPE.TAPER, 0, 0.45 * s, 0, 0.13 * s, 0.6 * s, 0.13 * s, mane, M.FUR);
+    // selle : tapis, siège, troussequin, pommeau ; étriers ; bride sur le museau
+    R.part(bodyBone, SHAPE.BOX, 0, 0.22 * s, 0.06 * s, 0.34 * s, 0.05 * s, 0.38 * s, SADDLE_CLOTH, M.CLOTH);
+    R.part(bodyBone, SHAPE.BOX, 0, 0.255 * s, 0.06 * s, 0.3 * s, 0.05 * s, 0.3 * s, LEATHER_BROWN, M.LEATHER);
+    R.part(bodyBone, SHAPE.BOX, 0, 0.3 * s, 0.2 * s, 0.3 * s, 0.09 * s, 0.05 * s, LEATHER_BROWN, M.LEATHER);
+    R.part(bodyBone, SHAPE.BOX, 0, 0.29 * s, -0.08 * s, 0.07 * s, 0.07 * s, 0.07 * s, LEATHER_BROWN, M.LEATHER);
+    for (const side of [-1, 1]) R.part(bodyBone, SHAPE.BOX, side * 0.2 * s, -0.05 * s, 0.06 * s, 0.02 * s, 0.22 * s, 0.03 * s, TACK, M.LEATHER);
+    R.part(head, SHAPE.BOX, 0, -0.03 * s, -0.19 * s, 0.14 * s, 0.03 * s, 0.03 * s, TACK, M.LEATHER);
+  }, 1.3);
+  HORSE_CACHE.set(c, m);
+  return m;
+}
+
+const MERC_CACHE = new Map<string, ModelDef>();
+const MERC_SKINS = [0xe0b090, 0xc89870, 0xa87850, 0xf0c8a8, 0x8a6040];
+const MERC_HAIRS = [0x2a1a10, 0x5a3a20, 0x8a6a30, 0xc8a050, 0x6a6a6a, 0x1a1a1a, 0xa04020];
+const MERC_TUNICS = [0x5a4a3a, 0x3a4a5a, 0x4a5a3a, 0x6a3a2a, 0x4a4a4a, 0x5a3a4a];
+
+/** Mercenaire : apparence (0..255), arme selon l'archétype, tabard brique (distinct des gardes) ; palier 1 : casque ; palier 2 : + cape et mailles. */
+export function mercModel(look: number, arch: MercArch, tier: 0 | 1 | 2, sex: 'm' | 'f'): ModelDef {
+  const l = Math.floor(look) & 255, key = `${l}:${arch}:${tier}:${sex}`;
+  let m = MERC_CACHE.get(key);
+  if (m) return m;
+  const f = sex === 'f';
+  m = humanoid({
+    skin: MERC_SKINS[l % 5], hair: MERC_HAIRS[(l >> 2) % 7], shirt: tier >= 2 ? 0x8a8a94 : MERC_TUNICS[(l >> 5) % 6], pants: 0x3a3228,
+    weapon: arch === 'lame' ? 'épée' : arch === 'lancier' ? 'lance' : 'hache', shield: arch === 'lame', helmet: tier >= 1, cape: tier >= 2 ? 0x4a1a1a : undefined,
+    tabard: 0x6a2a2a, emblem: 0xd8c8a0, face: true, scale: f ? 0.93 : 1, letter: 'M',
+    hairStyle: f ? (['long', 'chignon', 'queue'] as const)[l % 3] : (['court', 'queue', 'court', 'chauve'] as const)[(l >> 3) % 4],
+    beardStyle: !f && (l >> 1) % 3 === 0 ? (['barbe', 'moustache', 'bouc'] as const)[(l >> 4) % 3] : undefined,
+  });
+  MERC_CACHE.set(key, m);
   return m;
 }
 

@@ -18,6 +18,18 @@ import { de } from '@ascii-fort/worldgen/civilization/Names';
 export interface DialogueOption { label: string; go: () => DialogueNode | null }
 export interface DialogueNode { speaker: string; sub: string; mood: string; lines: string[]; options: DialogueOption[] }
 
+/** Service proposé par l'aubergiste ou le fermier : cheval, mercenaire (engagement ou renouvellement), maison. */
+export interface ServiceOffer {
+  id: 'cheval' | 'mercenaire' | 'renouveler' | 'maison';
+  /** libellé de l'option (le prix est ajouté) */
+  label: string;
+  /** ce que dit le PNJ de cette offre (affiché dans le nœud) */
+  info: string;
+  price: number;
+  /** vrai : simple information (déjà possédé, plus de stock, contrat trop long), pas d'option d'achat */
+  locked?: boolean;
+}
+
 export interface DialogueHost {
   world: World<any>; rep: Reputation; economy: Economy; rumors: Rumors; quests: QuestSystem; time: GameTime; state: WorldState;
   weather(): string;
@@ -28,6 +40,10 @@ export interface DialogueHost {
   repairQuote?(n: NPCData): { count: number; cost: number };
   /** le forgeron répare, portés d'abord, tant que l'or suffit */
   repairAll?(n: NPCData): { count: number; cost: number; total: number };
+  /** cheval, mercenaire et maison à vendre (aubergiste, fermier d'un lieu sans auberge) ; vide : rien à proposer */
+  estateOffers?(n: NPCData): ServiceOffer[];
+  /** conclut l'achat (or déduit, bien livré) et renvoie la réplique du PNJ ; un refus est une réplique, jamais une exception */
+  estateBuy?(n: NPCData, id: ServiceOffer['id']): string;
 }
 
 const DIRS = ['au nord', 'au nord-est', "à l'est", 'au sud-est', 'au sud', 'au sud-ouest', "à l'ouest", 'au nord-ouest'];
@@ -80,6 +96,7 @@ export class DialogueSystem {
     const opts: DialogueOption[] = [];
     if (h.economy.stock(n, h.time.day).length) opts.push({ label: 'Montre-moi tes marchandises (commerce).', go: () => { h.openTrade(e); return null; } });
     if (n.profession === 'forgeron' && h.repairQuote) { const q = h.repairQuote(n); if (q.count) opts.push({ label: `Peux-tu réparer mon équipement ? (${q.count} objet${q.count > 1 ? 's' : ''}, ${q.cost} or)`, go: () => this.repair(e) }); }
+    if (h.estateOffers?.(n).length) opts.push({ label: n.profession === 'fermier' ? 'As-tu un cheval à vendre ?' : 'Que proposes-tu ? (écurie, hommes d’armes, maison)', go: () => this.services(e) });
     const offer = h.quests.offerFor(n.id), active = h.quests.activeFor(n.id);
     if (offer) opts.push({ label: 'Tu as l\'air soucieux…', go: () => this.questOffer(e) });
     if (active) opts.push({ label: h.quests.canTurnIn(active) ? `À propos de « ${active.title} »… c'est réglé.` : `À propos de « ${active.title} »…`, go: () => this.questProgress(e) });
@@ -102,6 +119,31 @@ export class DialogueSystem {
     if (!r.count) return this.node(e, ['Ça te coûtera plus que ce que tu as en poche. Reviens quand tu auras de quoi payer.'], back);
     const done = r.count < r.total ? `Avec ce que tu as, j'en répare ${r.count} sur ${r.total}.` : this.pick(n, 11, ['Et voilà : comme neuf. Prends-en soin.', 'Un coup de marteau, un coup de meule… c’est réparé.']);
     return this.node(e, [done, `Ça fait ${r.cost} pièce${r.cost > 1 ? 's' : ''}.`], back);
+  }
+
+  /** Services de l'auberge ou de la ferme ; chaque achat renvoie un nœud (un go() qui renvoie null fermerait l'écran). */
+  private services(e: Entity): DialogueNode {
+    const n = e.npc!, h = this.h, offers = h.estateOffers?.(n) ?? [], back = () => this.again(e), again = () => this.services(e);
+    const intro = n.profession === 'fermier' ? 'Une bête de trait ou de selle ? Voyons ce qu’il y a dans l’étable.'
+      : this.pick(n, 12, ['Une monture, un bras à louer, un toit à vendre : voyons ce que j’ai.', 'Écurie, hommes d’armes, maison… Que cherches-tu ?']);
+    const options: DialogueOption[] = offers.filter((o) => !o.locked).map((o) => ({
+      label: `${o.label} (${o.price} or)`,
+      go: () => (o.id === 'maison' ? this.confirmHouse(e, o) : this.node(e, [h.estateBuy!(n, o.id)], again)),
+    }));
+    options.push({ label: 'Autre chose…', go: back }, { label: 'Au revoir.', go: () => null });
+    return { ...this.head(e, h.rep.mood(n)), lines: [intro, ...offers.map((o) => o.info)], options };
+  }
+
+  /** L'achat d'une maison se confirme : c'est la plus grosse dépense du jeu. */
+  private confirmHouse(e: Entity, o: ServiceOffer): DialogueNode {
+    const n = e.npc!, h = this.h, again = () => this.services(e);
+    return {
+      ...this.head(e, h.rep.mood(n)), lines: [`${o.price} pièces, l’acte et les clés. Une fois signé, la maison est à toi : le lit, le coffre, la porte. Tu es sûr ?`],
+      options: [
+        { label: `Oui, topons là. (${o.price} or)`, go: () => this.node(e, [h.estateBuy!(n, 'maison')], again) },
+        { label: 'Pas maintenant.', go: again },
+      ],
+    };
   }
 
   private node(e: Entity, lines: string[], back: () => DialogueNode | null): DialogueNode {
@@ -142,7 +184,12 @@ export class DialogueSystem {
           const gn = GOOD_NAMES[sh.good], pl = gn.startsWith('les ');
           return [`${gn.charAt(0).toUpperCase() + gn.slice(1)} n'arrive${pl ? 'nt' : ''} plus de ${from}. Les convois se font attaquer sur la route.`, 'Du coup, je dois vendre plus cher. Ça ne plaît à personne, à moi le premier.'];
         }
-        return n.profession === 'aubergiste' ? ['Les voyageurs vont et viennent. Une chambre, c\'est dix pièces la nuit.', 'Et la soupe est chaude.'] : ['Les affaires vont, les routes sont sûres. Pourvu que ça dure.'];
+        if (n.profession !== 'aubergiste') return ['Les affaires vont, les routes sont sûres. Pourvu que ça dure.'];
+        // ce que l'auberge propose réellement (écurie, hommes d'armes, maison), dit en passant : une offre verrouillée
+        // (déjà possédée, plus de stock) ou le renouvellement d'un contrat en cours ne se vante pas
+        const ids = (h.estateOffers?.(n) ?? []).filter((o) => !o.locked).map((o) => o.id);
+        const extra = [ids.includes('cheval') ? 'une écurie' : '', ids.includes('mercenaire') ? 'un mercenaire au fond de la salle' : '', ids.includes('maison') ? 'une maison à vendre' : ''].filter(Boolean);
+        return ['Les voyageurs vont et viennent. Une chambre, c\'est dix pièces la nuit.', 'Et la soupe est chaude.' + (extra.length ? ` J’ai aussi ${extra.join(', ').replace(/, ([^,]*)$/, ' et $1')}, si ça t’intéresse.` : '')];
       }
       case 'garde': case 'soldat': {
         const dangers = civ.pois.filter((p) => ['camp de bandits', 'antre du troll', 'tanière de loups'].includes(p.kind) && Math.hypot(p.x - s.x, p.z - s.z) < 2500);

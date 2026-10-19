@@ -1,11 +1,14 @@
 import { Entity, type RemoteTarget } from './Entity';
 export type { RemoteTarget } from './Entity';
 import { generateNPCs, type NPCData } from './NPC';
-import { humanoid, drawModel, type ModelDef, type HumanLook } from './Models';
+import { humanoid, drawModel, horseModel, mercModel, type ModelDef, type HumanLook } from './Models';
 import { buildLairs, buildHerds, makeMonster, dangerAt, dungeonLevel, MONSTERS, type Lair } from './Monster';
 import { NavGrid } from '../ai/Pathfinding';
 import { blockAt, resolveSpot, patrolRoute, type Spot } from '../ai/Schedule';
 import { thinkMonster, moveMonster, turn, type MonsterCtx } from '../ai/MonsterAI';
+import { updateAlly, type AllyCtx } from '../ai/AllyAI';
+import { HORSE_GRADES, MOUNT, newAlly, mercLevel, mercStats, type SavedHorse, type SavedMerc } from '../gameplay/Companions';
+import { houseForSale, rehomeHouses, type HouseRef } from '../gameplay/Estate';
 import { hitEntity, hitPlayer, type CombatHost } from '../gameplay/Combat';
 import { hash2i } from '@ascii-fort/core/RNG';
 import type { World } from '@ascii-fort/worldgen/World';
@@ -84,6 +87,15 @@ export class EntityManager {
   net: EntityNet | null = null;
   private dungeonId = -1;
   private dungeonEnts: Entity[] = [];
+  /** compagnons du joueur (dans `entities`, hors de toute zone d'autorité) : cheval et mercenaire */
+  horse: Entity | null = null;
+  merc: Entity | null = null;
+  private actx: AllyCtx;
+  /** dernier monstre frappé par le joueur (le mercenaire l'attaque aussi) */
+  private playerFoe = { id: '', t: 0 };
+  /** maison à vendre de chaque implantation (calculée sur les données brutes des PNJ) et maison achetée par le joueur */
+  private sale = new Map<number, number | null>();
+  private owned: HouseRef | null = null;
 
   constructor(private host: EntityHost) {
     this.lairs = [...buildLairs(host.world.civ, host.world.seed), ...buildHerds(host.world.civ, host.world.seed)];
@@ -94,6 +106,13 @@ export class EntityManager {
       hash: (e, k) => hash2i(e.id.length * 131 + e.id.charCodeAt(e.id.length - 1) * 17 + e.id.charCodeAt(0), k, e.id.length) / 4294967296,
     };
     host.events.on('entity:killed', (ev) => this.onKilled(ev.victimId));
+    host.events.on('entity:damaged', (d) => { if (d.sourceId === 'player') this.playerFoe = { id: d.targetId, t: 8 }; });
+    this.actx = {
+      player: host.player, ents: this.entities, combat: host.combat, events: host.events,
+      ground: (x, z, y) => this.ground(x, z, y), step: (e, mx, mz) => this.allyStep(e, mx, mz),
+      goto: (e, tx, tz, sp, dt) => this.goto(e, tx, tz, sp, dt), navigable: (e, x, z) => this.navigable(e, x, z),
+      playerFoe: () => (this.playerFoe.t > 0 ? this.playerFoe.id : null),
+    };
   }
 
   // ---------------------------------------------------------------- PNJ (données)
@@ -103,9 +122,31 @@ export class EntityManager {
       const civ = this.host.world.civ;
       const L = this.host.world.civWorld.layouts.find((x) => x.sid === sid);
       l = L ? generateNPCs(civ, civ.settlements[sid], L) : [];
+      if (L) {
+        // maison à vendre : choisie sur les données brutes, puis libérée (ses habitants déménagent) ; ne touche pas à la génération
+        const sale = houseForSale(sid, civ.settlements[sid].type, L.buildings, l);
+        this.sale.set(sid, sale);
+        this.rehome(L, l, sid, sale);
+      }
       this.npcData.set(sid, l);
     }
     return l;
+  }
+  /** Relogement runtime : les maisons réservées (à vendre, achetée) se vident ; seul `home` change. */
+  private rehome(L: Layout, npcs: NPCData[], sid: number, sale: number | null): number {
+    const reserved = new Set<number>();
+    if (sale !== null) reserved.add(sale);
+    if (this.owned?.sid === sid) reserved.add(this.owned.bid);
+    return rehomeHouses(L.buildings, npcs, [...reserved]);
+  }
+  /** Maison à vendre de l'implantation (id de bâtiment), ou null. */
+  saleHouse(sid: number): number | null { this.npcsOf(sid); return this.sale.get(sid) ?? null; }
+  /** Maison achetée par le joueur (null : aucune) : elle est libérée de ses habitants s'ils y sont encore. */
+  setOwnedHouse(h: HouseRef | null): void {
+    this.owned = h;
+    if (!h) return;
+    const l = this.npcData.get(h.sid), L = this.host.world.civWorld.layouts.find((x) => x.sid === h.sid);
+    if (l && L && this.rehome(L, l, h.sid, this.sale.get(h.sid) ?? null) > 0) for (const e of this.zones.get(h.sid)?.ents ?? []) e.thinkT = 0;   // leurs entités recalculent leur poste
   }
   allNpcData(): Map<number, NPCData[]> { return this.npcData; }
   findNpc(id: string): NPCData | undefined { return this.npcsOf(parseInt(id.slice(1), 10)).find((n) => n.id === id); }
@@ -210,6 +251,99 @@ export class EntityManager {
   clear(): void {
     for (const sid of [...this.zones.keys()]) this.deactivate(sid);
     for (const l of this.lairs) if (this.activeLairs.has(l.key)) this.deactivateLair(l);
+  }
+
+  // ---------------------------------------------------------------- compagnons du joueur
+  /** Cheval (un seul) : posé à sa position, robe et grade donnés. */
+  spawnHorse(o: SavedHorse): Entity {
+    this.removeAlly('horse');
+    const g = HORSE_GRADES[o.grade];
+    const e = new Entity('ally:horse', 'monster', 'cheval', o.name, horseModel(o.coat), g.hp);
+    e.x = o.x; e.z = o.z; e.heading = o.heading; e.y = this.host.world.heightAt(o.x, o.z);
+    e.hp = Math.max(1, Math.min(g.hp, o.hp));
+    e.ally = newAlly('horse', { grade: o.grade, look: o.coat, armor: g.armor, maxStamina: g.stamina, stamina: Math.min(g.stamina, o.stamina ?? g.stamina), mounted: o.mounted === true });
+    this.entities.push(e); this.horse = e;
+    return e;
+  }
+  /** Mercenaire (un seul) : niveau, PV, armes et apparence suivent le niveau du joueur. */
+  spawnMerc(o: SavedMerc & { x: number; z: number }, playerLevel: number): Entity {
+    this.removeAlly('merc');
+    const level = mercLevel(playerLevel), st = mercStats(level, o.arch), p = this.host.player;
+    const e = new Entity('ally:merc', 'monster', 'mercenaire', `${o.first} ${o.last}`.trim(), mercModel(o.look, o.arch, st.tier, o.sex), st.hp);
+    e.x = o.x; e.z = o.z; e.heading = o.heading ?? p.heading;
+    const g = this.ground(o.x, o.z, p.y + 1);
+    e.y = g > -20 ? g : p.y;
+    e.hp = Math.max(1, Math.min(st.hp, o.hp));
+    e.ally = newAlly('merc', {
+      mode: o.mode, level, armor: st.armor, damage: st.damage, reach: st.reach, atkCd: st.atkCd, look: o.look, arch: o.arch, first: o.first, last: o.last, sex: o.sex,
+      left: o.left, post: o.mode === 'attendre' ? { x: o.x, z: o.z } : null,
+    });
+    this.entities.push(e); this.merc = e;
+    return e;
+  }
+  /** Le niveau du mercenaire suit celui du joueur (PV conservés en proportion, équipement visible mis à jour). */
+  syncMerc(playerLevel: number): void {
+    const e = this.merc, a = e?.ally;
+    if (!e || !a) return;
+    const level = mercLevel(playerLevel);
+    if (level === a.level) return;
+    const st = mercStats(level, a.arch), frac = e.hp / e.maxHp;
+    a.level = level; a.armor = st.armor; a.damage = st.damage; a.atkCd = st.atkCd; a.reach = st.reach;
+    e.maxHp = st.hp; e.hp = Math.max(1, Math.round(st.hp * frac));
+    e.model = mercModel(a.look, a.arch, st.tier, a.sex);
+  }
+  removeAlly(kind: 'horse' | 'merc'): void {
+    const e = kind === 'horse' ? this.horse : this.merc;
+    if (!e) return;
+    this.remove([e]);
+    if (kind === 'horse') this.horse = null; else this.merc = null;
+  }
+  clearAllies(): void { this.removeAlly('horse'); this.removeAlly('merc'); }
+
+  /** Zone active dont la grille de navigation contient (x, z). */
+  private zoneAt(x: number, z: number): ActiveZone | null {
+    for (const zone of this.zones.values()) if (zone.grid.inside(x, z)) return zone;
+    return null;
+  }
+  private navigable(e: Entity, x: number, z: number): boolean { const zone = this.zoneAt(e.x, e.z); return !!zone && zone.grid.inside(x, z); }
+
+  /** Pas d'un compagnon : comme `step`, mais jamais dans l'eau profonde (plus d'un mètre). */
+  private allyStep(e: Entity, mx: number, mz: number): boolean {
+    const w = this.host.world;
+    if (!this.host.inDungeon()) {
+      const nx = e.x + mx, nz = e.z + mz, wt = w.waterAt(nx, nz);
+      if (!Number.isNaN(wt) && wt - this.ground(nx, nz, e.y + 0.4) > 1) return false;   // sol réel : un pont se franchit
+    }
+    return this.step(e, mx, mz);
+  }
+
+  /**
+   * Marche d'un compagnon vers (tx, tz) : A* (file de chemins, au plus un calcul par seconde et par compagnon) dans la grille de la
+   * zone active qui contient l'entité et la cible, sinon ligne droite qui glisse le long des murs. Renvoie la distance restante
+   * (avant le pas) ; `ally.stuck` compte les secondes bloquées.
+   */
+  private goto(e: Entity, tx: number, tz: number, speed: number, dt: number): number {
+    const a = e.ally!, dist = Math.hypot(tx - e.x, tz - e.z);
+    if (dist < 0.4) { e.pose.walk *= 0.85; return dist; }
+    let wx = tx, wz = tz;
+    const zone = this.zoneAt(e.x, e.z);
+    if (zone && zone.grid.inside(tx, tz)) {
+      e.sid = zone.sid;
+      const stale = !e.target || Math.hypot(e.target.x - tx, e.target.z - tz) > 3;
+      if ((stale || !e.path) && e.thinkT <= 0 && !e.pathPending && dist > 3) {
+        e.target = { x: tx, z: tz }; e.path = null; e.pathI = 0; e.pathPending = true; e.thinkT = 1.2;
+        this.pathQueue.push(e);
+      }
+      if (e.path && e.pathI < e.path.length) {
+        const wp = e.path[e.pathI]; wx = wp.x; wz = wp.z;
+        if (Math.hypot(wx - e.x, wz - e.z) < 0.5) e.pathI++;
+      }
+    } else e.path = null;
+    const dx = wx - e.x, dz = wz - e.z, d = Math.hypot(dx, dz) || 1, st = Math.min(d, speed * dt);
+    a.stuck = this.allyStep(e, (dx / d) * st, (dz / d) * st) ? 0 : a.stuck + dt;
+    e.heading = turn(e.heading, Math.atan2(dx, -dz), dt * 6);
+    e.pose.walk += dt * speed * (a.kind === 'horse' ? 2.2 : 4.2);
+    return dist;
   }
 
   /** Créatures d'un donjon (celles déjà tuées ne reviennent pas). */
@@ -441,6 +575,7 @@ export class EntityManager {
     this.mctx.env.night = h.night(); this.mctx.env.fog = h.fog();
     this.mctx.ents = this.entities;
     this.mctx.others = this.net ? this.net.others() : NO_OTHERS;
+    this.playerFoe.t -= dt;
     this.checkT -= dt;
     if (this.checkT <= 0) {
       this.checkT = 1;
@@ -493,6 +628,8 @@ export class EntityManager {
         e.thinkT -= dt;
         if (e.thinkT <= 0) { e.thinkT = 0.3; thinkMonster(e, this.mctx); }
         moveMonster(e, dt, this.mctx);
+      } else if (e.ally) {
+        updateAlly(e, dt, this.actx);
       } else if (e.npc) {
         const zone = this.zones.get(e.sid);
         if (!zone) continue;
@@ -502,10 +639,11 @@ export class EntityManager {
       }
     }
     // les cadavres de créatures disparaissent après un moment
-    const gone = this.entities.filter((e) => !e.alive && e.mon && e.deadT > 150);
-    if (gone.length) this.remove(gone);
+    const gone = this.entities.filter((e) => !e.alive && ((e.mon && e.deadT > 150) || (e.ally && e.deadT > MOUNT.corpse)));
+    if (gone.length) { this.remove(gone); if (this.horse && gone.includes(this.horse)) this.horse = null; }
     this.dynamic.length = 0;
-    for (const e of this.entities) if (e.alive && Math.hypot(e.x - p.x, e.z - p.z) < 12) this.dynamic.push({ x: e.x, z: e.z, r: e.radius, bottom: e.y, top: e.y + e.model.height, dyn: true });
+    // le mercenaire et le cheval monté ne bloquent pas le joueur (portes, couloirs) ; le cheval laissé à pied est un obstacle
+    for (const e of this.entities) if (e.alive && !(e.ally && (e.ally.mounted || e.ally.kind === 'merc')) && Math.hypot(e.x - p.x, e.z - p.z) < 12) this.dynamic.push({ x: e.x, z: e.z, r: e.radius, bottom: e.y, top: e.y + e.model.height, dyn: true });
     for (const o of this.mctx.others) if (!o.dead && Math.hypot(o.x - p.x, o.z - p.z) < 12) this.dynamic.push({ x: o.x, z: o.z, r: 0.32, bottom: o.y, top: o.y + 1.8, dyn: true });
   }
 
@@ -630,7 +768,7 @@ export class EntityManager {
     const fx = Math.sin(heading), fz = -Math.cos(heading);
     let best: Entity | null = null, bs = Infinity;
     for (const e of this.entities) {
-      if (alive && !e.alive) continue;
+      if ((alive && !e.alive) || e.ally?.mounted) continue;
       const dx = e.x - x, dz = e.z - z, d = Math.hypot(dx, dz);
       if (d > maxD + e.radius || d < 0.01) continue;
       const facing = (dx * fx + dz * fz) / d;

@@ -24,6 +24,7 @@ import { packBits, unpackBits, type SaveData } from './SaveManager';
 import type { Coop } from '../net/Coop';
 import { hashString } from '@ascii-fort/core/RNG';
 import { LockpickScreen } from '../ui/LockpickScreen';
+import { Possessions } from './Possessions';
 import { CraftingScreen, type Feedback } from '../ui/CraftingScreen';
 import { Particles } from './Particles';
 import { Birds } from './Birds';
@@ -38,7 +39,7 @@ import { Reputation } from '@ascii-fort/sim/gameplay/Reputation';
 import { Economy } from '@ascii-fort/sim/gameplay/Economy';
 import { Rumors } from '@ascii-fort/sim/gameplay/Rumors';
 import { QuestSystem } from '@ascii-fort/sim/gameplay/QuestSystem';
-import { DialogueSystem, type DialogueNode } from '@ascii-fort/sim/gameplay/Dialogue';
+import { DialogueSystem, type DialogueNode, type ServiceOffer } from '@ascii-fort/sim/gameplay/Dialogue';
 import { Camera } from '@ascii-fort/ascii-engine/Camera';
 import { Weather, type WeatherState } from '@ascii-fort/sim/gameplay/Weather';
 import { AudioEngine, type Surface } from '../audio/AudioEngine';
@@ -57,7 +58,7 @@ export interface Buff { id: string; name: string; t: number; dmg?: number; armor
 export type Focus =
   | { t: 'prop'; prop: Prop; label: string; hint?: string; danger?: boolean; muted?: boolean }
   | { t: 'bush'; node: HarvestNode; label: string; hint?: string }
-  | { t: 'entity'; e: Entity; label: string; pick?: boolean }
+  | { t: 'entity'; e: Entity; label: string; pick?: boolean; hint?: string }
   | { t: 'drop'; d: Dropped; label: string }
   | { t: 'player'; id: string; label: string }
   | { t: 'fish'; label: string };
@@ -81,6 +82,8 @@ export class Game {
   readonly rumors: Rumors;
   readonly quests: QuestSystem;
   readonly dialogue: DialogueSystem;
+  /** maison, coffre personnel, cheval et mercenaire du joueur */
+  readonly poss: Possessions;
   readonly weatherSys: Weather;
   readonly audio = new AudioEngine();
   wx: { mix: WeatherMix; state: WeatherState; flash: number } = { mix: CLEAR_WEATHER, state: 'clair', flash: 0 };
@@ -158,7 +161,7 @@ export class Game {
     this.player.x = sp.x; this.player.z = sp.z; this.player.heading = sp.heading;
     this.world.chunks.update(sp.x, sp.z, -1);
     this.player.y = this.world.heightAt(sp.x, sp.z) + 0.1;
-    this.combat = { player: this.player, events: this.events, onPlayerDeath: () => this.onPlayerDeath(), playerArmor: () => this.character.armor, forward: (e, a, el) => !!this.coop?.forwardHit(e, a, el), onPlayerHit: (raw, blocked) => this.wearOnHit(raw, blocked) };
+    this.combat = { player: this.player, events: this.events, onPlayerDeath: () => this.onPlayerDeath(), playerArmor: () => this.character.armor, forward: (e, a, el) => !!this.coop?.forwardHit(e, a, el), onPlayerHit: (raw, blocked) => { this.wearOnHit(raw, blocked); this.poss.shareHit(raw, blocked); } };
     this.entities = new EntityManager(this);
     this.world.chunks.dynamic = this.entities.dynamic;
     this.lastDay = this.time.day;
@@ -168,9 +171,10 @@ export class Game {
     this.rumors = new Rumors(this.world.civ, this.events, () => this.time.day);
     this.quests = new QuestSystem(this);
     this.dialogue = new DialogueSystem(this);
+    this.poss = new Possessions(this);
     this.weatherSys = new Weather(this.world.macro);
     this.events.on('entity:damaged', (d) => {
-      if (d.sourceId === 'player') this.audio.hit();
+      if (d.sourceId === 'player' || d.sourceId?.startsWith('ally:')) this.audio.hit();
       const e = this.entities.entities.find((x) => x.id === d.targetId);
       if (!e) return;
       const kind = e.type.includes('squelette') || e.type === 'gardien des tombes' ? 'os' : e.type === 'spectre' ? 'brume' : e.type === 'perdrix' ? 'plume' : 'sang';
@@ -213,6 +217,9 @@ export class Game {
     return s.filter((x) => x.qty > 0);
   }
   openTrade(e: Entity): void { if (this.rep.mood(e.npc!) === 'hostile') return; this.ui?.openTrade(e); }
+  /** Cheval, mercenaire, maison : ce que propose l'aubergiste (ou le fermier d'un lieu sans auberge), et l'achat. */
+  estateOffers(n: NPCData): ServiceOffer[] { return this.poss.offers(n); }
+  estateBuy(n: NPCData, id: ServiceOffer['id']): string { return this.poss.buy(n, id); }
   payFine(sid: number): boolean {
     const b = this.rep.bounty.get(sid) ?? 0;
     if (this.character.inv.gold < b) return false;
@@ -253,22 +260,23 @@ export class Game {
   }
 
   private respawn(): void {
+    const home = this.poss.onDeath();   // plus de monture (le cheval reste où il est) ; point de réveil devant sa maison, s'il y en a une
     if (this.dungeon) this.exitDungeon();
-    const sp = this.world.spawn(), p = this.player;
+    const sp = home ?? this.world.spawn(), p = this.player;
     p.x = sp.x; p.z = sp.z; p.heading = sp.heading; p.vx = p.vz = p.vy = 0;
     this.world.chunks.update(p.x, p.z, -1);
     p.y = this.world.heightAt(p.x, p.z) + 0.1;
     p.dead = false; p.hp = Math.round(p.maxHp * 0.5); p.stamina = p.maxStamina; p.poison = p.burn = p.frost = 0;
     const lost = Math.floor(this.character.inv.gold * 0.2);
     this.character.inv.gold -= lost;
-    if (!this.coop) this.time.minutes += 8 * 60;
+    if (!this.coop) { this.time.minutes += 8 * 60; this.poss.elapse(8 * 60); }
     this.respawnT = 0;
-    this.events.emit('message', { text: `Vous vous réveillez à l'auberge${this.coop ? '' : ', huit heures plus tard'}. Votre bourse est plus légère (-${lost} or).` });
+    this.events.emit('message', { text: `Vous vous réveillez ${home ? 'dans votre lit, chez vous' : "à l'auberge"}${this.coop ? '' : ', huit heures plus tard'}. Votre bourse est plus légère (-${lost} or).` });
   }
 
   // ------------------------------------------------------------------ objets interactifs
   private isOwned(pr: Prop): boolean {
-    if (pr.sid < 0 || pr.key.startsWith('dj')) return false;
+    if (pr.sid < 0 || pr.key.startsWith('dj') || this.poss.isMine(pr)) return false;
     const s = this.world.civ.settlements[pr.sid];
     return !!s && !s.abandoned && s.type !== 'camp';
   }
@@ -306,14 +314,16 @@ export class Game {
   private propLabel(pr: Prop): string {
     const owned = this.isOwned(pr);
     switch (pr.kind) {
-      case 'entrée': return `Entrer : ${this.world.civ.dungeons[pr.dungeonId]?.name ?? 'souterrain'}`;
+      case 'entrée': return `${this.player.mounted ? 'Mettre pied à terre et entrer' : 'Entrer'} : ${this.world.civ.dungeons[pr.dungeonId]?.name ?? 'souterrain'}`;
       case 'sortie': return 'Remonter à la surface';
       case 'porte verrouillée': return this.state.flags.get(`door:dj${pr.dungeonId}`) ? '' : 'Porte verrouillée';
       case 'coffre': case 'tonneau': case 'caisse':
+        // le coffre de sa maison : testé avant `opened` (un autre joueur peut avoir fouillé le même meuble chez lui)
+        if (pr.kind === 'coffre' && this.poss.isMine(pr)) return `Ouvrir votre coffre (${this.poss.estate.chest.items.size} pile(s), ${this.poss.estate.chest.gold} or)`;
         if (this.state.opened.has(pr.key)) return '';
         { const lock = this.lockLevel(pr); if (lock && !this.state.flags.get('crocheté:' + pr.key)) return `Crocheter : ${pr.kind} verrouillé (${'♦'.repeat(lock)})${owned ? ' (vol)' : ''}`; }
         return `${owned ? 'Voler dans' : 'Fouiller'} : ${pr.kind}${owned ? ' (vol)' : ''}`;
-      case 'lit': return this.buildingKind(pr) === 'auberge' ? 'Dormir (chambre : 10 or)' : owned ? '' : 'Dormir';
+      case 'lit': return this.poss.isMine(pr) ? 'Dormir chez vous (gratuit)' : this.buildingKind(pr) === 'auberge' ? 'Dormir (chambre : 10 or)' : owned ? '' : 'Dormir';
       case 'autel': case 'sanctuaire': return 'Prier';
       case 'puits': return "Boire l'eau du puits";
       case 'âtre': case 'feu': case 'foyer': case 'enclume': case 'établi': return WORKSHOP_LABEL[this.workshop(pr)!];
@@ -328,12 +338,13 @@ export class Game {
     const e = this.entities.pick(p.x, p.z, p.heading, 3.2, false);
     const see = (x: number, z: number) => lineOfSight(this.world.chunks, p.x, p.z, x, z, p.y);
     if (e && see(e.x, e.z)) {
-      if (e.alive && e.npc) {
+      if (e.ally) { if (e.alive) return this.poss.focusOf(e); }
+      else if (e.alive && e.npc) {
         const behind = (p.x - e.x) * Math.sin(e.heading) - (p.z - e.z) * Math.cos(e.heading) < 0;
         if (p.crouch && behind && Math.hypot(e.x - p.x, e.z - p.z) < 1.9 && !this.aware(e)) return { t: 'entity', e, label: `Voler à la tire : ${e.label}`, pick: true };
         return { t: 'entity', e, label: `Parler à ${e.label}${this.stockOf(e).length ? ' · [T] commercer' : ''}` };
       }
-      if (!e.alive && !e.looted) return { t: 'entity', e, label: `Fouiller : ${e.npc ? e.label : e.name}` };
+      if (!e.ally && !e.alive && !e.looted) return { t: 'entity', e, label: `Fouiller : ${e.npc ? e.label : e.name}` };
     }
     const fx = Math.sin(p.heading), fz = -Math.cos(p.heading);
     // un autre joueur juste devant : on peut lui proposer un échange
@@ -432,6 +443,7 @@ export class Game {
     if (f.t === 'fish') { this.castLine(); return; }
     if (f.t === 'entity') {
       const e = f.e;
+      if (e.ally) { this.poss.interactAlly(e); return; }
       if (e.alive && e.npc) { if (f.pick) this.pickpocket(e); else this.talkTo(e); return; }
       if (!e.alive && !e.looted) {
         e.looted = true;
@@ -454,7 +466,9 @@ export class Game {
     if (f.t === 'bush') { this.gather(f.node); return; }
     const pr = f.prop;
     switch (pr.kind) {
-      case 'entrée': this.enterDungeon(pr.dungeonId); break;
+      case 'entrée':
+        if (p.mounted) this.poss.dismount('Pas de cheval là-dedans : vous mettez pied à terre.', 0xf0d060);
+        this.enterDungeon(pr.dungeonId); break;
       case 'sortie': this.exitDungeon(); break;
       case 'porte verrouillée': {
         const dg = this.dungeon;
@@ -469,6 +483,7 @@ export class Game {
         break;
       }
       case 'coffre': case 'tonneau': case 'caisse': {
+        if (pr.kind === 'coffre' && this.poss.isMine(pr)) { this.poss.openChest(pr); break; }   // coffre personnel : ni fait partagé, ni `opened`, ni serrure
         if (this.state.opened.has(pr.key)) break;
         const lock = this.lockLevel(pr);
         if (lock && !this.state.flags.get('crocheté:' + pr.key)) {
@@ -480,6 +495,7 @@ export class Game {
         break;
       }
       case 'lit': {
+        if (this.poss.isMine(pr)) { this.sleep(true); break; }
         const inn = this.buildingKind(pr) === 'auberge';
         const flag = `chambre:${pr.sid}`;
         if (inn && this.state.flags.get(flag) !== this.time.day) {
@@ -954,18 +970,20 @@ export class Game {
     if (this.ui) this.ui.openDialogue(node, () => { e.talkT = 2; });
   }
 
-  sleep(): void {
+  sleep(home = false): void {
     const t = this.time, p = this.player;
     const h = t.hour;
     const wake = h >= 18 || h < 6 ? ((24 + 7 - h) % 24) * 60 : 3 * 60;
+    // chez soi : le poison, le gel et les brûlures passent, et le repos dure plus longtemps
+    const rest = () => { if (home) p.poison = p.frost = p.burn = 0; this.addBuff(home ? { id: 'reposé', name: 'Bien reposé', t: 900, stam: 0.4, dmg: 0.08 } : { id: 'reposé', name: 'Reposé', t: 600, stam: 0.3, dmg: 0.05 }); };
     if (this.coop) {
       p.hp = p.maxHp; p.stamina = p.maxStamina; p.mana = p.maxMana;
-      this.addBuff({ id: 'reposé', name: 'Reposé', t: 600, stam: 0.3, dmg: 0.05 });
+      rest();
       this.events.emit('message', { text: 'Vous vous reposez un moment. (En ligne, le temps ne s’arrête pour personne.)', color: 0x9ad0ff });
       return;
     }
-    t.minutes += wake;
-    this.addBuff({ id: 'reposé', name: 'Reposé', t: 600, stam: 0.3, dmg: 0.05 });
+    t.minutes += wake; this.poss.elapse(wake);
+    rest();
     p.hp = p.maxHp; p.stamina = p.maxStamina; p.mana = p.maxMana;
     this.events.emit('message', { text: `Vous dormez. ${t.label()}.`, color: 0x9ad0ff });
   }
@@ -974,6 +992,7 @@ export class Game {
   enterDungeon(id: number): void {
     const d = this.world.civ.dungeons[id];
     if (!d || this.dungeon) return;
+    if (this.player.mounted) this.poss.dismount('Pas de cheval là-dedans : vous mettez pied à terre.', 0xf0d060);   // couvre aussi la console et le chargement
     const layout = generateDungeon(this.seed, d);
     const built = buildDungeon(layout);
     const p = this.player;
@@ -1033,6 +1052,7 @@ export class Game {
     const wetTarget = this.dungeon ? 0 : Math.min(1, this.rain() * 1.4);
     this.wetness += (wetTarget - this.wetness) * Math.min(1, dt * (wetTarget > this.wetness ? 0.08 : 0.015));
     this.updateBuffs(dt);
+    this.poss.tick(dt);   // contrat du mercenaire, niveau du mercenaire, hauteur de l'œil
     if (this.character.level !== this.lastLevel) {
       const prev = this.lastLevel, gained = this.character.level - prev;
       this.lastLevel = this.character.level;
@@ -1057,10 +1077,12 @@ export class Game {
       if (this.respawnT <= 0) this.respawn();
     } else {
       p.look(input, 0.0022 * this.sensitivity);
-      p.blocking = input.locked && input.mouseDown(2) && p.stamina > 0;
+      this.poss.beforeMove(input);   // G : monter / descendre · Y : siffler · N : mercenaire ; état de monte, allures, bâtiments interdits
+      p.blocking = input.locked && input.mouseDown(2) && p.stamina > 0 && !p.mounted;
       const over = this.character.inv.weight() > this.character.carryMax();
       p.update(dt, input, this.world, over ? 0.55 : 1);
       p.tickStatus(dt);
+      this.poss.afterMove();   // descente automatique (eau, bâtiment, cheval blessé), refus d'avancer, entrée chez soi
       if (this.god) { p.hp = p.maxHp; p.dead = false; p.stamina = p.maxStamina; p.mana = p.maxMana; }
       if (p.dead) this.onPlayerDeath();
       if (p.lastFall > 13) {
@@ -1215,8 +1237,9 @@ export class Game {
     if (p.swimming && p.moving) { this.swimT -= dt; if (this.swimT <= 0) { this.swimT = 0.75; a.splash(0.6); } }
     if (p.onGround && p.moving) {
       this.stepDist += Math.hypot(p.vx, p.vz) * dt;
-      if (this.stepDist > (p.sprinting ? 2.2 : 1.6)) {
-        this.stepDist = 0; const surf = this.surfaceUnder(); a.step(surf);
+      if (this.stepDist > (p.mounted ? (p.sprinting ? 2.7 : 2) : p.sprinting ? 2.2 : 1.6)) {
+        this.stepDist = 0; const surf = this.surfaceUnder();
+        if (p.mounted) a.hoof(p.sprinting, surf); else a.step(surf);
         if (p.sprinting && (surf === 'herbe' || surf === 'neige') && !this.dungeon) this.particles.emit('poussière', p.x - p.vx * 0.12, p.y + 0.1, p.z - p.vz * 0.12, 3);
       }
     }
@@ -1336,6 +1359,7 @@ export class Game {
       if (e) n.hp = e.alive ? e.hp : 0;
       npcs.push({ id: n.id, alive: n.alive, hp: n.hp, wealth: n.wealth, memories: n.memories });
     }
+    const est = this.poss.toSave();
     return {
       format: 1, game: GAME_VERSION, generator: GENERATOR_VERSION, seed: this.seed.text, savedAt: Date.now(), label, time: this.time.minutes,
       player: { x: p.x, y: p.y, z: p.z, heading: p.heading, pitch: p.pitch, hp: p.hp, stamina: p.stamina, mana: p.mana, dungeon: this.dungeon ? this.dungeon.layout.id : -1, ret: this.dungeon ? this.dungeon.ret : null },
@@ -1349,12 +1373,14 @@ export class Game {
       lairs: this.entities.lairs.map((l) => ({ key: l.key, alive: l.alive, leaderAlive: l.leaderAlive })),
       killed: [...this.entities.killed], clearedCamps: [...this.entities.clearedCamps],
       removed: [...this.world.chunks.removed],
+      ...(est ? { estate: est } : {}),   // maison, coffre, cheval, mercenaire : absents si rien n'est possédé
     };
   }
 
   applySave(d: SaveData): void {
     if (this.dungeon) this.exitDungeon();
     this.entities.clear();
+    this.poss.reset();   // le Game est réutilisé si la seed est la même : champ absent = rien de possédé
     const ch = this.character, st = this.state, p = this.player;
     this.time.minutes = d.time; this.lastDay = this.time.day;
     Object.assign(ch.stats, d.character.stats); Object.assign(ch.skills, d.character.skills); Object.assign(ch.skillXp, d.character.skillXp);
@@ -1390,13 +1416,14 @@ export class Game {
     this.syncStats();
     p.hp = d.player.hp; p.stamina = d.player.stamina; p.mana = d.player.mana;
     this.lastHp = p.hp;
+    try { this.poss.load(d.estate); } catch { this.poss.reset(); }   // en dernier et protégé : Coop.welcome avale les exceptions en laissant un état partiel
     this.talentHint();
   }
 
   render(viewMode = 0): void {
     viewMode = viewMode || this.viewMode;
     const p = this.player, c = this.camera, dg = this.dungeon;
-    c.x = p.x; c.y = p.eyeY; c.z = p.z; c.heading = p.heading; c.pitch = p.pitch;
+    c.x = p.x; c.y = p.eyeY + this.poss.bob(); c.z = p.z; c.heading = p.heading; c.pitch = p.pitch;
     if (this.photoCam) { const q = this.photoCam; c.x = q.x; c.y = q.y; c.z = q.z; c.heading = q.heading; c.pitch = q.pitch; }
     // secousse quand on encaisse un coup
     if (p.hurt > 0) { const k = Math.min(1, p.hurt) * 0.035; c.heading += (Math.random() - 0.5) * k; c.pitch += (Math.random() - 0.5) * k; c.y += (Math.random() - 0.5) * k * 2; }

@@ -1,10 +1,11 @@
-import { C, type TextGrid } from '@ascii-fort/ascii-engine/TextGrid';
+import { C, TextGrid } from '@ascii-fort/ascii-engine/TextGrid';
 import { spell } from '@ascii-fort/sim/gameplay/Spells';
 import { item } from '@ascii-fort/sim/gameplay/Items';
 import type { Game } from '../game/Game';
 import { GENERATOR_VERSION } from '../version';
 import { CHUNK } from '@ascii-fort/worldgen/constants';
 import { BIOMES } from '@ascii-fort/worldgen/terrain/Biomes';
+import { MOUNT } from '@ascii-fort/sim/gameplay/Companions';
 
 // Interface de jeu en caractères : barres, boussole, heure, cible, invites, messages.
 
@@ -26,12 +27,27 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
   bar(g, 1, by, 'HP', p.hp, p.maxHp, p.poison > 0 ? C.green : C.hp);
   bar(g, 1, by + 1, 'END', p.stamina, p.maxStamina, C.sta);
   bar(g, 1, by + 2, 'MANA', p.mana, p.maxMana, C.mp);
+  // compagnons : cheval (PV, endurance du galop) et mercenaire (PV), à droite des barres du joueur
+  // (colonnes 29-53, rangées du bas : « edge » est la première colonne libre à leur droite, 0 s'il n'y en a pas)
+  let cy = by, edge = 0;
+  const hv = game.poss.horseView();
+  if (hv && (hv.mounted || hv.dist < 60)) {
+    bar(g, 29, cy++, 'CHEV', hv.hp, hv.maxHp, C.hp);
+    bar(g, 29, cy++, 'GALO', hv.stamina, hv.maxStamina, hv.winded ? C.red : C.orange);
+    edge = 54;
+  }
+  const mv = game.poss.mercView();
+  if (mv && cy < by + 3) {
+    bar(g, 29, cy++, 'MERC', mv.hp, mv.maxHp, mv.ko > 0 ? C.red : C.green);
+    edge = 54;
+    if (mv.ko > 0 && cy <= by + 2) { const t = ` ${mv.name} à terre (${Math.ceil(mv.ko)} s) `; g.text(29, cy, t, C.red, C.panel, 0.55); edge = Math.max(edge, 29 + t.length); }
+  }
   const worst = ch.worstEquipped();
-  const status = [p.poison > 0 ? 'empoisonné' : '', p.frost > 0 ? 'gelé' : '', p.burn > 0 ? 'brûlé' : '', p.diving ? 'en plongée' : p.swimming ? 'à la nage' : p.depth > 0.3 ? 'dans l\'eau' : '', p.crouch && !p.swimming ? 'accroupi' : '', ch.inv.weight() > ch.carryMax() ? 'surchargé' : '',
+  const status = [p.poison > 0 ? 'empoisonné' : '', p.frost > 0 ? 'gelé' : '', p.burn > 0 ? 'brûlé' : '', p.diving ? 'en plongée' : p.swimming ? 'à la nage' : p.depth > 0.3 ? 'dans l\'eau' : '', p.crouch && !p.swimming ? 'accroupi' : '', p.mounted ? (p.sprinting ? 'au galop' : 'à cheval') : '', hv && p.mounted && hv.limp ? 'cheval boiteux' : '', ch.inv.weight() > ch.carryMax() ? 'surchargé' : '',
     worst <= 0 ? 'équipement hors d’usage' : worst < 25 ? 'équipement très usé' : ''].filter(Boolean).join(' · ');
   const tp = ch.talentPoints();
   g.text(1, by - 1, ` Niv ${ch.level} · ${ch.xp}/${ch.xpForNext()} XP · ${ch.inv.gold} or${ch.statPoints ? ' · +' + ch.statPoints + ' pt (P)' : ''}${tp ? ' · +' + tp + ' talent' + (tp > 1 ? 's' : '') + ' (K)' : ''} ${status ? '· ' + status : ''} `, C.gold, C.panel, 0.55);
-  g.text(1, rows - 1, ` ${ch.equip.arme ? item(ch.equip.arme).name : 'Poings'}${ch.weapon?.weapon?.kind === 'arc' ? ` (${ch.inv.count('flèche')} flèches)` : ''} · H potion (${ch.inv.count('potion de soin')}) · R ${spell(ch.spellR)?.name ?? '—'} · F ${spell(ch.spellF)?.name ?? '—'} `, C.dim, C.panel, 0.45);
+  g.text(1, rows - 1, ` ${ch.equip.arme ? item(ch.equip.arme).name : 'Poings'}${ch.weapon?.weapon?.kind === 'arc' ? ` (${ch.inv.count('flèche')} flèches)` : ''} · H potion (${ch.inv.count('potion de soin')}) · R ${spell(ch.spellR)?.name ?? '—'} · F ${spell(ch.spellF)?.name ?? '—'}${hv ? ' · G cheval · Y siffler' : ''}${mv ? ' · N mercenaire' : ''} `, C.dim, C.panel, 0.45);
 
   // boussole
   const cw = Math.min(61, cols - 30), cx0 = Math.floor((cols - cw) / 2);
@@ -64,7 +80,7 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
       if (!r.seen || r.dungeon !== dg) continue;
       const d = Math.hypot(r.x - p.x, r.z - p.z);
       if (d > 60) continue;
-      const pr = cam.project(r.x, r.y + 2.15, r.z);
+      const pr = cam.project(r.x, r.y + 2.15 + (r.mount ? MOUNT.lift : 0), r.z);
       if (!pr || pr.u < 0 || pr.u > 1 || pr.v < 0 || pr.v > 1) continue;
       const label = ` ${r.name}${r.pose.dead > 0.5 ? ' (à terre)' : r.hp < r.maxHp * 0.35 ? ' (blessé)' : ''} `;
       g.text(Math.round(pr.u * cols - label.length / 2), Math.round(pr.v * rows), label, C.cyan, C.panel, 0.45);
@@ -89,7 +105,7 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
   const civ = game.world.civ, m = game.world.macro;
   const here = civ.settlements.find((s) => !s.abandoned && Math.hypot(s.x - p.x, s.z - p.z) < s.radius + 20);
   const region = m.regions[m.region[m.cellOf(p.x, p.z)]]?.name ?? '';
-  const place = game.dungeon ? game.dungeon.layout.name : here ? here.name : region;
+  const place = game.dungeon ? game.dungeon.layout.name : game.poss.atHome ? `♥ Chez vous · ${here?.name ?? ''}` : here ? here.name : region;
   const right = ` ${game.time.label()} · ${game.time.phase} · ${game.weather()} `;
   g.text(cols - right.length - 1, 0, right, C.text, C.panel, 0.6);
   g.text(cols - place.length - 3, 1, ` ${place} `, C.title, C.panel, 0.6);
@@ -106,8 +122,12 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
   if (game.focus) {
     g.center(mid + 2, ` [E] ${game.focus.label} `, game.focus.t === 'entity' && game.focus.pick ? C.magenta : C.yellow, C.panel);
     const f = game.focus;
+    if (f.t === 'entity' && f.hint) g.center(mid + 3, ` ${f.hint} `, C.cyan, C.panel);
     if ((f.t === 'prop' || f.t === 'bush') && f.hint) g.center(mid + 3, ` ${f.hint} `, f.t === 'prop' && f.danger ? C.red : f.t === 'bush' || (f.t === 'prop' && f.muted) ? C.dim : C.green, C.panel);
   }
+  // monture : invite à monter, allure, essoufflement
+  const mh = game.poss.hint();
+  if (mh) g.center(mid + 4, ` ${mh.text} `, mh.color, C.panel);
   // souffle sous l'eau
   if (p.breath < 0.999 && !p.dead) {
     g.center(mid + 6, ' Souffle ', p.breath < 0.25 ? C.red : C.cyan, C.panel);
@@ -148,10 +168,11 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
     if (game.banner.sub2) g.center(yb + 2, ` ${game.banner.sub2} `.slice(0, cols - 2), Math.floor(now / 400) % 2 ? C.yellow : C.cyan, C.panel);
   }
 
-  // messages
-  const msgs = st.log.filter((l) => now - l.t < 7000).slice(-5);
-  msgs.forEach((l, i) => g.text(cols - Math.min(cols - 30, l.text.length + 2) - 1, rows - 1 - msgs.length + i, ` ${l.text.slice(0, cols - 34)} `, l.color, C.panel, 0.6));
-  if (p.dead) { g.center(mid - 4, '  Vous êtes mort  ', C.red, C.black); g.center(mid - 3, ' On vous ramènera à l\'auberge… ', C.dim, C.black); }
+  // messages : la pile reste à droite des barres de compagnons quand elles sont affichées (les lignes longues passent à la ligne)
+  const mw = cols - (edge || 30), tw = Math.max(10, mw - 4);
+  const msgs = st.log.filter((l) => now - l.t < 7000).flatMap((l) => TextGrid.wrap(l.text, tw).map((t) => ({ text: t.slice(0, tw), color: l.color }))).slice(-5);
+  msgs.forEach((l, i) => g.text(cols - Math.min(mw, l.text.length + 2) - 1, rows - 1 - msgs.length + i, ` ${l.text} `, l.color, C.panel, 0.6));
+  if (p.dead) { g.center(mid - 4, '  Vous êtes mort  ', C.red, C.black); g.center(mid - 3, game.poss.home() ? ' On vous ramènera chez vous… ' : ' On vous ramènera à l\'auberge… ', C.dim, C.black); }
 
   // débogage (F3)
   if (st.debug) {

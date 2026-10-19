@@ -1,6 +1,7 @@
 import type { ModelDef, Pose } from './Models';
 import type { NPCData } from './NPC';
 import type { Spot } from '../ai/Schedule';
+import type { AllyState } from '../gameplay/Companions';
 
 /** Données de combat/comportement d'un monstre (remplies par Monster.ts). */
 export interface MonsterState {
@@ -70,13 +71,16 @@ export class Entity {
   shouted = false;
   /** envois du propriétaire où l'entité manquait (disparue chez lui) */
   missing = 0;
+  /** compagnon du joueur (cheval, mercenaire) : simulé localement, jamais dans une zone d'autorité (zoneKey = '') ; ni `mon` ni `npc` */
+  ally?: AllyState;
 
-  constructor(readonly id: string, readonly kind: 'npc' | 'monster', readonly type: string, public name: string, readonly model: ModelDef, hp: number) {
+  constructor(readonly id: string, readonly kind: 'npc' | 'monster', readonly type: string, public name: string, public model: ModelDef, hp: number) {
     this.radius = model.radius;
     this.hp = hp; this.maxHp = hp;
   }
 
   get label(): string {
+    if (this.ally) return this.ally.kind === 'merc' ? `${this.name} (mercenaire niv. ${this.ally.level})` : `${this.name} (cheval)`;
     if (this.npc) return `${this.npc.first} ${this.npc.last} (${this.npc.profession})`;
     return this.mon && this.mon.level > 1 ? `${this.name} · niv. ${this.mon.level}` : this.name;
   }

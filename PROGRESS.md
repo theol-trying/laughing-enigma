@@ -6,7 +6,7 @@
 > Économie : travailler seul (pas d'agents en parallèle), pas de relecture inutile de fichiers.
 
 ## ➜ REPRENDRE ICI
-Jalon 7 en cours : étapes 43 à 50 faites (pause demandée le 2026-10-12 après la 50) ; reprendre à l’étape 51 (cheval, mercenaire, maison). Depuis l’étape 49 : workflow `.claude/workflows/ascii-fort-step.js` (Workflow { name: "ascii-fort-step", args: { step, title, brief, areas } } ; agents Sonnet 5.5, demande de l’utilisateur) ; glyphes : `node scripts/glyphcheck.mjs`. Lancer `node scripts/autosave.mjs 2` en arrière-plan (2 min).
+Jalon 7 en cours : étapes 43 à 51 faites ; reprendre à l’étape 52 (chaînes de quêtes, primes, persuasion). À partir de l’étape 52 (demande de l’utilisateur) : pas de workflow, un seul agent Opus implémente un cahier des charges précis, puis vérification en jeu ; le workflow `.claude/workflows/ascii-fort-step.js` (agents Sonnet, args.root = chemin du projet) reste disponible si une étape le justifie ; glyphes : `node scripts/glyphcheck.mjs`. Lancer `node scripts/autosave.mjs 2` en arrière-plan (2 min).
 Jalon 2 terminé (étapes 12 à 19) : modèles articulés, police fine (deux grilles), bibliothèques (packages/*),
 multijoueur coop Cloudflare (un Worker : assets + Durable Object Room ; autorité par zone ; faits partagés).
 Déployé le 2026-10-06 par l'utilisateur : Worker Cloudflare « ascii-fort » relié au dépôt (build réussi, redéploiement à chaque push sur main).
@@ -77,7 +77,7 @@ Si du travail non committé a été perdu : `git diff HEAD refs/autosave/latest`
 - [x] 48. Faune chassable : hardes de cerfs, sangliers, perdrix (`buildHerds`, flux « faune », clés `herd:<n>`, fuite en harde selon vue/ouïe, envol), oiseaux dans le ciel (`Birds.ts`), pêche (canne à pêche, [E] lancer/ferrer, poissons selon rivière/lac/mer, cuisson au feu)
 - [x] 49. Artisanat élargi : écran d’artisanat (`CraftingScreen`, recettes déclaratives `Crafting.ts`) à l’enclume, au foyer de forge, à l’établi, au feu/âtre ; forge d’armes et d’armures (pièces « de qualité »), tannage, alchimie (potions de force, de chaleur…), cuisine (repas « rassasié ») ; cueillette des buissons ; usure dans l’id (`épée courte~62`, paliers 50/25/0 %), réparation à l’enclume ou contre de l’or chez le forgeron
 - [x] 50. Arbres de talents : 4 arbres (Guerrier, Rôdeur, Mage, Artisan-marchand) de 8 talents sur 3 rangées (`Talents.ts`, effets chiffrés branchés), un point tous les 3 niveaux (rétroactif, dérivé du niveau), onglet Talents de la fiche (touche K, `TalentPanel.ts`), remise à zéro payante, console `talent`/`talents` ; correctifs : `lastLevel` au chargement, revente plafonnée à 90 % du prix d’achat
-- [ ] 51. Cheval, mercenaire à engager, maison à acheter et coffre personnel
+- [x] 51. Cheval (achat chez le fermier ou à l’écurie de l’auberge, G monter/descendre, Y siffler, trot/galop, peut être blessé ou tué), mercenaire engagé à l’auberge (contrat de 7 jours, N suivre/attendre, `AllyAI.ts`), maison à vendre (choix déterministe, achat par dialogue) avec lit et coffre personnel (`ChestScreen`), marqueurs sur la carte ; biens par joueur (`Companions.ts`, `Estate.ts`, `Possessions.ts`) ; console `cheval`/`mercenaire`/`maison`/`coffre`
 - [ ] 52. Chaînes de quêtes avec boss uniques, tableau des primes, persuasion et intimidation
 - [ ] 53. Caravanes et voyageurs sur les routes, attaqués par les bandits
 - [ ] 54. Événements vivants : raids, fêtes, épidémie, guerre entre factions (frontières qui bougent)

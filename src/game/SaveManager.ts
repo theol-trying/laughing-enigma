@@ -1,9 +1,13 @@
 // Sauvegardes : IndexedDB (repli localStorage). Une sauvegarde = seed + version du générateur
 // + différences avec le monde généré (le reste se régénère à l'identique depuis la seed).
 
+import type { EstateSave } from '@ascii-fort/sim/gameplay/Estate';
+
 export interface SaveData {
   /** arbres abattus, rochers brisés */
   removed?: string[];
+  /** maison, coffre personnel, cheval et mercenaire du joueur (absent : rien de possédé) */
+  estate?: EstateSave;
   format: 1;
   game: string; generator: string; seed: string; savedAt: number; label: string;
   time: number;

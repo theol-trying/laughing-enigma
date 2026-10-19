@@ -71,9 +71,9 @@ export class DialogueScreen implements Screen {
     this.optY = y + 3 + lines.length; this.optX = x + 3; this.optW = w - 6;
     n.options.forEach((o, i) => {
       const yy = this.optY + i, over = ctx.mouseCell.y === yy && ctx.mouseCell.x >= this.optX && ctx.mouseCell.x < this.optX + this.optW;
-      g.text(this.optX, yy, `${i + 1}. ${o.label}`.slice(0, this.optW).padEnd(this.optW), over ? 0xffffff : C.yellow, over ? C.sel : -1);
+      g.text(this.optX, yy, `${(i + 1) % 10}. ${o.label}`.slice(0, this.optW).padEnd(this.optW), over ? 0xffffff : C.yellow, over ? C.sel : -1);
     });
-    g.text(x + 3, y + h - 1, ' 1-9 ou clic : répondre · E, Tab ou Échap : partir '.slice(0, w - 6), C.dim, C.panel);
+    g.text(x + 3, y + h - 1, ' 1-9, 0 ou clic : répondre · E, Tab ou Échap : partir '.slice(0, w - 6), C.dim, C.panel);
   }
 
   input(ctx: UICtx): void {
@@ -82,7 +82,8 @@ export class DialogueScreen implements Screen {
     let k = -1;
     const m = ctx.mouseCell;
     if (ctx.clicked && m.x >= this.optX && m.x < this.optX + this.optW && m.y >= this.optY && m.y < this.optY + this.node.options.length) k = m.y - this.optY;
-    for (let d = 0; d < Math.min(9, this.node.options.length); d++) if (i.pressed('Digit' + (d + 1)) || i.pressed('Numpad' + (d + 1))) k = d;
+    // 1-9, puis 0 pour la dixième option (l'aubergiste peut en avoir dix)
+    for (let d = 0; d < Math.min(10, this.node.options.length); d++) { const c = String((d + 1) % 10); if (i.pressed('Digit' + c) || i.pressed('Numpad' + c)) k = d; }
     if (k < 0) return;
     const next = this.node.options[k].go();
     if (next) this.node = next;

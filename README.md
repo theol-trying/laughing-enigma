@@ -181,7 +181,7 @@ développement (F1).
 | Clic droit | bloquer |
 | `V` ou double appui | esquiver |
 | `B` | arc ↔ arme de mêlée · `R` / `F` les deux sorts choisis (Tab → Sorts) · `H` potion |
-| `Tab` inventaire (onglets, comparaison, équipement, sorts) · `M` carte · `J` journal · `P` personnage (points) · `K` talents (un point tous les 3 niveaux) | |
+| `Tab` inventaire (onglets, comparaison, équipement, sorts) · `M` carte · `J` journal · `P` personnage (points) · `K` talents (un point tous les 3 niveaux) · `G` monter/descendre de cheval · `Y` siffler le cheval · `N` mercenaire : suivre/attendre | |
 | `Échap` | pause (sauvegarder, charger, options) · `F5`/`F9` sauvegarde/chargement rapides |
 | `F3` | informations de débogage · `F1` console de test (`help` : téléportation, heure, météo, objets, créatures…) |
 | `Entrée` | (en ligne) écrire un message aux autres joueurs · `E` face à un joueur : proposer un échange |

@@ -1,5 +1,6 @@
 import { NET_HZ, MAX_SAVE, type ServerMsg, type ZoneEnts } from '@ascii-fort/net/protocol';
-import { humanoid, drawModel, type ModelDef, type Pose, type Weapon } from '@ascii-fort/sim/entities/Models';
+import { humanoid, drawModel, horseModel, mercModel, type ModelDef, type Pose, type Weapon } from '@ascii-fort/sim/entities/Models';
+import { MOUNT, mercCode, mercStats, sanitizeMountWire, sanitizeMercWire, worldOf } from '@ascii-fort/sim/gameplay/Companions';
 import { hitEntity, hitPlayer, type Element } from '@ascii-fort/sim/gameplay/Combat';
 import type { Entity } from '@ascii-fort/sim/entities/Entity';
 import type { EntityNet, RemoteTarget } from '@ascii-fort/sim/entities/EntityManager';
@@ -22,7 +23,9 @@ import type { NetClient, Welcome } from './NetClient';
 const START = 1 * MIN_PER_DAY + 8 * 60 + 30;
 
 /** État d'un joueur tel qu'il circule sur le réseau. */
-interface PlayerState { x: number; y: number; z: number; h: number; sw: number; bl: number; d: number; hp: number; mhp: number; lk: string; dg: number; cr: number; sp: number; iv?: number; nm?: number; sb?: number }
+interface PlayerState { x: number; y: number; z: number; h: number; sw: number; bl: number; d: number; hp: number; mhp: number; lk: string; dg: number; cr: number; sp: number; iv?: number; nm?: number; sb?: number;
+  /** cheval monté : robe + 1 (absent : à pied) ; mercenaire : [x, z, cap, code (apparence, archétype, palier, sexe), à terre] — champs optionnels, PROTOCOL inchangé */
+  mt?: number; mc?: number[] }
 
 /** Message adressé d'un client à un autre (champ « d » du message « to »). */
 type Direct =
@@ -45,6 +48,9 @@ export interface TradeSession {
 /** Émotes (dans le chat : /salut, /danse…) → texte affiché au-dessus de la tête. */
 const EMOTES: Record<string, string> = { salut: '*fait signe de la main*', danse: '*danse*', révérence: '*fait une révérence*', reverence: '*fait une révérence*', rire: '*éclate de rire*', oui: '*acquiesce*', non: '*secoue la tête*' };
 
+/** Mercenaire d'un autre joueur : simple silhouette interpolée (ni ciblable, ni bloquante). */
+interface RemoteMerc { x: number; z: number; h: number; tx: number; tz: number; th: number; key: string; model: ModelDef; pose: Pose; ko: boolean }
+
 export class RemotePlayer {
   x = 0; y = 0; z = 0; heading = 0;
   tx = 0; ty = 0; tz = 0; th = 0;
@@ -59,6 +65,10 @@ export class RemotePlayer {
   /** bulle de chat au-dessus de la tête, émote en cours */
   bubble: { text: string; t: number } | null = null;
   emote: { k: string; t: number } | null = null;
+  /** cheval monté (robe + 1, 0 : à pied), sa pose, et mercenaire visible */
+  mount = 0;
+  hpose: Pose = { walk: 0, swing: 0, dead: 0, hover: 0, block: 0 };
+  merc: RemoteMerc | null = null;
   constructor(readonly id: string, public name: string) { this.model = playerModel(name, ''); }
 }
 
@@ -186,6 +196,19 @@ export class Coop implements EntityNet {
     p.pose.dead = s.d;
     p.invisible = !!s.iv;
     p.noiseMul = Number.isFinite(s.nm) ? Math.min(1, Math.max(0.2, s.nm!)) : 1; p.stealthBonus = Number.isFinite(s.sb) ? Math.min(0.3, Math.max(0, s.sb!)) : 0;
+    // cheval monté et mercenaire (champs optionnels : un ancien client n'en envoie pas)
+    p.mount = sanitizeMountWire(s.mt);
+    const mc = sanitizeMercWire(s.mc);
+    if (!mc) p.merc = null;
+    else {
+      const key = `${mc.look}:${mc.arch}:${mc.tier}:${mc.sex}`;
+      if (!p.merc) p.merc = { x: mc.x, z: mc.z, h: mc.h, tx: mc.x, tz: mc.z, th: mc.h, key, model: mercModel(mc.look, mc.arch, mc.tier, mc.sex), pose: { walk: 0, swing: 0, dead: 0, hover: 0, block: 0 }, ko: mc.ko };
+      else {
+        const m = p.merc;
+        m.tx = mc.x; m.tz = mc.z; m.th = mc.h; m.ko = mc.ko;
+        if (m.key !== key) { m.key = key; m.model = mercModel(mc.look, mc.arch, mc.tier, mc.sex); }
+      }
+    }
   }
 
   private onFx(from: string, f: CastFx & { dg: number }) {
@@ -417,6 +440,17 @@ export class Coop implements EntityNet {
       r.heading += dh * k;
       const moved = far ? 0 : Math.hypot(dx * k, dz * k);
       r.pose.walk = moved > 0.002 ? r.pose.walk + moved * 3.2 : r.pose.walk * 0.85;
+      if (r.mount) { r.hpose.walk = moved > 0.002 ? r.hpose.walk + moved * 2.2 : r.hpose.walk * 0.85; r.pose.walk = 0; }   // le cavalier ne marche pas, le cheval oui
+      const m = r.merc;
+      if (m) {
+        const mx = m.tx - m.x, mz = m.tz - m.z, mfar = Math.hypot(mx, mz) > 8;
+        m.x = mfar ? m.tx : m.x + mx * k; m.z = mfar ? m.tz : m.z + mz * k;
+        let dm = m.th - m.h; while (dm > Math.PI) dm -= Math.PI * 2; while (dm < -Math.PI) dm += Math.PI * 2;
+        m.h += dm * k;
+        const mm = mfar ? 0 : Math.hypot(mx * k, mz * k);
+        m.pose.walk = mm > 0.002 ? m.pose.walk + mm * 4.2 : m.pose.walk * 0.85;
+        m.pose.dead += ((m.ko ? 1 : 0) - m.pose.dead) * Math.min(1, dt * 3);
+      }
       if (r.bubble && (r.bubble.t -= dt) <= 0) r.bubble = null;
       if (r.emote) {
         const t = (r.emote.t -= dt);
@@ -450,9 +484,12 @@ export class Coop implements EntityNet {
       const ch = g.character, w = ch.weapon?.weapon?.kind ?? '-';
       const lk = `${w}|${ch.shield ? (ch.shield.good === 'fer' ? 'f' : 'b') : ''}|${ch.equip.tête ? 1 : 0}|${ch.equip.corps && /maille|plate/.test(ch.equip.corps) ? 1 : 0}`;
       const r2 = (v: number) => Math.round(v * 100) / 100;
+      const hz = g.entities.horse, mc = g.entities.merc;
       const s: PlayerState = {
         x: r2(p.x), y: r2(p.y), z: r2(p.z), h: r2(p.heading), sw: r2(g.fight.swing), bl: p.blocking ? 1 : 0, d: p.dead ? 1 : 0,
         hp: Math.round(p.hp), mhp: p.maxHp, lk, dg: g.dungeon ? g.dungeon.layout.id : -1, cr: p.crouch ? 1 : 0, sp: p.sprinting ? 1 : 0, iv: p.invisible ? 1 : 0, nm: r2(p.noiseMul), sb: r2(p.stealthBonus),
+        ...(hz?.alive && hz.ally?.mounted ? { mt: hz.ally.look + 1 } : {}),
+        ...(mc?.alive && mc.ally && worldOf(mc.x) === worldOf(p.x) ? { mc: [r2(mc.x), r2(mc.z), r2(mc.heading), mercCode(mc.ally.look, mc.ally.arch, mercStats(mc.ally.level, mc.ally.arch).tier, mc.ally.sex), mc.ally.ko > 0 ? 1 : 0] } : {}),
       };
       this.net.send({ t: 'st', s });
       const zs: ZoneEnts[] = g.entities.snapshot();
@@ -481,7 +518,10 @@ export class Coop implements EntityNet {
     const dg = this.game.dungeon ? this.game.dungeon.layout.id : -1;
     for (const r of this.players.values()) {
       if (!r.seen || r.dungeon !== dg || r.invisible || Math.hypot(r.x - cx, r.z - cz) > 170) continue;
-      drawModel(ib, r.model, r.x, r.y, r.z, r.heading, r.pose);
+      if (r.mount) { drawModel(ib, horseModel(r.mount - 1), r.x, r.y, r.z, r.heading, r.hpose); drawModel(ib, r.model, r.x, r.y + MOUNT.lift, r.z, r.heading, r.pose); }
+      else drawModel(ib, r.model, r.x, r.y, r.z, r.heading, r.pose);
+      const m = r.merc;
+      if (m && Math.hypot(m.x - cx, m.z - cz) < 170) drawModel(ib, m.model, m.x, dg >= 0 ? r.y : this.game.world.heightAt(m.x, m.z), m.z, m.h, m.pose);
     }
     for (const s of this.shots) {
       const sp = Math.hypot(s.vx, s.vz) || 1, lk = projectileLook(s.kind);
