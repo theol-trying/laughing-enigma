@@ -16,7 +16,9 @@ import { item } from './Items';
 // disparue ; gobelins dans une mine) et leur résolution modifie le monde en retour.
 
 /** Quêtes systémiques, plus les chaînes de quêtes (« chaîne », voir Chains.ts) et les primes acceptées au tableau (« prime »). */
-export type QuestKind = 'bandits' | 'loups' | 'relique' | 'expédition' | 'mine' | 'chaîne' | 'prime';
+export type QuestKind = 'bandits' | 'loups' | 'relique' | 'expédition' | 'mine' | 'chaîne' | 'prime'
+  /** pli confié par un messager de la route (Convoys.ts) : le remettre au destinataire */
+  | 'course';
 export interface Quest {
   id: string; kind: QuestKind; giver: string; sid: number;
   title: string; summary: string;
@@ -169,7 +171,10 @@ export class QuestSystem {
 
   offerFor(npcId: string): Quest | undefined { return this.quests.find((q) => q.giver === npcId && q.status === 'disponible'); }
   activeFor(npcId: string): Quest | undefined { return this.quests.find((q) => q.giver === npcId && q.status === 'active'); }
-  canTurnIn(q: Quest): boolean { return q.status === 'active' && q.stage === q.stages.length - 1; }
+  canTurnIn(q: Quest): boolean {
+    if (q.kind === 'course' && q.data.item && !this.h.character.inv.count(q.data.item)) return false;   // la lettre perdue ne se remet pas
+    return q.status === 'active' && q.stage === q.stages.length - 1;
+  }
 
   /** Quête affichée par le HUD et la boussole : celle qu'on suit si elle est en cours, sinon la première en cours. */
   trackedQuest(): Quest | undefined {

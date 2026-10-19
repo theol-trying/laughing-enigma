@@ -389,6 +389,8 @@ export class Coop implements EntityNet {
     else if (kind === 'open') g.state.opened.add(key);
     else if (kind === 'node') g.world.chunks.removeNode(key);
     else if (kind === 'flag') { g.state.flags.set(key, v as boolean); if (key.startsWith('door:')) g.applyDoor(); }
+    // issue d'une embuscade sur un convoi des routes (nouveau préfixe : un ancien client se contente de le stocker)
+    else if (kind === 'conv') g.convoys.applyFact(key, v);
   }
 
   fact(k: string, v: unknown): void {

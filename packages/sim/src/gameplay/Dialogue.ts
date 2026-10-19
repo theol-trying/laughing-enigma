@@ -33,6 +33,8 @@ export interface DialogueHooks {
   offer?(e: Entity, q: Quest): { lines: string[]; options: DialogueOption[]; replace?: boolean; note?: DialogueNode['note'] };
   /** options ajoutées à l'arrestation (persuader ou intimider le garde) */
   arrest?(e: Entity, bounty: number): DialogueOption[];
+  /** répliques d'un voyageur des routes (membre d'un convoi) : « Parle-moi de toi », « Comment vont les affaires ? » */
+  road?(e: Entity, topic: 'about' | 'job'): string[] | undefined;
 }
 
 /** Service proposé par l'aubergiste ou le fermier : cheval, mercenaire (engagement ou renouvellement), maison. */
@@ -63,6 +65,8 @@ export interface DialogueHost {
   estateBuy?(n: NPCData, id: ServiceOffer['id']): string;
   /** chaînes de quêtes, marchandage, persuasion et intimidation */
   hooks?: DialogueHooks;
+  /** marchandises du jour d'un PNJ (celles des voyageurs des routes ne dépendent pas de leur métier seul) */
+  stockOf?(e: Entity): { id: string; qty: number }[];
 }
 
 const DIRS = ['au nord', 'au nord-est', "à l'est", 'au sud-est', 'au sud', 'au sud-ouest', "à l'ouest", 'au nord-ouest'];
@@ -97,9 +101,9 @@ export class DialogueSystem {
 
   /** En-tête d'un nœud : nom, métier, lieu, âge et humeur. */
   head(e: Entity, mood: string) {
-    const n = e.npc!;
-    const s = this.h.world.civ.settlements[n.sid];
-    return { speaker: `${n.first} ${n.last}`, sub: `${n.profession}${n.profession === 'voyageur' ? '' : ' · ' + s.name} · ${n.age} ans`, mood };
+    const n = e.npc!, civ = this.h.world.civ;
+    const s = civ.settlements[n.sid], where = n.road ? ` · en route vers ${civ.settlements[n.road.to]?.name ?? '?'}` : n.profession === 'voyageur' ? '' : ' · ' + s.name;
+    return { speaker: `${n.first} ${n.last}`, sub: `${n.title ?? n.profession}${where} · ${n.age} ans`, mood };
   }
 
   private greeting(n: NPCData, mood: string): string {
@@ -114,16 +118,17 @@ export class DialogueSystem {
   private menu(e: Entity): DialogueOption[] {
     const n = e.npc!, h = this.h, back = () => this.again(e);
     const opts: DialogueOption[] = [];
-    if (h.economy.stock(n, h.time.day).length) opts.push({ label: 'Montre-moi tes marchandises (commerce).', go: () => { h.openTrade(e); return null; } });
+    if ((h.stockOf ? h.stockOf(e) : h.economy.stock(n, h.time.day)).length) opts.push({ label: 'Montre-moi tes marchandises (commerce).', go: () => { h.openTrade(e); return null; } });
     if (n.profession === 'forgeron' && h.repairQuote) { const q = h.repairQuote(n); if (q.count) opts.push({ label: `Peux-tu réparer mon équipement ? (${q.count} objet${q.count > 1 ? 's' : ''}, ${q.cost} or)`, go: () => this.repair(e) }); }
     if (h.estateOffers?.(n).length) opts.push({ label: n.profession === 'fermier' ? 'As-tu un cheval à vendre ?' : 'Que proposes-tu ? (écurie, hommes d’armes, maison)', go: () => this.services(e) });
     const offer = h.quests.offerFor(n.id), active = h.quests.activeFor(n.id);
     if (offer) opts.push({ label: 'Tu as l\'air soucieux…', go: () => this.questOffer(e) });
     if (active) opts.push({ label: h.quests.canTurnIn(active) ? `À propos de « ${active.title} »… c'est réglé.` : `À propos de « ${active.title} »…`, go: () => this.questProgress(e) });
     opts.push(...(h.hooks?.menu?.(e) ?? []));
+    const road = (topic: 'about' | 'job') => (n.road ? h.hooks?.road?.(e, topic) : undefined);
     const talk: DialogueOption[] = [
-      { label: 'Parle-moi de toi.', go: () => this.node(e, this.about(n), back) },
-      { label: 'Comment vont les affaires ?', go: () => this.node(e, this.job(n), back) },
+      { label: 'Parle-moi de toi.', go: () => this.node(e, road('about') ?? this.about(n), back) },
+      { label: 'Comment vont les affaires ?', go: () => this.node(e, road('job') ?? this.job(n), back) },
       { label: 'Quelles nouvelles ?', go: () => this.node(e, this.news(n), back) },
       { label: 'Que sais-tu des environs ?', go: () => this.node(e, this.surroundings(n), back) },
     ];

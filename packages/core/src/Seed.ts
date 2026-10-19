@@ -7,7 +7,9 @@ export type StreamName =
   | 'settlements' | 'roads' | 'layout' | 'poi' | 'npc' | 'dungeon' | 'monsters'
   | 'loot' | 'names' | 'weather' | 'vegetation' | 'quests' | 'economy' | 'items' | 'faune' | 'cheval' | 'mercenaire'
   // chaînes de quêtes et primes : flux propres, lus au moment de l'exécution (un nom ajouté ne décale aucun autre flux)
-  | 'chaînes' | 'primes';
+  | 'chaînes' | 'primes'
+  // caravanes et voyageurs sur les routes (étape 53) : flux propre, lu au moment de l'exécution
+  | 'convois';
 
 /** Normalise une saisie de seed : majuscules, séparateurs « - », caractères sûrs. */
 export function normalizeSeed(input: string): string {

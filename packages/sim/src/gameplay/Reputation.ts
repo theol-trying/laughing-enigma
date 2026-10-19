@@ -88,8 +88,11 @@ export class Reputation {
   /** Multiplicateur du jour chez ce PNJ (1 : aucun marchandage aujourd'hui). */
   dealMult(n: NPCData): number { return dealOf(this.deals, n.id, this.day()); }
 
-  /** Multiplicateur de prix selon l'opinion (amis : moins cher), puis le marchandage du jour. */
-  priceFactor(n: NPCData): number { return Math.max(0.8, Math.min(1.5, 1 - this.opinion(n) / 250)) * this.dealMult(n); }
+  /** Remise durable chez ce PNJ (marchand de caravane, maison de négoce dont on a sauvé un convoi) : 1 sans remise. */
+  lasting: (n: NPCData) => number = () => 1;
+
+  /** Multiplicateur de prix selon l'opinion (amis : moins cher), puis le marchandage du jour et les remises durables. */
+  priceFactor(n: NPCData): number { return Math.max(0.8, Math.min(1.5, 1 - this.opinion(n) / 250)) * this.dealMult(n) * this.lasting(n); }
 
   mood(n: NPCData): 'hostile' | 'méfiant' | 'neutre' | 'amical' {
     const o = this.opinion(n);

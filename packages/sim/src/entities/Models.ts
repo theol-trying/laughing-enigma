@@ -43,6 +43,9 @@ export interface HumanLook {
   emblem?: number;
   /** visage visible de près (yeux, bouche, nez) */
   face?: boolean;
+  /** hotte de colporteur sur le dos (couleur) ; besace de messager à la hanche, bandoulière en travers du torse (couleur) */
+  pack?: number;
+  satchel?: number;
 }
 
 const { sin, abs, max, min, PI } = Math;
@@ -162,6 +165,15 @@ export function humanoid(l: HumanLook): ModelDef {
   if (l.cape !== undefined) {
     const cape = R.bone(spine, 0, 0.53 * s, 0.15 * s * wid, (p, t, r) => { r.pitch = -(0.08 + abs(sin(p.walk)) * 0.2) * k(p); });
     R.part(cape, SHAPE.BOX, 0, -0.47 * s, 0, 0.44 * s * wid, 0.94 * s, 0.03, l.cape, M.CLOTH);
+  }
+  if (l.pack !== undefined) {
+    // hotte : caisse d'osier, couverture roulée par-dessus
+    R.part(spine, SHAPE.BOX, 0, 0.3 * s, 0.26 * s * wid, 0.36 * s, 0.5 * s, 0.22 * s, l.pack, M.WOOD);
+    R.part(spine, SHAPE.CYL, 0, 0.6 * s, 0.26 * s * wid, 0.13 * s, 0.42 * s, 0.13 * s, 0x7a5a3a, M.CLOTH, { roll: PI / 2 });
+  }
+  if (l.satchel !== undefined) {
+    R.part(spine, SHAPE.BOX, 0, 0.28 * s, 0, 0.05 * s, 0.72 * s, 0.3 * s * wid, l.satchel, M.LEATHER, { roll: 0.75 });
+    R.part(hips, SHAPE.BOX, 0.22 * s * wid, -0.06 * s, 0.04 * s, 0.09 * s, 0.24 * s, 0.28 * s, l.satchel, M.LEATHER);
   }
   if (l.hood) R.part(spine, SHAPE.TAPER, 0, 0.5 * s, 0, 0.5 * s * wid, 0.15 * s, 0.34 * s * wid, l.hoodColor ?? l.shirt, M.CLOTH);
   if (!skel) R.part(spine, SHAPE.CYL, 0, 0.58 * s, 0, 0.1 * s * th, 0.1 * s, 0.1 * s * th, l.skin, skinM);
@@ -436,6 +448,91 @@ export function mercModel(look: number, arch: MercArch, tier: 0 | 1 | 2, sex: 'm
     beardStyle: !f && (l >> 1) % 3 === 0 ? (['barbe', 'moustache', 'bouc'] as const)[(l >> 4) % 3] : undefined,
   });
   MERC_CACHE.set(key, m);
+  return m;
+}
+
+// ---------------------------------------------------------------- convois : chariot bâché, bêtes de trait
+
+const WAGON_CACHE = new Map<string, ModelDef>();
+/** Rayon des roues arrière et avant du chariot (m) : la rotation des roues en dépend. */
+export const WAGON_WHEEL = { rear: 0.55, front: 0.45 } as const;
+
+/**
+ * Chariot bâché à quatre roues (avant vers −z) : plateau, ridelles, brancards, banc du cocher, bâche sur arceaux,
+ * caisses et tonneaux à l'arrière. Pose : `walk` = angle des roues arrière (distance / rayon), `block` = tangage (pente),
+ * `dead` = renversé sur le côté (épave), `hover` = soulèvement (épave). `mules` : timon central (attelage à deux).
+ */
+export function wagonModel(cover: number, cargo: number, mules: boolean): ModelDef {
+  const key = `${cover}:${cargo}:${mules ? 1 : 0}`;
+  let m = WAGON_CACHE.get(key);
+  if (m) return m;
+  const R = new Rig(), PLANK = 0x7a5634, DARKW = 0x4e3622, RIM = 0x3a2a1c;
+  const chassis = R.bone(0, 0, 0, 0, (p, t, r) => { r.pitch = p.block; });
+  // plateau, ridelles, brancards (ou timon), banc du cocher
+  R.part(chassis, SHAPE.BOX, 0, 0.78, 0, 1.5, 0.22, 3.0, PLANK, M.PLANKS);
+  for (const side of [-1, 1]) R.part(chassis, SHAPE.BOX, side * 0.73, 1.0, 0, 0.06, 0.32, 3.0, DARKW, M.WOOD);
+  R.part(chassis, SHAPE.BOX, 0, 1.0, 1.47, 1.5, 0.32, 0.06, DARKW, M.WOOD);
+  if (mules) R.part(chassis, SHAPE.BOX, 0, 0.72, -2.4, 0.09, 0.09, 1.9, DARKW, M.WOOD);
+  else for (const side of [-1, 1]) R.part(chassis, SHAPE.BOX, side * 0.4, 0.8, -2.35, 0.07, 0.07, 1.9, DARKW, M.WOOD, { pitch: -0.06 });
+  R.part(chassis, SHAPE.BOX, 0, 1.25, -1.32, 1.3, 0.1, 0.36, PLANK, M.PLANKS);
+  R.part(chassis, SHAPE.BOX, 0, 1.05, -1.48, 1.3, 0.34, 0.06, DARKW, M.WOOD);
+  // bâche : voûte en cinq pans posée sur les ridelles, et trois arceaux de bois
+  const arc = (rx: number, ry: number, len: number, z: number, color: number, mat: number, th: number) => {
+    for (let i = 0; i < 5; i++) {
+      const a0 = (i / 5) * PI, a1 = ((i + 1) / 5) * PI;
+      const x0 = Math.cos(a0) * rx, y0 = 1.12 + Math.sin(a0) * ry, x1 = Math.cos(a1) * rx, y1 = 1.12 + Math.sin(a1) * ry;
+      R.part(chassis, SHAPE.BOX, (x0 + x1) / 2, (y0 + y1) / 2, z, Math.hypot(x1 - x0, y1 - y0) + 0.04, th, len, color, mat, { roll: Math.atan2(y1 - y0, x1 - x0) });
+    }
+  };
+  arc(0.76, 0.95, 2.5, -0.05, cover, M.CLOTH, 0.05);
+  for (const z of [-1.28, -0.05, 1.18]) arc(0.79, 0.98, 0.07, z, DARKW, M.WOOD, 0.06);
+  // chargement visible à l'arrière : deux caisses et un tonneau
+  R.part(chassis, SHAPE.BOX, -0.38, 1.12, 1.18, 0.5, 0.46, 0.44, cargo, M.WOOD);
+  R.part(chassis, SHAPE.BOX, 0.12, 1.06, 1.22, 0.42, 0.34, 0.36, shadeHex(cargo, 0.8), M.WOOD);
+  R.part(chassis, SHAPE.CYL, 0.48, 1.14, 1.15, 0.4, 0.5, 0.4, 0x6a4a2a, M.WOOD);
+  R.part(chassis, SHAPE.CYL, 0.48, 1.14, 1.15, 0.42, 0.05, 0.42, IRON, M.METAL);
+  // essieux et roues (rayons sur la face extérieure : on les voit tourner)
+  for (const [z, rad] of [[1.0, WAGON_WHEEL.rear], [-0.95, WAGON_WHEEL.front]] as [number, number][]) {
+    R.part(chassis, SHAPE.CYL, 0, rad, z, 0.08, 1.9, 0.08, DARKW, M.WOOD, { roll: PI / 2 });
+    for (const side of [-1, 1]) {
+      const k = WAGON_WHEEL.rear / rad;
+      const w = R.bone(chassis, side * 0.88, rad, z, (p, t, r) => { r.pitch = -p.walk * k; });
+      R.part(w, SHAPE.CYL, 0, 0, 0, rad * 2, 0.07, rad * 2, RIM, M.WOOD, { roll: PI / 2 });
+      R.part(w, SHAPE.CYL, side * 0.05, 0, 0, 0.16, 0.14, 0.16, IRON, M.METAL, { roll: PI / 2 });
+      for (const a of [0, PI / 4, PI / 2, (3 * PI) / 4]) R.part(w, SHAPE.BOX, side * 0.045, 0, 0, 0.03, rad * 1.85, 0.05, 0xa07a50, M.WOOD, { pitch: a });
+    }
+  }
+  m = R.done('#', 2.1, 1.0, true, 'côté');
+  WAGON_CACHE.set(key, m);
+  return m;
+}
+
+function shadeHex(c: number, k: number): number {
+  return (Math.round(((c >> 16) & 255) * k) << 16) | (Math.round(((c >> 8) & 255) * k) << 8) | Math.round((c & 255) * k);
+}
+
+const DRAUGHT_CACHE = new Map<string, ModelDef>();
+/** Bête de trait (quadrupède du jeu) : cheval de trait (collier, sellette, traits, œillères) ou mule (longues oreilles). */
+export function draughtModel(kind: 'cheval' | 'mule', coat: number): ModelDef {
+  const c = ((Math.floor(coat) % COATS.length) + COATS.length) % COATS.length, key = `${kind}:${c}`;
+  let m = DRAUGHT_CACHE.get(key);
+  if (m) return m;
+  const mule = kind === 'mule';
+  const color = mule ? [0x6a5a4a, 0x5a4a3c, 0x7a6a58][c % 3] : COATS[c].body, mane = mule ? 0x3a3028 : COATS[c].mane, s = mule ? 1.12 : 1.5;
+  m = quadruped(color, s, mule ? 'm' : 'h', M.FUR, color, 0x2a2420, (R, head, bodyBone, neck, tail) => {
+    R.part(neck, SHAPE.BOX, 0, 0.17 * s, -0.04 * s, 0.05 * s, 0.3 * s, 0.1 * s, mane, M.FUR, { pitch: -1.0 });
+    R.part(tail, SHAPE.TAPER, 0, 0.4 * s, 0, 0.11 * s, mule ? 0.3 * s : 0.55 * s, 0.11 * s, mane, M.FUR);
+    if (mule) for (const side of [-1, 1]) R.part(head, SHAPE.CONE, side * 0.08 * s, 0.2 * s, 0.03 * s, 0.06 * s, 0.26 * s, 0.05 * s, color, M.FUR, { roll: -side * 0.25 });
+    // collier rembourré autour de l'encolure, sellette et sous-ventrière, traits le long des flancs, œillères
+    R.part(neck, SHAPE.CYL, 0, 0.0, 0.02 * s, 0.32 * s, 0.1 * s, 0.34 * s, 0x5a3a22, M.LEATHER, { pitch: -0.9 });
+    R.part(bodyBone, SHAPE.BOX, 0, 0.21 * s, 0.0, 0.3 * s, 0.05 * s, 0.14 * s, 0x3a2a1c, M.LEATHER);
+    R.part(bodyBone, SHAPE.CYL, 0, 0.02 * s, 0.0, 0.4 * s, 0.04 * s, 0.4 * s, 0x3a2a1c, M.LEATHER, { pitch: PI / 2 });
+    for (const side of [-1, 1]) {
+      R.part(bodyBone, SHAPE.BOX, side * 0.19 * s, 0.04 * s, 0.1 * s, 0.02 * s, 0.04 * s, 0.85 * s, 0x2a1e14, M.LEATHER);
+      R.part(head, SHAPE.BOX, side * 0.1 * s, 0.03 * s, -0.08 * s, 0.02 * s, 0.07 * s, 0.07 * s, 0x2a1e14, M.LEATHER);
+    }
+  }, mule ? 1.15 : 1.25);
+  DRAUGHT_CACHE.set(key, m);
   return m;
 }
 

@@ -9,7 +9,9 @@ import type { RNG } from '@ascii-fort/core/RNG';
 
 export type Profession =
   | 'fermier' | 'forgeron' | 'marchand' | 'aubergiste' | 'garde' | 'prêtre' | 'meunier' | 'chasseur'
-  | 'pêcheur' | 'mineur' | 'soldat' | 'moine' | 'noble' | 'artisan' | 'guérisseuse' | 'voyageur';
+  | 'pêcheur' | 'mineur' | 'soldat' | 'moine' | 'noble' | 'artisan' | 'guérisseuse' | 'voyageur'
+  // voyageurs des routes (convois : Caravans.ts)
+  | 'charretier' | 'escorte' | 'pèlerin' | 'colporteur' | 'messager';
 
 export type Activity = 'dormir' | 'manger' | 'travailler' | 'loisir' | 'prier' | 'patrouiller' | 'garder' | 'voyager';
 export type PlaceRef = 'home' | 'work' | 'inn' | 'plaza' | 'temple' | 'field' | 'patrol' | 'wild';
@@ -40,6 +42,10 @@ export interface NPCData {
   alive: boolean;
   hp: number;
   memories: Memory[];
+  /** métier affiché, accordé (« marchande », « garde de caravane ») ; absent : `profession` */
+  title?: string;
+  /** voyageur d'un convoi : route suivie (implantations de départ et d'arrivée) et identifiant du convoi */
+  road?: { from: number; to: number; convoy: string };
 }
 
 const SKINS = [0xe0b090, 0xc89870, 0xa87850, 0xf0c8a8, 0x8a6040];
@@ -82,6 +88,7 @@ const WORK_OF: Partial<Record<string, Profession>> = {
 const WEALTH: Record<Profession, number> = {
   fermier: 25, forgeron: 110, marchand: 220, aubergiste: 130, garde: 45, prêtre: 60, meunier: 70, chasseur: 30, pêcheur: 25,
   mineur: 35, soldat: 40, moine: 10, noble: 600, artisan: 60, guérisseuse: 50, voyageur: 80,
+  charretier: 20, escorte: 40, pèlerin: 15, colporteur: 90, messager: 30,
 };
 
 /** PNJ importants d'une implantation (déterministe). */

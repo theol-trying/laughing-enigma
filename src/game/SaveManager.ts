@@ -3,6 +3,7 @@
 
 import type { EstateSave } from '@ascii-fort/sim/gameplay/Estate';
 import type { ExploitsSave } from './Exploits';
+import type { ConvoySave } from '@ascii-fort/sim/gameplay/Caravans';
 
 export interface SaveData {
   /** arbres abattus, rochers brisés */
@@ -11,6 +12,8 @@ export interface SaveData {
   estate?: EstateSave;
   /** primes acceptées, récompenses négociées, persuasions et marchandages du jour (absent : rien en cours) */
   exploits?: ExploitsSave;
+  /** convois des routes : issues d'embuscades observées, membres tués, courses de messager, remises durables (absent : état par défaut) */
+  convois?: ConvoySave;
   format: 1;
   game: string; generator: string; seed: string; savedAt: number; label: string;
   time: number;

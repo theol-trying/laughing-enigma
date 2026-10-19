@@ -26,6 +26,7 @@ import { hashString } from '@ascii-fort/core/RNG';
 import { LockpickScreen } from '../ui/LockpickScreen';
 import { Possessions } from './Possessions';
 import { Exploits } from './Exploits';
+import { Convoys } from './Convoys';
 import { CraftingScreen, type Feedback } from '../ui/CraftingScreen';
 import { Particles } from './Particles';
 import { Birds } from './Birds';
@@ -89,6 +90,8 @@ export class Game {
   readonly poss: Possessions;
   /** chaînes de quêtes, tableau des primes, persuasion et intimidation */
   readonly exploits: Exploits;
+  /** caravanes, pèlerins, colporteurs, messagers et patrouilles des routes ; embuscades */
+  readonly convoys: Convoys;
   /** ajouts du jeu aux dialogues (lus par DialogueSystem) */
   hooks: DialogueHooks | undefined;
   readonly weatherSys: Weather;
@@ -180,7 +183,10 @@ export class Game {
     this.dialogue = new DialogueSystem(this);
     this.poss = new Possessions(this);
     this.exploits = new Exploits(this);
-    this.hooks = this.exploits.hooks;
+    this.convoys = new Convoys(this);
+    this.entities.convoyHost = this.convoys;
+    const xh = this.exploits.hooks, vh = this.convoys.hooks;
+    this.hooks = { ...xh, road: vh.road, menu: (e) => [...(vh.menu?.(e) ?? []), ...(xh.menu?.(e) ?? [])] };
     this.weatherSys = new Weather(this.world.macro);
     this.events.on('entity:damaged', (d) => {
       if (d.sourceId === 'player' || d.sourceId?.startsWith('ally:')) this.audio.hit();
@@ -222,7 +228,7 @@ export class Game {
   stockOf(e: Entity): { id: string; qty: number }[] {
     const key = `${e.id}:${this.time.day}`;
     let s = this.stocks.get(key);
-    if (!s) { s = this.economy.stock(e.npc!, this.time.day); this.stocks.set(key, s); }
+    if (!s) { s = this.convoys.stockFor(e) ?? this.economy.stock(e.npc!, this.time.day); this.stocks.set(key, s); }
     return s.filter((x) => x.qty > 0);
   }
   openTrade(e: Entity): void { if (this.rep.mood(e.npc!) === 'hostile') return; this.ui?.openTrade(e); }
@@ -376,6 +382,9 @@ export class Game {
     // tableau des primes, objet de quête à ramasser
     const xf = this.exploits.focus();
     if (xf && xf.d < bs) { bs = xf.d; best = xf.f; }
+    // épave d'un convoi pillé
+    const cf = this.convoys.focus();
+    if (cf && cf.d < bs) { bs = cf.d; best = cf.f; }
     // vol : on montre s'il y a des témoins
     if (best?.t === 'prop' && /^(coffre|tonneau|caisse)$/.test(best.prop.kind) && this.isOwned(best.prop)) {
       const n = this.theftWitnesses();
@@ -1012,6 +1021,7 @@ export class Game {
     this.dungeon = { layout, mesh: this.renderer.createMesh(built.mesh), data: built.data, ret: { x: p.x, z: p.z, heading: p.heading + Math.PI } };
     this.world.chunks.overlays = [built.data];
     this.applyDoor();
+    this.convoys.onWorldChange();   // les convois quittent la simulation (un combat en cours se décide)
     this.entities.clear();
     this.entities.spawnDungeon(layout);
     this.exploits.onWorldChange();
@@ -1134,6 +1144,7 @@ export class Game {
     if (!this.dungeon) this.world.chunks.update(p.x, p.z, 5);
     this.entities.update(dt);
     this.exploits.tick(dt);
+    this.convoys.tick(dt);   // après entities.update : obstacles des chariots pour l'image suivante
     this.coop?.update(dt);
     if (!this.wasGround && p.onGround && this.prevVy < -7 && !this.dungeon) this.particles.emit('poussière', p.x, p.y + 0.05, p.z, 10);
     this.wasGround = p.onGround; this.prevVy = p.vy;
@@ -1376,7 +1387,7 @@ export class Game {
       if (e) n.hp = e.alive ? e.hp : 0;
       npcs.push({ id: n.id, alive: n.alive, hp: n.hp, wealth: n.wealth, memories: n.memories });
     }
-    const est = this.poss.toSave(), ex = this.exploits.toSave();
+    const est = this.poss.toSave(), ex = this.exploits.toSave(), cv = this.convoys.toSave();
     return {
       format: 1, game: GAME_VERSION, generator: GENERATOR_VERSION, seed: this.seed.text, savedAt: Date.now(), label, time: this.time.minutes,
       player: { x: p.x, y: p.y, z: p.z, heading: p.heading, pitch: p.pitch, hp: p.hp, stamina: p.stamina, mana: p.mana, dungeon: this.dungeon ? this.dungeon.layout.id : -1, ret: this.dungeon ? this.dungeon.ret : null },
@@ -1385,13 +1396,14 @@ export class Game {
       npcs,
       rep: { global: this.rep.global, faction: [...this.rep.faction], local: [...this.rep.local], bounty: [...this.rep.bounty] },
       economy: [...this.economy.supply].map(([k, v]) => [k, { ...v }]),
-      quests: this.quests.quests.filter((q) => q.status !== 'disponible' && q.kind !== 'prime').map((q) => ({ id: q.id, status: q.status, stage: q.stage, killed: q.data.killed ?? 0 })),
+      quests: this.quests.quests.filter((q) => q.status !== 'disponible' && q.kind !== 'prime' && q.kind !== 'course').map((q) => ({ id: q.id, status: q.status, stage: q.stage, killed: q.data.killed ?? 0 })),
       rumors: this.rumors.list.map((r) => ({ text: r.text, origin: r.origin, day: r.day, reach: [...r.reach], tag: r.tag })),
       lairs: this.entities.lairs.map((l) => ({ key: l.key, alive: l.alive, leaderAlive: l.leaderAlive })),
       killed: [...this.entities.killed], clearedCamps: [...this.entities.clearedCamps],
       removed: [...this.world.chunks.removed],
       ...(est ? { estate: est } : {}),   // maison, coffre, cheval, mercenaire : absents si rien n'est possédé
       ...(ex ? { exploits: ex } : {}),   // primes, récompenses négociées, persuasions du jour : absents si rien n'est en cours
+      ...(cv ? { convois: cv } : {}),    // issues d'embuscades observées, courses de messager, remises durables
     };
   }
 
@@ -1400,6 +1412,7 @@ export class Game {
     this.entities.clear();
     this.poss.reset();   // le Game est réutilisé si la seed est la même : champ absent = rien de possédé
     this.exploits.reset();   // idem : histoires disponibles, aucune prime, aucune persuasion du jour
+    this.convoys.reset();    // idem : aucune issue observée, aucune course, aucune remise
     const ch = this.character, st = this.state, p = this.player;
     this.time.minutes = d.time; this.lastDay = this.time.day;
     Object.assign(ch.stats, d.character.stats); Object.assign(ch.skills, d.character.skills); Object.assign(ch.skillXp, d.character.skillXp);
@@ -1437,6 +1450,7 @@ export class Game {
     this.lastHp = p.hp;
     try { this.poss.load(d.estate); } catch { this.poss.reset(); }   // en dernier et protégé : Coop.welcome avale les exceptions en laissant un état partiel
     try { this.exploits.load(d.exploits); } catch { this.exploits.reset(); }
+    try { this.convoys.load(d.convois); } catch { this.convoys.reset(); }
     this.talentHint();
   }
 
@@ -1467,6 +1481,7 @@ export class Game {
     if (!dg) for (const l of this.entities.lanterns(atmo.night)) lights.push(l);
     for (const pr of this.fight.projectiles) { const l = projectileLook(pr.kind).light; if (l) lights.push({ x: pr.x, y: pr.y, z: pr.z, radius: 8, r: l[0], g: l[1], b: l[2] }); }
     if (this.coop) lights.push(...this.coop.lights());
+    if (!dg) lights.push(...this.convoys.lights());
     lights.push(...this.particles.lights());
     if (this.buffs.some((b) => b.id === 'lumière')) lights.unshift({ x: p.x, y: p.eyeY + 0.7, z: p.z, radius: 16, r: 1.5, g: 1.35, b: 1.05 });
     const shadowL = this.torchShadows ? near.find(({ l, d }) => d < 22 && (l.kind !== 'torch' || torchOn > 0.3) && l.kind !== 'window')?.l : undefined;
@@ -1481,7 +1496,7 @@ export class Game {
     this.coop?.render(this.instances, c.x, c.z);
     this.particles.render(this.instances, c.x, c.z);
     this.exploits.render(this.instances, c.x, c.z, this.elapsed);   // tableaux des primes, objets de quête
-    if (!dg) { this.renderBanners(c.x, c.z); this.birds.render(this.instances, c.x, c.z); this.renderFishing(); }
+    if (!dg) { this.renderBanners(c.x, c.z); this.birds.render(this.instances, c.x, c.z); this.renderFishing(); this.convoys.render(this.instances, c.x, c.z); }
     if (dg && dg.layout.lockedDoor && !this.state.flags.get(`door:dj${dg.layout.id}`)) {
       const d = dg.layout.lockedDoor;
       this.instances.add(trsYawPitch(this.m4, d.x, 1.6, d.z, d.horizontal ? Math.PI / 2 : 0, 0, 3.4, 3.2, 0.3), 0x5a3a22, M.DOOR, 0, 0, 0.3);

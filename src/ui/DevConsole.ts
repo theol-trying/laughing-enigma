@@ -34,6 +34,8 @@ const HELP = [
   'primes [prendre <k>|remplir|réclamer|tableau|jour <j>]   avis du tableau le plus proche, accepter, remplir, réclamer, ouvrir',
   'jet <persuader|intimider> [ok|raté]     force un jet sur le PNJ visé (marchandage, ou garde si amende) ou sur un bandit blessé',
   'persuasion [reset]                      chances face au PNJ visé ; reset : oublie les tentatives et marchandages du jour',
+  'convois [rayon] | convoi [aller|caravane|pèlerins|colporteur|messager|patrouille]   convois proches ; aller au plus proche ; en faire venir un',
+  'embuscade [n] [convoi]                  embuscade de n brigands sur le convoi le plus proche (400 m) ou sur celui indiqué',
 ];
 
 export class DevConsole implements Screen {
@@ -162,6 +164,11 @@ export class DevConsole implements Screen {
         const res = g.exploits.dev(c, args);
         for (const l of res) this.print(l.text, l.err ? C.red : C.text);
         if (c === 'primes' && args[0]?.toLowerCase() === 'tableau' && !res.some((l) => l.err)) this.leave();   // le tableau s'est ouvert par-dessus
+        break;
+      }
+      case 'convois': case 'convoi': case 'embuscade': {
+        const res = g.convoys.dev(c, args);
+        for (const l of res) this.print(l.text, l.err ? C.red : C.text);
         break;
       }
       case '': break;

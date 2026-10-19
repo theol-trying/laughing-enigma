@@ -45,6 +45,16 @@ export interface EntityNet {
   hurtRemote(id: string, amount: number, src: Entity, element?: 'poison' | 'feu' | 'givre'): void;
 }
 
+/**
+ * Convois des routes (zones d'autorité « v<id> ») : le jeu les incarne près du joueur et fournit l'IA de leurs membres,
+ * les données de leurs PNJ (ids « v<convoi>:<rang> ») et leurs marionnettes en ligne (membres, bandits d'une embuscade).
+ */
+export interface ConvoyHost {
+  npc(id: string): NPCData | undefined;
+  puppet(zone: string, id: string, type: string, x: number, z: number): Entity | null;
+  step(e: Entity, dt: number): void;
+}
+
 const NO_OTHERS: RemoteTarget[] = [];
 /** Le déplacement (a→b) coupe-t-il la ligne du mur (c→d) ? */
 function segCross(ax: number, az: number, bx: number, bz: number, cx: number, cz: number, dx: number, dz: number): boolean {
@@ -96,6 +106,9 @@ export class EntityManager {
   /** maison à vendre de chaque implantation (calculée sur les données brutes des PNJ) et maison achetée par le joueur */
   private sale = new Map<number, number | null>();
   private owned: HouseRef | null = null;
+  /** convois incarnés : zone « v<id> » → membres et bandits de l'embuscade (simulés ici, ou marionnettes) */
+  readonly convoys = new Map<string, Entity[]>();
+  convoyHost: ConvoyHost | null = null;
 
   constructor(private host: EntityHost) {
     this.lairs = [...buildLairs(host.world.civ, host.world.seed), ...buildHerds(host.world.civ, host.world.seed)];
@@ -149,7 +162,11 @@ export class EntityManager {
     if (l && L && this.rehome(L, l, h.sid, this.sale.get(h.sid) ?? null) > 0) for (const e of this.zones.get(h.sid)?.ents ?? []) e.thinkT = 0;   // leurs entités recalculent leur poste
   }
   allNpcData(): Map<number, NPCData[]> { return this.npcData; }
-  findNpc(id: string): NPCData | undefined { return this.npcsOf(parseInt(id.slice(1), 10)).find((n) => n.id === id); }
+  findNpc(id: string): NPCData | undefined {
+    if (id.startsWith('v')) return this.convoyHost?.npc(id);   // membre d'un convoi
+    if (!id.startsWith('n')) return undefined;
+    return this.npcsOf(parseInt(id.slice(1), 10)).find((n) => n.id === id);
+  }
 
   private modelFor(n: NPCData): ModelDef {
     let m = this.models.get(n.id);
@@ -217,6 +234,11 @@ export class EntityManager {
     const set = new Set(list);
     for (let i = this.entities.length - 1; i >= 0; i--) if (set.has(this.entities[i])) this.entities.splice(i, 1);
     this.pathQueue = this.pathQueue.filter((e) => !set.has(e));
+    // une entité retirée (cadavre effacé, bandit rendu parti) quitte aussi la liste de son convoi
+    for (const e of list) {
+      const l = e.zoneKey ? this.convoys.get(e.zoneKey) : undefined;
+      if (l && l !== list) { const i = l.indexOf(e); if (i >= 0) l.splice(i, 1); }
+    }
   }
 
   private activateLair(l: Lair) {
@@ -251,6 +273,7 @@ export class EntityManager {
   clear(): void {
     for (const sid of [...this.zones.keys()]) this.deactivate(sid);
     for (const l of this.lairs) if (this.activeLairs.has(l.key)) this.deactivateLair(l);
+    for (const z of [...this.convoys.keys()]) this.removeConvoy(z);
   }
 
   // ---------------------------------------------------------------- entités propres au joueur, redditions
@@ -282,6 +305,34 @@ export class EntityManager {
     if (ents) return ents.filter((e) => e.alive && !e.mon?.leader && !e.mon?.yielded).length;
     return this.lairs.find((l) => l.key === key)?.alive ?? 0;
   }
+
+  // ---------------------------------------------------------------- convois (zones « v<id> »)
+  /** Incarne un convoi : ses membres entrent dans la simulation, la zone est réclamée (multijoueur). */
+  addConvoy(zone: string, ents: Entity[]): void {
+    if (this.convoys.has(zone)) return;
+    const list: Entity[] = [];
+    this.convoys.set(zone, list);
+    for (const e of ents) this.addToConvoy(zone, e);
+    this.net?.claim(zone);
+  }
+  /** Ajoute une entité à un convoi incarné (bandit d'une embuscade). */
+  addToConvoy(zone: string, e: Entity): void {
+    const list = this.convoys.get(zone);
+    if (!list || list.includes(e)) return;
+    e.zoneKey = zone;
+    list.push(e);
+    if (!this.entities.includes(e)) this.entities.push(e);
+  }
+  /** Retire un convoi de la simulation (le joueur s'éloigne, souterrain, chargement) et libère sa zone. */
+  removeConvoy(zone: string): void {
+    const list = this.convoys.get(zone);
+    if (!list) return;
+    this.convoys.delete(zone);
+    this.remove(list);
+    this.net?.release(zone);
+  }
+  /** Simule-t-on cette zone ici (solo, ou propriétaire en ligne) ? */
+  simulates(zone: string): boolean { return !this.net || this.net.owns(zone); }
 
   // ---------------------------------------------------------------- compagnons du joueur
   /** Cheval (un seul) : posé à sa position, robe et grade donnés. */
@@ -336,6 +387,9 @@ export class EntityManager {
     return null;
   }
   private navigable(e: Entity, x: number, z: number): boolean { const zone = this.zoneAt(e.x, e.z); return !!zone && zone.grid.inside(x, z); }
+
+  /** Pas d'un membre de convoi (ou d'un compagnon) : sans franchir de mur ni entrer dans l'eau profonde. */
+  walk(e: Entity, mx: number, mz: number): boolean { return this.allyStep(e, mx, mz); }
 
   /** Pas d'un compagnon : comme `step`, mais jamais dans l'eau profonde (plus d'un mètre). */
   private allyStep(e: Entity, mx: number, mz: number): boolean {
@@ -660,6 +714,8 @@ export class EntityManager {
         moveMonster(e, dt, this.mctx);
       } else if (e.ally) {
         updateAlly(e, dt, this.actx);
+      } else if (e.convoy) {
+        this.convoyHost?.step(e, dt);
       } else if (e.npc) {
         const zone = this.zones.get(e.sid);
         if (!zone) continue;
@@ -686,10 +742,12 @@ export class EntityManager {
     const out = [...this.zones.keys()].map((s) => 's' + s);
     for (const k of this.activeLairs.keys()) out.push(k);
     if (this.dungeonId >= 0) out.push('d' + this.dungeonId);
+    for (const k of this.convoys.keys()) out.push(k);
     return out;
   }
 
   private zoneList(z: string): Entity[] | null {
+    if (z.startsWith('v')) return this.convoys.get(z) ?? null;
     if (z.startsWith('s')) return this.zones.get(Number(z.slice(1)))?.ents ?? null;
     if (z.startsWith('lair:')) return this.activeLairs.get(z) ?? null;
     if (z.startsWith('d')) return Number(z.slice(1)) === this.dungeonId ? this.dungeonEnts : null;
@@ -738,6 +796,7 @@ export class EntityManager {
 
   /** Entité présente chez le propriétaire mais pas ici (populations divergentes) : on la crée. */
   private spawnPuppet(z: string, id: string, type: string, x: number, zz: number): Entity | null {
+    if (z.startsWith('v')) { const e = this.convoyHost?.puppet(z, id, type, x, zz) ?? null; if (e) e.zoneKey = z; return e; }
     if (z.startsWith('s')) {
       const n = this.findNpc(id);
       if (!n) return null;
@@ -782,7 +841,7 @@ export class EntityManager {
   /** Lanternes des gardes la nuit (lumières mobiles). */
   lanterns(night: number): { x: number; y: number; z: number; radius: number; r: number; g: number; b: number }[] {
     if (night < 0.4) return [];
-    return this.entities.filter((e) => e.alive && e.npc && (e.npc.profession === 'garde' || e.npc.profession === 'soldat') && (e.action === 'patrouiller' || e.action === 'garder'))
+    return this.entities.filter((e) => e.alive && e.npc && (e.npc.profession === 'garde' || e.npc.profession === 'soldat' || e.npc.profession === 'escorte') && (e.action === 'patrouiller' || e.action === 'garder'))
       .map((e) => ({ x: e.x + Math.cos(e.heading) * 0.4, y: e.y + 1.2, z: e.z + Math.sin(e.heading) * 0.4, radius: 10, r: 1.5, g: 0.95, b: 0.5 }));
   }
 

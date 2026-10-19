@@ -31,6 +31,26 @@ export interface MonsterState {
   yielded?: boolean;
 }
 
+/**
+ * Membre d'un convoi (caravane, pèlerins, colporteur, messager, patrouille) : place dans la colonne, que le jeu recalcule
+ * à chaque image (cible tx/tz, regard, couché au campement, sentinelle), et ses moyens au combat.
+ */
+export interface ConvoyTag {
+  /** identifiant du convoi (zone d'autorité « v<id> ») */
+  id: string;
+  role: string;
+  /** rang dans la colonne */
+  slot: number;
+  /** dégâts portés à chaque coup ; combattant : garde, soldat (les autres fuient) */
+  dmg: number; fighter: boolean;
+  /** place à rejoindre, cap à prendre une fois arrivé, allure du convoi (m/s) */
+  tx: number; tz: number; face: number | null; speed: number;
+  /** couché au campement (sommeil) ; sentinelle (lanterne la nuit) */
+  lie: boolean; watch: boolean;
+  /** menace en cours (créature) et cible de fuite */
+  threat: Entity | null; fx: number; fz: number;
+}
+
 /** Autre joueur vu par la simulation (multijoueur) : cible possible des créatures. */
 export interface RemoteTarget { id: string; x: number; y: number; z: number; dead: boolean; crouch: boolean; sprint: boolean; noiseMul?: number; stealthBonus?: number }
 
@@ -77,6 +97,8 @@ export class Entity {
   missing = 0;
   /** compagnon du joueur (cheval, mercenaire) : simulé localement, jamais dans une zone d'autorité (zoneKey = '') ; ni `mon` ni `npc` */
   ally?: AllyState;
+  /** membre d'un convoi (avec `npc`) : son IA est celle des convois (zone d'autorité « v<id> ») */
+  convoy?: ConvoyTag;
 
   constructor(readonly id: string, readonly kind: 'npc' | 'monster', readonly type: string, public name: string, public model: ModelDef, hp: number) {
     this.radius = model.radius;
@@ -85,7 +107,7 @@ export class Entity {
 
   get label(): string {
     if (this.ally) return this.ally.kind === 'merc' ? `${this.name} (mercenaire niv. ${this.ally.level})` : `${this.name} (cheval)`;
-    if (this.npc) return `${this.npc.first} ${this.npc.last} (${this.npc.profession})`;
+    if (this.npc) return `${this.npc.first} ${this.npc.last} (${this.npc.title ?? this.npc.profession})`;
     return this.mon && this.mon.level > 1 ? `${this.name} · niv. ${this.mon.level}` : this.name;
   }
 }

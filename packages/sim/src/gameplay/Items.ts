@@ -205,7 +205,7 @@ export function item(id: string): ItemDef {
     const [, kind, , label] = id.split(':');
     const names: Record<string, string> = { marchandises: 'Marchandises volées', relique: 'Relique sacrée', journal: 'Journal de l’expédition', trophée: 'Trophée de chasse',
       // objets des chaînes de quêtes
-      registre: 'Registre des rançons', carnet: 'Carnet du chasseur disparu', plan: 'Plan des galeries', grimoire: 'Grimoire noir', sceau: 'Sceau royal brisé', fiole: 'Fiole de venin pur', étendard: 'Étendard en lambeaux' };
+      lettre: 'Lettre cachetée', registre: 'Registre des rançons', carnet: 'Carnet du chasseur disparu', plan: 'Plan des galeries', grimoire: 'Grimoire noir', sceau: 'Sceau royal brisé', fiole: 'Fiole de venin pur', étendard: 'Étendard en lambeaux' };
     return { id, name: label ? `${names[kind] ?? kind} (${label})` : names[kind] ?? kind, cat: 'quête', value: 0, weight: 1, desc: 'Objet de quête.' };
   }
   const at = id.lastIndexOf(WEAR_SEP);

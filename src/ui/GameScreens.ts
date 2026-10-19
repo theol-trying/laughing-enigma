@@ -205,6 +205,8 @@ export class JournalScreen implements Screen {
     head(`Primes (${pr.length}/${MAX_BOUNTIES})${done ? ` · ${done} réclamée${done > 1 ? 's' : ''}` : ''}`);
     if (!pr.length) { dim('Aucune. Le tableau des primes se trouve sur la place des villages et des villes.'); blank(); }
     for (const q of pr) { const st = game.exploits.bountyOf(q)?.st; quest(q, ` · ${q.reward.gold} or${st === 'remplie' ? ' · à réclamer' : st === 'caduque' ? ' · caduque' : ''}`); }
+    const routes = game.convoys.journalLines();
+    if (routes.length) { head('Routes'); for (const l of routes) for (const t of TextGrid.wrap(l.text, W)) out.push({ text: t, color: l.color, indent: 4 }); blank(); }
     const goods = game.poss.journalLines();
     if (goods.length) { head('Biens et compagnons'); for (const l of goods) out.push({ text: l.text.slice(0, w - 8), color: l.color, indent: 4 }); blank(); }
     const fin = qs.filter((q) => q.status === 'terminée' && q.kind !== 'prime');
@@ -299,6 +301,9 @@ export class MapScreen implements Screen {
     for (const s of civ.settlements) if (st.discovered.has(`settlement:${s.id}`)) { const [gl, col] = SET_GLYPH[s.type]; label(s.x, s.z, gl, col, this.zoom >= 2 || s.type === 'capitale' || s.type === 'ville' || s.id === civ.startId ? s.name : undefined); }
     for (const p of civ.pois) if (st.discovered.has(`poi:${p.id}`)) label(p.x, p.z, p.dungeonId >= 0 ? 'Ω' : p.kind === 'camp de bandits' ? 'x' : '¤', p.kind === 'camp de bandits' ? C.red : C.cyan, this.zoom >= 3 ? p.name : undefined);
     for (const m of game.poss.markers()) label(m.x, m.z, m.glyph, m.color, this.zoom >= 2 ? m.name : undefined, true);
+    // convois rencontrés ou proches, épaves récentes
+    const roads = game.convoys.markers();
+    for (const m of roads) label(m.x, m.z, m.glyph, m.color, this.zoom >= 4 ? m.name : undefined, true);
     const bosses = game.exploits.markers();
     for (const m of bosses) label(m.x, m.z, m.glyph, m.color, this.zoom >= 2 ? m.name : undefined, true);
     // cibles des quêtes en cours (la quête suivie clignote en blanc)
@@ -309,6 +314,8 @@ export class MapScreen implements Screen {
     // légende : coupée par morceaux entiers (jamais au milieu d'un mot) quand la fenêtre est étroite
     const legend: [string, string][] = [[`+/- zoom (×${this.zoom})`, ''], ['flèches : déplacer', ' · '], ['Espace : recentrer', ' · '], ['M/Échap : fermer', ' · '], ['◙ capitale', ' · '], ['■ ville', ' '], ['⌂ village', ' '], ['╬ château', ' '], ['Ω souterrain', ' '], ['x bandits', ' '], ['! quête', ' ']];
     if (bosses.length) legend.push(['‡ boss', ' ']);
+    if (roads.some((m) => m.glyph === '♦')) legend.push(['♦ convoi', ' ']);
+    if (roads.some((m) => m.glyph === '×')) legend.push(['× épave', ' ']);
     if (game.poss.markers().length) legend.push(['♥ maison', ' '], ['h cheval', ' '], ['☻ mercenaire', ' ']);
     let help = '';
     for (const [t, sep] of legend) { const next = help ? help + sep + t : t; if (next.length > w - 4) break; help = next; }

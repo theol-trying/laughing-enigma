@@ -29,7 +29,7 @@ export function hitEntity(host: CombatHost, e: Entity, amount: number, sourceId:
     host.events.emit('entity:damaged', { targetId: e.id, sourceId, amount });
     return amount;
   }
-  const armor = e.mon ? e.mon.armor : e.npc ? (e.npc.profession === 'garde' || e.npc.profession === 'soldat' ? 4 : 0) : 0;
+  const armor = e.mon ? e.mon.armor : e.npc ? (e.npc.profession === 'garde' || e.npc.profession === 'soldat' || e.npc.profession === 'escorte' ? 4 : 0) : 0;
   let dmg = Math.max(1, Math.round(amount * (1 - armor / (armor + 12))));
   if (element === 'feu' && e.mon?.def === 'troll') dmg = Math.round(dmg * 1.6); // le feu empêche le troll de se régénérer
   if (e.mon?.def === 'squelette' && element === 'feu') dmg = Math.round(dmg * 1.3);

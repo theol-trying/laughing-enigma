@@ -144,7 +144,7 @@ export class TradeScreen implements Screen {
     const g = ctx.grid, n = this.e.npc!, ch = this.h.character;
     const w = Math.min(g.cols - 2, 110), h = Math.min(g.rows - 2, 32);
     const x = Math.floor((g.cols - w) / 2), y = Math.floor((g.rows - h) / 2);
-    g.box(x, y, w, h, { title: `Commerce — ${n.first} ${n.last} (${n.profession})`, double: true });
+    g.box(x, y, w, h, { title: `Commerce — ${n.first} ${n.last} (${n.title ?? n.profession})`, double: true });
     // marchandage du jour (persuasion, intimidation ou échec) : rappel sur le cadre
     const deal = this.h.rep.dealMult(n);
     if (deal !== 1) { const t = deal < 1 ? ` Remise du jour : -${Math.round((1 - deal) * 100)} % ` : ` Prix majorés aujourd’hui : +${Math.round((deal - 1) * 100)} % `; g.text(x + w - t.length - 2, y, t, deal < 1 ? C.green : C.red, C.panel); }
