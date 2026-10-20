@@ -17,7 +17,7 @@ export const CHEST_MAX_GOLD = 999999;
 const HOUSE_BASE: Record<string, number> = { 'village minier': 1500, village: 1600, port: 1800, bourg: 2000, ville: 2400, capitale: 2900 };
 
 export interface HouseRef { sid: number; bid: number }
-type HouseB = Pick<Building, 'id' | 'kind' | 'ruined'>;
+type HouseB = Pick<Building, 'id' | 'kind' | 'ruined' | 'quarter'>;
 type Resident = Pick<NPCData, 'home' | 'profession' | 'work'>;
 
 /** Prix : base du type de lieu + 12 or par m² au-delà de 48 m², arrondi à 10, toujours entre 1500 et 3000 (0 : lieu sans maison à vendre). */
@@ -40,7 +40,8 @@ function residentWeight(n: Resident): number {
  */
 export function houseForSale(sid: number, type: string, buildings: HouseB[], npcs: Resident[]): number | null {
   if (!HOUSE_TYPES.includes(type)) return null;
-  const maisons = buildings.filter((b) => b.kind === 'maison' && !b.ruined);
+  // maisons du plan d'origine seulement : celles des quartiers (étape 55) n'entrent pas dans ce choix
+  const maisons = buildings.filter((b) => b.kind === 'maison' && !b.ruined && b.quarter === undefined);
   if (maisons.length < MIN_HOUSES || !npcs.some((n) => n.profession === 'aubergiste')) return null;
   let best: { id: number; score: number; h: number } | null = null;
   for (const b of maisons) {
@@ -58,7 +59,7 @@ export function houseForSale(sid: number, type: string, buildings: HouseB[], npc
  * idempotent. Renvoie le nombre de PNJ déplacés.
  */
 export function rehomeHouses(buildings: HouseB[], npcs: Resident[], reserved: number[]): number {
-  const free = buildings.filter((b) => b.kind === 'maison' && !b.ruined && !reserved.includes(b.id));
+  const free = buildings.filter((b) => b.kind === 'maison' && !b.ruined && b.quarter === undefined && !reserved.includes(b.id));
   if (!free.length) return 0;
   let moved = 0;
   for (const rb of reserved) {

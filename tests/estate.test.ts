@@ -31,7 +31,8 @@ describe('maison à vendre : choix et libération (monde de test)', () => {
         const npcs = generateNPCs(civ, s, L), fresh = generateNPCs(civ, s, L);
         const sale = houseForSale(s.id, s.type, L.buildings, npcs);
         expect(houseForSale(s.id, s.type, L.buildings, fresh)).toBe(sale);
-        const maisons = L.buildings.filter((b) => b.kind === 'maison' && !b.ruined);
+        // maisons du plan d'origine : celles des quartiers (étape 55, ajoutées en fin de liste) n'entrent pas dans ce choix
+        const maisons = L.buildings.filter((b) => b.kind === 'maison' && !b.ruined && b.quarter === undefined);
         if (sale === null) { expect(!HOUSE_TYPES.includes(s.type) || maisons.length < MIN_HOUSES || !npcs.some((n) => n.profession === 'aubergiste')).toBe(true); continue; }
         eligible++;
         const b = L.buildings[sale];

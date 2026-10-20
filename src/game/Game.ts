@@ -28,6 +28,7 @@ import { Possessions } from './Possessions';
 import { Exploits } from './Exploits';
 import { Convoys } from './Convoys';
 import { Happenings } from './Happenings';
+import { Quarters } from './Quarters';
 import { CraftingScreen, type Feedback } from '../ui/CraftingScreen';
 import { Particles } from './Particles';
 import { Birds } from './Birds';
@@ -95,6 +96,8 @@ export class Game {
   readonly convoys: Convoys;
   /** événements vivants : raids, fêtes, épidémies, guerres entre factions (frontières qui bougent) */
   readonly happenings: Happenings;
+  /** quartiers des villes (étape 55) : marché animé, tavernes (commandes, rumeurs, tournée, dés), criées, chansons, barde */
+  readonly quarters: Quarters;
   /** ajouts du jeu aux dialogues (lus par DialogueSystem) */
   hooks: DialogueHooks | undefined;
   readonly weatherSys: Weather;
@@ -189,11 +192,12 @@ export class Game {
     this.convoys = new Convoys(this);
     this.entities.convoyHost = this.convoys;
     this.happenings = new Happenings(this);
+    this.quarters = new Quarters(this);
     this.entities.eventHost = this.happenings;
     // la réputation (opinion, prix) suit le propriétaire du lieu : la guerre la change
     this.rep.factionOf = (n) => (n.road || n.id.startsWith('e') ? n.factionId : this.ownerOf(n.sid));
-    const xh = this.exploits.hooks, vh = this.convoys.hooks, hh = this.happenings.hooks;
-    this.hooks = { ...xh, road: vh.road, talk: hh.talk, menu: (e) => [...(vh.menu?.(e) ?? []), ...(hh.menu?.(e) ?? []), ...(xh.menu?.(e) ?? [])] };
+    const xh = this.exploits.hooks, vh = this.convoys.hooks, hh = this.happenings.hooks, qh = this.quarters.hooks;
+    this.hooks = { ...xh, road: vh.road, talk: (e, t) => hh.talk?.(e, t) ?? qh.talk?.(e, t), menu: (e) => [...(vh.menu?.(e) ?? []), ...(hh.menu?.(e) ?? []), ...(qh.menu?.(e) ?? []), ...(xh.menu?.(e) ?? [])] };
     this.weatherSys = new Weather(this.world.macro);
     this.events.on('entity:damaged', (d) => {
       if (d.sourceId === 'player' || d.sourceId?.startsWith('ally:')) this.audio.hit();
@@ -237,7 +241,7 @@ export class Game {
     const key = `${e.id}:${this.time.day}`;
     if (this.happenings.closed(e)) return [];   // boutique fermée pendant une épidémie
     let s = this.stocks.get(key);
-    if (!s) { s = this.convoys.stockFor(e) ?? this.happenings.stockFor(e) ?? this.economy.stock(e.npc!, this.time.day); this.stocks.set(key, s); }
+    if (!s) { s = this.convoys.stockFor(e) ?? this.happenings.stockFor(e) ?? this.quarters.stockFor(e) ?? this.economy.stock(e.npc!, this.time.day); this.stocks.set(key, s); }
     return s.filter((x) => x.qty > 0);
   }
   openTrade(e: Entity): void { if (this.rep.mood(e.npc!) === 'hostile') return; this.ui?.openTrade(e); }
@@ -1163,6 +1167,7 @@ export class Game {
     this.exploits.tick(dt);
     this.convoys.tick(dt);   // après entities.update : obstacles des chariots pour l'image suivante
     this.happenings.tick(dt);   // raids, fêtes, épidémies, guerres (étals et cibles : obstacles de l'image suivante)
+    this.quarters.tick(dt);     // marché et tavernes des quartiers : criées, toasts, chansons, barde
     this.coop?.update(dt);
     if (!this.wasGround && p.onGround && this.prevVy < -7 && !this.dungeon) this.particles.emit('poussière', p.x, p.y + 0.05, p.z, 10);
     this.wasGround = p.onGround; this.prevVy = p.vy;
@@ -1213,6 +1218,7 @@ export class Game {
     this.combatT -= dt;
     if (this.combatT > 0) return 'combat';
     if (this.dungeon) return 'donjon';
+    if (this.quarters.bardPlaying) return 'taverne';   // le barde joue dans la taverne où l'on se trouve
     if (this.happenings.festive()) return 'fête';
     const here = this.world.civ.settlements.some((s) => !s.abandoned && s.type !== 'camp' && Math.hypot(s.x - p.x, s.z - p.z) < s.radius + 25);
     if (here && this.atmoNight < 0.5) return 'village';
@@ -1519,7 +1525,7 @@ export class Game {
     this.coop?.render(this.instances, c.x, c.z);
     this.particles.render(this.instances, c.x, c.z);
     this.exploits.render(this.instances, c.x, c.z, this.elapsed);   // tableaux des primes, objets de quête
-    if (!dg) { this.renderBanners(c.x, c.z); this.birds.render(this.instances, c.x, c.z); this.renderFishing(); this.convoys.render(this.instances, c.x, c.z); this.happenings.render(this.instances, c.x, c.z); }
+    if (!dg) { this.renderBanners(c.x, c.z); this.birds.render(this.instances, c.x, c.z); this.renderFishing(); this.convoys.render(this.instances, c.x, c.z); this.happenings.render(this.instances, c.x, c.z); this.quarters.render(this.instances, c.x, c.z); }
     if (dg && dg.layout.lockedDoor && !this.state.flags.get(`door:dj${dg.layout.id}`)) {
       const d = dg.layout.lockedDoor;
       this.instances.add(trsYawPitch(this.m4, d.x, 1.6, d.z, d.horizontal ? Math.PI / 2 : 0, 0, 3.4, 3.2, 0.3), 0x5a3a22, M.DOOR, 0, 0, 0.3);

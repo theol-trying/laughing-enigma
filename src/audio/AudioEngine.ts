@@ -316,6 +316,17 @@ export class AudioEngine {
   cheer(p?: Pos): void { for (let i = 0; i < 6; i++) this.burst(700 + Math.random() * 900, 'bandpass', 0.35 + Math.random() * 0.3, 0.07, 1.5, p, i * 0.06); }
   /** Flèche plantée dans une cible de paille. */
   thud(p: Pos): void { this.burst(260, 'lowpass', 0.09, 0.4, 1.5, p); this.tone(120, 0.08, 0.15, 'triangle', 0.7, p); }
+  // ---------------------------------------------------------------- quartiers : marché et tavernes (étape 55)
+  /** Chopes qui trinquent (taverne). */
+  clink(p?: Pos): void { this.tone(2350, 0.18, 0.05, 'triangle', 0, p); this.tone(3120, 0.14, 0.035, 'triangle', 0, p, 0.012); this.burst(5200, 'highpass', 0.04, 0.04, 1, p); }
+  /** Criée d'un marchand : appel de voix glissant, bref et doux (une voyelle tenue puis qui retombe). */
+  call(p: Pos, fem = false): void {
+    const f = fem ? 420 : 260;
+    this.tone(f, 0.32, 0.05, 'sawtooth', 1.25, p); this.tone(f * 1.25, 0.42, 0.04, 'sawtooth', 0.8, p, 0.28);
+    this.burst(f * 3, 'bandpass', 0.6, 0.035, 4, p);
+  }
+  /** Dés qui roulent sur une table. */
+  dice(): void { for (let i = 0; i < 5; i++) this.burst(2600 + i * 180, 'bandpass', 0.03, 0.14, 3, undefined, i * 0.07 + (i > 2 ? 0.05 : 0)); }
   /** Fanfare (paix, victoire au concours). */
   fanfare(): void { for (const [f, at] of [[523, 0], [659, 0.14], [784, 0.28], [1047, 0.42]] as [number, number][]) this.tone(f, 0.35, 0.09, 'square', 1, undefined, at); }
 

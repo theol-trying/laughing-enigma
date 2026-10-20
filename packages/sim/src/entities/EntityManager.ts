@@ -1,6 +1,6 @@
 import { Entity, type RemoteTarget } from './Entity';
 export type { RemoteTarget } from './Entity';
-import { generateNPCs, type NPCData } from './NPC';
+import { generateNPCs, generateDistrictNPCs, type NPCData } from './NPC';
 import { humanoid, drawModel, horseModel, mercModel, type ModelDef, type HumanLook } from './Models';
 import { buildLairs, buildHerds, makeMonster, dangerAt, dungeonLevel, MONSTERS, type Lair } from './Monster';
 import { NavGrid } from '../ai/Pathfinding';
@@ -11,6 +11,7 @@ import { HORSE_GRADES, MOUNT, newAlly, mercLevel, mercStats, type SavedHorse, ty
 import { houseForSale, rehomeHouses, type HouseRef } from '../gameplay/Estate';
 import { hitEntity, hitPlayer, type CombatHost } from '../gameplay/Combat';
 import { hash2i } from '@ascii-fort/core/RNG';
+import { segDist } from '@ascii-fort/core/math';
 import type { World } from '@ascii-fort/worldgen/World';
 import type { GameTime } from '@ascii-fort/core/Time';
 import type { EventBus } from '@ascii-fort/core/Events';
@@ -75,13 +76,14 @@ function segCross(ax: number, az: number, bx: number, bz: number, cx: number, cz
   const den = (bx - ax) * (dz - cz) - (bz - az) * (dx - cx);
   if (Math.abs(den) < 1e-12) return false;
   const t = ((cx - ax) * (dz - cz) - (cz - az) * (dx - cx)) / den, u = ((cx - ax) * (bz - az) - (cz - az) * (bx - ax)) / den;
-  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+  // un départ exactement sur la ligne du mur ne compte pas (sinon un PNJ arrêté pile dessus ne pourrait plus en repartir)
+  return t > 1e-6 && t <= 1 && u >= 0 && u <= 1;
 }
 /** métiers qui travaillent un outil en main (geste de frappe à leur poste) */
 const WORK_TOOLS = new Set(['forgeron', 'artisan', 'mineur']);
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
-interface ActiveZone { sid: number; L: Layout; grid: NavGrid; ents: Entity[]; patrol: { x: number; z: number }[] }
+interface ActiveZone { sid: number; L: Layout; grid: NavGrid; ents: Entity[]; patrol: { x: number; z: number }[]; doors: [number, number, number, number][] }
 
 const ACTIVATE = 250, DEACTIVATE = 330, DRAW = 170, LAIR_ON = 230, LAIR_OFF = 320;
 
@@ -96,6 +98,8 @@ export class EntityManager {
   readonly lairs: Lair[];
   private activeLairs = new Map<string, Entity[]>();
   private npcData = new Map<number, NPCData[]>();
+  /** PNJ d'origine de chaque implantation (generateNPCs), sans les habitants des quartiers (étape 55) */
+  private baseData = new Map<number, NPCData[]>();
   private pathQueue: Entity[] = [];
   private checkT = 0;
   private circles: CircleCollider[] = [];
@@ -152,11 +156,14 @@ export class EntityManager {
       const civ = this.host.world.civ;
       const L = this.host.world.civWorld.layouts.find((x) => x.sid === sid);
       l = L ? generateNPCs(civ, civ.settlements[sid], L) : [];
+      this.baseData.set(sid, l.slice());
       if (L) {
         // maison à vendre : choisie sur les données brutes, puis libérée (ses habitants déménagent) ; ne touche pas à la génération
         const sale = houseForSale(sid, civ.settlements[sid].type, L.buildings, l);
         this.sale.set(sid, sale);
         this.rehome(L, l, sid, sale);
+        // habitants des quartiers (étape 55) : ajoutés après ceux d'origine, numéros suivants, flux propre
+        l.push(...generateDistrictNPCs(civ, civ.settlements[sid], L, l));
       }
       this.npcData.set(sid, l);
     }
@@ -179,6 +186,11 @@ export class EntityManager {
     if (l && L && this.rehome(L, l, h.sid, this.sale.get(h.sid) ?? null) > 0) for (const e of this.zones.get(h.sid)?.ents ?? []) e.thinkT = 0;   // leurs entités recalculent leur poste
   }
   allNpcData(): Map<number, NPCData[]> { return this.npcData; }
+  /**
+   * PNJ d'origine (sans les habitants des quartiers de l'étape 55, mêmes objets) : les systèmes qui CHOISISSENT parmi les PNJ
+   * (commanditaires des chaînes et des quêtes, victimes d'un raid…) les lisent pour que leurs tirages ne changent pas.
+   */
+  baseNpcsOf(sid: number): NPCData[] { this.npcsOf(sid); return this.baseData.get(sid) ?? []; }
   findNpc(id: string): NPCData | undefined {
     if (id.startsWith('v')) return this.convoyHost?.npc(id);   // membre d'un convoi
     if (id.startsWith('e')) return this.eventHost?.npc(id);    // soldat, marchand de foire
@@ -201,18 +213,18 @@ export class EntityManager {
       const c = n.colors, garde = garde0, moine = n.look === 'moine', noble = n.look === 'noble';
       const h = (n.age * 31 + n.first.length * 7 + n.last.length) % 10; // variété visuelle stable
       const pr = n.profession, f = n.sex === 'f', h2 = (n.age * 7 + n.last.length * 3) % 10;
-      const hats: Record<string, HumanLook['hat']> = { fermier: 'paille', meunier: 'bonnet', pêcheur: 'bonnet', marchand: 'béret', noble: 'béret', guérisseuse: 'coiffe' };
+      const hats: Record<string, HumanLook['hat']> = { fermier: 'paille', meunier: 'bonnet', pêcheur: 'bonnet', marchand: 'béret', noble: 'béret', guérisseuse: 'coiffe', barde: 'béret', bourgeois: 'béret' };
       m = humanoid({
         skin: c.skin, shirt: garde ? 0x8a8a94 : noble ? 0x6a2a6a : c.shirt, pants: c.pants, hair: n.age > 58 ? 0xb8b4ac : c.hair,
-        helmet: garde, robe: moine, hood: moine && h < 4, cape: noble ? 0x3a2a5a : garde && h < 3 ? 0x6a2a2a : pr === 'chasseur' ? 0x3a5a2a : undefined,
-        weapon: garde ? 'lance' : pr === 'forgeron' || pr === 'artisan' ? 'marteau' : pr === 'mineur' ? 'pioche' : null, shield: garde,
+        helmet: garde, robe: moine, hood: moine && h < 4, cape: noble ? 0x3a2a5a : garde && h < 3 ? 0x6a2a2a : pr === 'chasseur' ? 0x3a5a2a : pr === 'barde' ? 0x7a2a5a : undefined,
+        weapon: garde ? 'lance' : pr === 'forgeron' || (pr === 'artisan' && !(n.quarter && n.work < 0)) ? 'marteau' : pr === 'mineur' ? 'pioche' : pr === 'barde' ? 'luth' : null, shield: garde,
         beard: false, beardStyle: !f && n.age > 22 && !garde && h < 6 ? (['barbe', 'moustache', 'bouc'] as const)[h % 3] : undefined,
         hairStyle: f ? (['long', 'chignon', 'queue'] as const)[h2 % 3] : n.age > 50 && h2 < 4 ? 'chauve' : h2 === 9 ? 'queue' : 'court',
         hat: hats[noble ? 'noble' : pr] && (pr !== 'fermier' || h2 < 7) ? hats[noble ? 'noble' : pr] : undefined,
         hatColor: noble ? 0x5a1a4a : [0x8a2a2a, 0x2a4a7a, 0x4a6a3a, 0x7a6a3a][h2 % 4],
         dress: f && !garde && !moine && h2 < 6, bareArms: pr === 'forgeron' || (pr === 'fermier' && h2 > 6),
         tabard: garde ? fc : undefined, emblem: garde ? 0xe8d8a0 : undefined, face: true,
-        apron: pr === 'forgeron' ? 0x4a3020 : pr === 'aubergiste' ? 0xd8d0c0 : undefined,
+        apron: pr === 'forgeron' ? 0x4a3020 : pr === 'aubergiste' || pr === 'tavernier' ? 0xd8d0c0 : undefined,
         scale: (f ? 0.9 : 0.95) + ((n.age * 13) % 17) / 100, letter: '@',
       });
       this.models.set(key, m);
@@ -231,8 +243,8 @@ export class EntityManager {
     const w = this.host.world, s = w.civ.settlements[sid];
     const L = w.civWorld.layouts.find((x) => x.sid === sid);
     if (!L || !w.chunks.chunkAt(s.x, s.z)) return;
-    const grid = NavGrid.build(w.chunks, s.x, s.z, s.radius + 55, doorPassages(L));
-    const zone: ActiveZone = { sid, L, grid, ents: [], patrol: patrolRoute(L) };
+    const doors = doorPassages(L), grid = NavGrid.build(w.chunks, s.x, s.z, s.radius + 55, doors);
+    const zone: ActiveZone = { sid, L, grid, ents: [], patrol: patrolRoute(L), doors };
     const minute = this.host.time.minuteOfDay, hour = this.host.time.hour;
     for (const n of this.npcsOf(sid)) {
       if (!n.alive) continue;
@@ -553,10 +565,11 @@ export class EntityManager {
       const p = zone.patrol[i];
       return { x: p.x, z: p.z, building: -1, lying: false, face: null, outdoor: true };
     }
-    const sp = resolveSpot(n, b, zone.L, hour);
+    const sp = resolveSpot(n, b, zone.L, hour, this.host.time.day);
     if (sp.outdoor && this.host.rain() > 0.35 && n.profession !== 'garde' && n.profession !== 'soldat') {
       const inn = zone.L.buildings.find((x) => x.kind === 'auberge');
-      return resolveSpot(n, { ...b, place: inn ? 'inn' : 'home', act: 'loisir' }, zone.L, hour);
+      // les habitants des quartiers (étape 55) s'abritent à la taverne
+      return resolveSpot(n, { ...b, place: n.quarter && zone.L.district?.taverns.length ? 'tavern' : inn ? 'inn' : 'home', act: 'loisir' }, zone.L, hour, this.host.time.day);
     }
     return sp;
   }
@@ -638,6 +651,40 @@ export class EntityManager {
   }
 
   private wallSegs: SegCollider[] = []; private wallCircles: CircleCollider[] = []; private wallPlats: Platform[] = [];
+  /**
+   * Bloqué contre le chambranle d'une porte (porte en biais : les cases de 1 m du chemin frôlent le mur) : on passe par l'axe
+   * de la porte, d'un bout à l'autre du passage, avant de reprendre le chemin. false : pas de porte à côté, ou déjà essayé.
+   */
+  private doorAssist(e: Entity): boolean {
+    const zone = this.zones.get(e.sid), path = e.path;
+    if (!zone || !path) return false;
+    let best: [number, number, number, number] | null = null, bd = 1.6;
+    for (const p of zone.doors) {
+      if (Math.abs(p[0] - e.x) > 4 || Math.abs(p[1] - e.z) > 4) continue;
+      const d = segDist(e.x, e.z, p[0], p[1], p[2], p[3]).d;
+      if (d < bd) { bd = d; best = p; }
+    }
+    if (!best) return false;
+    const a = { x: best[0], z: best[1] }, b = { x: best[2], z: best[3] };
+    const [near, far] = Math.hypot(a.x - e.x, a.z - e.z) < Math.hypot(b.x - e.x, b.z - e.z) ? [a, b] : [b, a];
+    const next = path[e.pathI];
+    if (next && ((next.x === near.x && next.z === near.z) || (next.x === far.x && next.z === far.z))) return false;
+    path.splice(e.pathI, 0, near, far);
+    return true;
+  }
+  /** Case libre (centre) à 3 m au plus, que l'on rejoint en ligne droite sans franchir de mur ; null s'il n'y en a pas. */
+  private exitCell(e: Entity, grid: NavGrid): { x: number; z: number } | null {
+    this.host.world.chunks.collidersNear(e.x, e.z, this.wallCircles, this.wallSegs, this.wallPlats);
+    const tall = this.wallSegs.filter((w) => w.top > e.y + 1.0 && w.bottom < e.y + 1.5);
+    const ci = Math.floor(e.x - grid.x0), cj = Math.floor(e.z - grid.z0);
+    let best: { x: number; z: number } | null = null, bd = Infinity;
+    for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) {
+      const x = grid.x0 + ci + di + 0.5, z = grid.z0 + cj + dj + 0.5, d = Math.hypot(x - e.x, z - e.z);
+      if (d >= bd || d > 3.2 || !grid.free(x, z) || tall.some((w) => segCross(e.x, e.z, x, z, w.ax, w.az, w.bx, w.bz))) continue;
+      best = { x, z }; bd = d;
+    }
+    return best;
+  }
   /** Déplace un PNJ sans jamais franchir un mur (glisse le long si besoin) ; renvoie false s'il est bloqué. */
   private step(e: Entity, mx: number, mz: number): boolean {
     this.host.world.chunks.collidersNear(e.x, e.z, this.wallCircles, this.wallSegs, this.wallPlats);
@@ -693,7 +740,7 @@ export class EntityManager {
       if (moving && !blocked) {
         const dx = tx - e.x, dz = tz - e.z, d = Math.hypot(dx, dz) || 1;
         const step = Math.min(d, speed * dt);
-        if (!this.step(e, (dx / d) * step, (dz / d) * step)) { e.path = null; e.target = null; }
+        if (!this.step(e, (dx / d) * step, (dz / d) * step) && !this.doorAssist(e)) { e.path = null; e.target = null; }
         e.heading = turn(e.heading, Math.atan2(dx, -dz), dt * 6);
         e.pose.walk += dt * speed * 4.2;
       } else if (e.action === 'danser' && Math.hypot(p.x - e.x, p.z - e.z) > 1.2) {
@@ -753,7 +800,12 @@ export class EntityManager {
       e.pathPending = false;
       const zone = this.zones.get(e.sid);
       if (!zone || !e.target) continue;
-      const path = zone.grid.findPath(e.x, e.z, e.target.x, e.target.z);
+      // PNJ sur une case bloquée (couché sur un lit, collé à un meuble ou à un mur) : on part de la case libre la plus proche
+      // qu'il peut rejoindre sans traverser de mur (sinon le chemin partirait de l'autre côté du mur et il resterait coincé)
+      const out = zone.grid.free(e.x, e.z) ? null : this.exitCell(e, zone.grid);
+      let path = out ? zone.grid.findPath(out.x, out.z, e.target.x, e.target.z) : null;
+      if (path && out) path.unshift(out);
+      else path = zone.grid.findPath(e.x, e.z, e.target.x, e.target.z);
       // pas de chemin : on ne va tout droit que si la cible est à deux pas (sinon on traverserait les murs)
       e.path = path ?? (Math.hypot(e.target.x - e.x, e.target.z - e.z) < 2.5 ? [{ x: e.target.x, z: e.target.z }] : null);
       if (!e.path) e.target = null;

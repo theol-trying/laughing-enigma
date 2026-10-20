@@ -1,5 +1,5 @@
 import type { NPCData, ScheduleBlock, Profession } from '../entities/NPC';
-import type { Layout, Building, FurnitureKind } from '@ascii-fort/worldgen/civilization/Layout';
+import type { Layout, Building, FurnitureKind, Stall } from '@ascii-fort/worldgen/civilization/Layout';
 import { hash2i } from '@ascii-fort/core/RNG';
 
 // Emploi du temps → lieu concret : le lit du PNJ, l'enclume du forgeron, le comptoir de
@@ -20,8 +20,24 @@ function world(b: Building, lx: number, lz: number) {
 const WORK_FURNITURE: Partial<Record<Profession, FurnitureKind[]>> = {
   forgeron: ['enclume', 'foyer de forge', 'établi'], marchand: ['comptoir'], aubergiste: ['comptoir', 'tonneau'],
   prêtre: ['autel'], moine: ['autel', 'banc'], meunier: ['meule'], noble: ['trône', 'table'], garde: ['râtelier', 'table'],
-  soldat: ['râtelier', 'table'], artisan: ['établi', 'table'],
+  soldat: ['râtelier', 'table'], artisan: ['établi', 'table'], tavernier: ['comptoir'],
 };
+
+/** Marché ouvert (heures de jeu) : étals garnis, marchands à leur poste, flâneurs. */
+export const MARKET_OPEN = 7, MARKET_CLOSE = 18.5;
+/** Le barde se repose ce soir-là (un soir sur quatre environ). */
+export function bardRests(n: Pick<NPCData, 'id'>, day: number): boolean { return hash2i(n.id.length * 131 + n.id.charCodeAt(n.id.length - 1), day, 9) % 4 === 0; }
+/** Taverne où joue le barde ce soir (il en change selon le jour s'il y en a plusieurs). */
+export function bardTavern(n: Pick<NPCData, 'id'>, taverns: readonly number[], day: number): number {
+  return taverns.length ? taverns[hash2i(n.id.charCodeAt(n.id.length - 1), day, 17) % taverns.length] : -1;
+}
+
+/** Position d'un étal du marché : côté marchand (−z local) ou côté clients (+z, décalage latéral lx). */
+export function stallSpot(st: { x: number; z: number; yaw: number }, seller: boolean, lx = 0): { x: number; z: number; face: number } {
+  const c = Math.cos(st.yaw), s = Math.sin(st.yaw), lz = seller ? -1.7 : 1.8;
+  const x = st.x + lx * c + lz * s, z = st.z - lx * s + lz * c;
+  return { x, z, face: Math.atan2(st.x - x, -(st.z - z)) };
+}
 
 /** Point d'un meuble où se tenir (devant, derrière un comptoir, couché sur un lit). */
 function furnitureSpot(b: Building, kinds: FurnitureKind[], salt: number, lying = false): Spot | null {
@@ -44,7 +60,8 @@ function interior(b: Building, salt: number): Spot {
   return { ...world(b, lx, lz), building: b.id, lying: false, face: null, outdoor: false };
 }
 
-export function resolveSpot(n: NPCData, block: ScheduleBlock, L: Layout, hour: number): Spot {
+/** `day` : jour de jeu (le barde change de taverne selon le soir) ; 0 par défaut. */
+export function resolveSpot(n: NPCData, block: ScheduleBlock, L: Layout, hour: number, day = 0): Spot {
   const salt = hash2i(n.id.length * 7919 + n.id.charCodeAt(n.id.length - 1), Math.floor(hour), n.id.charCodeAt(1));
   const byId = (id: number) => L.buildings[id];
   const home = byId(n.home), work = n.work >= 0 ? byId(n.work) : undefined;
@@ -67,6 +84,9 @@ export function resolveSpot(n: NPCData, block: ScheduleBlock, L: Layout, hour: n
       return furnitureSpot(b, WORK_FURNITURE[n.profession] ?? ['table'], salt) ?? interior(b, salt);
     }
     case 'inn': {
+      // étape 55 : dans une ville à tavernes, un habitué sur deux boit son verre (ou mange) à la taverne de son quartier
+      const T = L.district?.taverns;
+      if (T?.length && block.act !== 'dormir' && (hash2i(n.id.length * 7919 + n.id.charCodeAt(n.id.length - 1), 7, n.id.charCodeAt(1)) & 1)) return tavernSeat(n, L, T, home, salt);
       const b = kind('auberge');
       if (b) return furnitureSpot(b, block.act === 'dormir' ? ['lit'] : ['banc', 'table', 'âtre'], salt, block.act === 'dormir') ?? interior(b, salt);
       break;
@@ -85,12 +105,54 @@ export function resolveSpot(n: NPCData, block: ScheduleBlock, L: Layout, hour: n
       const a = ((salt % 360) / 360) * Math.PI * 2, d = L.radius + 50 + (salt % 90);
       return outdoorAt(L.x + Math.cos(a) * d, L.z + Math.sin(a) * d);
     }
+    // étape 55 : le marché (son étal, ou un étal où l'on flâne) et les tavernes des quartiers
+    case 'market': {
+      const S = L.district?.stalls;
+      if (!S?.length) break;
+      if (n.stall !== undefined && S[n.stall] && block.act !== 'loisir') { const p = stallSpot(S[n.stall], true); return { x: p.x, z: p.z, building: -1, lying: false, face: p.face, outdoor: true }; }
+      return browse(S, salt, hour);
+    }
+    case 'tavern': {
+      const T = L.district?.taverns ?? [];
+      if (!T.length) {
+        const b = kind('auberge');
+        if (b) return furnitureSpot(b, block.act === 'dormir' ? ['lit'] : ['banc', 'table', 'âtre'], salt, block.act === 'dormir') ?? interior(b, salt);
+        break;
+      }
+      if (n.profession === 'barde' && block.act === 'travailler') {
+        // le barde joue près de la cheminée, tourné vers la salle ; certains soirs, il se repose chez lui
+        if (bardRests(n, day)) { const hb = home ?? L.buildings[0]; return furnitureSpot(hb, ['table', 'banc', 'âtre'], salt) ?? interior(hb, salt); }
+        const b = L.buildings[bardTavern(n, T, day)], sp = furnitureSpot(b, ['âtre'], 0);
+        return sp ? { ...sp, face: sp.face === null ? null : sp.face + Math.PI } : interior(b, salt);
+      }
+      // client : la taverne la plus proche de chez soi (le tavernier : la sienne)
+      return tavernSeat(n, L, T, home, salt);
+    }
     default: break;
   }
+  // un jour de marché, un flâneur sur deux s'arrête devant les étals plutôt qu'au milieu de la place
+  const S = L.district?.stalls;
+  if (block.place === 'plaza' && block.act === 'loisir' && S?.length && hour >= MARKET_OPEN && hour < MARKET_CLOSE && (salt & 1)) return browse(S, salt, hour);
   // place (ou repli) : un point autour du centre
   const r = L.plaza ? L.plaza.r : 8;
   const a = ((salt % 360) / 360) * Math.PI * 2, d = r * (0.35 + ((salt >> 4) % 50) / 100);
   return outdoorAt(L.x + Math.cos(a) * d, L.z + Math.sin(a) * d);
+}
+
+/** Place d'un client dans une taverne des quartiers : la plus proche de chez lui (le tavernier : la sienne). */
+function tavernSeat(n: NPCData, L: Layout, T: readonly number[], home: Building | undefined, salt: number): Spot {
+  const hb = home ?? L.buildings[0];
+  let b = L.buildings[T[0]];
+  for (const id of T) { const t = L.buildings[id]; if (Math.hypot(t.x - hb.x, t.z - hb.z) < Math.hypot(b.x - hb.x, b.z - hb.z)) b = t; }
+  if (n.work >= 0 && T.includes(n.work)) b = L.buildings[n.work];
+  return furnitureSpot(b, ['banc', 'table', 'âtre'], salt) ?? interior(b, salt);
+}
+
+/** Flâneur au marché : devant un étal (côté clients), un autre tous les quarts d'heure. */
+function browse(S: readonly Stall[], salt: number, hour: number): Spot {
+  const q = hash2i(salt, Math.floor(hour * 4), 31);
+  const p = stallSpot(S[q % S.length], false, (((q >>> 8) % 5) - 2) * 0.45);
+  return { x: p.x, z: p.z, building: -1, lying: false, face: p.face, outdoor: true };
 }
 
 function fieldSpot(L: Layout, near: Building | undefined, salt: number): Spot | null {

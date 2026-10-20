@@ -114,11 +114,19 @@ export function buildBuilding(mb: MeshBuilder, sampler: TerrainSampler, ch: Chun
     ch.platforms.push({ cx: sx, cz: sz, hw: dw / 2 + 0.3, hd: 0.25, yaw: b.yaw, top });
   }
   // torches de façade (auberge, forge, garde, temple, donjon)
-  if (!b.ruined && ['auberge', 'forge', 'corps de garde', 'temple', 'donjon', 'caserne', 'échoppe'].includes(b.kind)) {
+  if (!b.ruined && ['auberge', 'forge', 'corps de garde', 'temple', 'donjon', 'caserne', 'échoppe', 'taverne', 'atelier'].includes(b.kind)) {
     const tx = f.wx(d1 + 0.6, hd + 0.35), tz = f.wz(d1 + 0.6, hd + 0.35);
     mb.box(tx, y + 1.6, tz, 0.12, 0.6, 0.12, 0, 0x4a3020, M.WOOD);
     mb.box(tx, y + 2.2, tz, 0.22, 0.3, 0.22, 0, 0xffa030, M.FIRE);
     ch.lights.push({ x: tx, y: y + 2.4, z: tz, radius: 11, r: 1.5, g: 0.85, b: 0.4, kind: 'torch' });
+  }
+  // enseigne de taverne (étape 55) : potence de fer, panneau de bois perpendiculaire à la façade, une chope peinte
+  if (!b.ruined && b.kind === 'taverne') {
+    const ex = d0 - 0.9, sx = f.wx(ex, hd + 0.55), sz = f.wz(ex, hd + 0.55);
+    mb.box(f.wx(ex, hd + 0.45), y + 2.72, f.wz(ex, hd + 0.45), 0.06, 0.06, 0.95, b.yaw, 0x2e2e2e, M.METAL);
+    mb.box(sx, y + 2.0, sz, 0.06, 0.66, 0.8, b.yaw, 0x6a4a2a, M.WOOD);
+    mb.box(sx, y + 2.12, sz, 0.09, 0.3, 0.24, b.yaw, 0xd8a840, M.CLOTH);
+    mb.box(sx, y + 2.44, sz, 0.09, 0.08, 0.26, b.yaw, 0xf0ece0, M.CLOTH);
   }
   // mobilier
   b.furniture.forEach((fu, i) => furniture(mb, ch, f, b, fu, y, i));
@@ -129,7 +137,7 @@ export function buildBuilding(mb: MeshBuilder, sampler: TerrainSampler, ch: Chun
 /** Décor sans incidence sur le jeu (aucun tirage aléatoire : variations tirées de la position du bâtiment). */
 function interiorDecor(mb: MeshBuilder, ch: ChunkData, f: ReturnType<typeof frame>, b: Building, y: number) {
   const h = (k: number) => ((Math.imul((b.id + 1) * 73856093 ^ Math.floor(b.x * 7) * 19349663 ^ Math.floor(b.z * 3) * 83492791 ^ k * 2654435761, 2246822519) >>> 0) % 1000) / 1000;
-  const lived = ['maison', 'ferme', 'auberge', 'échoppe', 'donjon', 'cabane', 'moulin', 'corps de garde', 'chapelle', 'temple', 'forge', 'caserne', 'dortoir'].includes(b.kind);
+  const lived = ['maison', 'ferme', 'auberge', 'échoppe', 'donjon', 'cabane', 'moulin', 'corps de garde', 'chapelle', 'temple', 'forge', 'caserne', 'dortoir', 'taverne', 'atelier'].includes(b.kind);
   if (!lived) return;
   mb.sky = INSIDE;
   const hw = b.w / 2 - 0.4, hd = b.d / 2 - 0.4;
@@ -158,6 +166,15 @@ function interiorDecor(mb: MeshBuilder, ch: ChunkData, f: ReturnType<typeof fram
       mb.cylinder(cx + ox, y + 0.8, cz + oz, 0.03, 0.2, 5, 0xe8e0c8, M.CLOTH);
       mb.box(cx + ox, y + 1.0, cz + oz, 0.04, 0.06, 0.04, 0, 0xffc060, M.FIRE);
       ch.lights.push({ x: cx + ox, y: y + 1.15, z: cz + oz, radius: 4.5, r: 1.2, g: 0.8, b: 0.4, kind: 'candle' });
+      if (b.kind === 'taverne') {
+        // chopes d'étain et de bois, un pichet (taverne des quartiers)
+        for (let k = 0; k < 3; k++) {
+          const t = -0.6 + k * 0.45 + h(30 + k) * 0.1, px = cx + ox * t * 2, pz = cz + oz * t * 2, sd = (k % 2 ? 1 : -1) * 0.18;
+          mb.cylinder(px - oz * sd * 2, y + 0.8, pz + ox * sd * 2, 0.065, 0.15, 6, k === 1 ? 0x8a6a3a : 0x9a9aa2, k === 1 ? M.WOOD : M.METAL);
+        }
+        mb.cylinder(cx - ox * 0.9, y + 0.8, cz - oz * 0.9, 0.09, 0.26, 6, 0x8a5a3a, M.STONE);
+        continue;
+      }
       mb.cylinder(cx - ox, y + 0.8, cz - oz, 0.12, 0.06, 7, 0xb8b0a0, M.STONE);
       mb.blob(cx - ox * 0.2, y + 0.86, cz - oz * 0.2, 0.12, 0.06, 0.08, 0xc89850, M.WOOD, 5, 3);
     } else if (fu.kind === 'étagère') {

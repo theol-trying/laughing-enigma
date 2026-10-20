@@ -1,5 +1,7 @@
 import type { Civilization } from '@ascii-fort/worldgen/civilization/Civilization';
-import type { Layout, Building } from '@ascii-fort/worldgen/civilization/Layout';
+import type { Layout, Building, QuarterKind } from '@ascii-fort/worldgen/civilization/Layout';
+import { baseBuildings, craftOf } from '@ascii-fort/worldgen/civilization/Districts';
+import { STALLS, CRAFT_DEFS, RESIDENT_TITLES } from '../gameplay/Market';
 import type { Settlement } from '@ascii-fort/worldgen/civilization/types';
 import { NameGen } from '@ascii-fort/worldgen/civilization/Names';
 import type { RNG } from '@ascii-fort/core/RNG';
@@ -11,10 +13,14 @@ export type Profession =
   | 'fermier' | 'forgeron' | 'marchand' | 'aubergiste' | 'garde' | 'prêtre' | 'meunier' | 'chasseur'
   | 'pêcheur' | 'mineur' | 'soldat' | 'moine' | 'noble' | 'artisan' | 'guérisseuse' | 'voyageur'
   // voyageurs des routes (convois : Caravans.ts)
-  | 'charretier' | 'escorte' | 'pèlerin' | 'colporteur' | 'messager';
+  | 'charretier' | 'escorte' | 'pèlerin' | 'colporteur' | 'messager'
+  // quartiers des villes (étape 55)
+  | 'tavernier' | 'barde' | 'bourgeois';
 
 export type Activity = 'dormir' | 'manger' | 'travailler' | 'loisir' | 'prier' | 'patrouiller' | 'garder' | 'voyager';
-export type PlaceRef = 'home' | 'work' | 'inn' | 'plaza' | 'temple' | 'field' | 'patrol' | 'wild';
+export type PlaceRef = 'home' | 'work' | 'inn' | 'plaza' | 'temple' | 'field' | 'patrol' | 'wild'
+  // étape 55 : un étal du marché (le sien, ou celui où l'on flâne), une taverne du lieu
+  | 'market' | 'tavern';
 export interface ScheduleBlock { from: number; to: number; act: Activity; place: PlaceRef }
 
 export interface Traits { bravery: number; kindness: number; greed: number; piety: number; sociability: number; honesty: number }
@@ -46,6 +52,10 @@ export interface NPCData {
   title?: string;
   /** voyageur d'un convoi : route suivie (implantations de départ et d'arrivée) et identifiant du convoi */
   road?: { from: number; to: number; convoy: string };
+  /** habitant ajouté par les quartiers (étape 55) : son quartier ; absent pour les PNJ d'origine */
+  quarter?: QuarterKind;
+  /** marchand du marché : indice de son étal dans layout.district.stalls */
+  stall?: number;
 }
 
 const SKINS = [0xe0b090, 0xc89870, 0xa87850, 0xf0c8a8, 0x8a6040];
@@ -89,6 +99,7 @@ const WEALTH: Record<Profession, number> = {
   fermier: 25, forgeron: 110, marchand: 220, aubergiste: 130, garde: 45, prêtre: 60, meunier: 70, chasseur: 30, pêcheur: 25,
   mineur: 35, soldat: 40, moine: 10, noble: 600, artisan: 60, guérisseuse: 50, voyageur: 80,
   charretier: 20, escorte: 40, pèlerin: 15, colporteur: 90, messager: 30,
+  tavernier: 120, barde: 35, bourgeois: 320,
 };
 
 /** PNJ importants d'une implantation (déterministe). */
@@ -97,7 +108,9 @@ export function generateNPCs(civ: Civilization, s: Settlement, L: Layout): NPCDa
   const rng = civ.seed.stream('npc', s.id);
   const names = new NameGen(rng.fork('names'));
   const out: NPCData[] = [];
-  const houses = L.buildings.filter((b) => b.kind === 'maison' || b.kind === 'ferme' || b.kind === 'cabane');
+  // plan d'origine seulement : les bâtiments ajoutés par les quartiers (étape 55) ne changent rien à ces PNJ
+  const B0 = baseBuildings(L);
+  const houses = B0.filter((b) => b.kind === 'maison' || b.kind === 'ferme' || b.kind === 'cabane');
   let houseIdx = 0;
   const nextHome = (fallback: Building) => (houses.length ? houses[houseIdx++ % houses.length].id : fallback.id);
   const make = (prof: Profession, home: number, work: number, opts: Partial<NPCData> = {}): NPCData => {
@@ -123,7 +136,7 @@ export function generateNPCs(civ: Civilization, s: Settlement, L: Layout): NPCDa
   };
 
   // métiers liés aux bâtiments
-  for (const b of L.buildings) {
+  for (const b of B0) {
     const prof = WORK_OF[b.kind];
     if (!prof) continue;
     const count = prof === 'garde' ? 2 + (s.population > 300 ? 2 : 0) : prof === 'soldat' ? 4 : prof === 'moine' ? 3 : 1;
@@ -133,11 +146,11 @@ export function generateNPCs(civ: Civilization, s: Settlement, L: Layout): NPCDa
     }
   }
   // métiers liés au milieu
-  const inn = L.buildings.find((b) => b.kind === 'auberge');
-  if (s.produces.includes('gibier') && s.type !== 'monastère') make('chasseur', nextHome(L.buildings[0]), -1);
-  if (s.produces.includes('poisson') && s.type !== 'monastère' && rng.chance(0.7)) make('pêcheur', nextHome(L.buildings[0]), -1);
-  if (s.type === 'village minier') for (let k = 0; k < 2; k++) make('mineur', nextHome(L.buildings[0]), -1);
-  if (s.type !== 'hameau' && s.type !== 'fort' && s.type !== 'château' && rng.chance(0.6)) make('guérisseuse', nextHome(L.buildings[0]), -1);
+  const inn = B0.find((b) => b.kind === 'auberge');
+  if (s.produces.includes('gibier') && s.type !== 'monastère') make('chasseur', nextHome(B0[0]), -1);
+  if (s.produces.includes('poisson') && s.type !== 'monastère' && rng.chance(0.7)) make('pêcheur', nextHome(B0[0]), -1);
+  if (s.type === 'village minier') for (let k = 0; k < 2; k++) make('mineur', nextHome(B0[0]), -1);
+  if (s.type !== 'hameau' && s.type !== 'fort' && s.type !== 'château' && rng.chance(0.6)) make('guérisseuse', nextHome(B0[0]), -1);
   // familles : chaque maison non attribuée reçoit un artisan ou un fermier
   for (const hb of houses) if (!out.some((n) => n.home === hb.id)) make(rng.chance(0.5) ? 'artisan' : 'fermier', hb.id, hb.kind === 'ferme' ? hb.id : -1);
   // voyageurs à l'auberge
@@ -196,6 +209,149 @@ export function generateNPCs(civ: Civilization, s: Settlement, L: Layout): NPCDa
     const leader = exp.title.replace("L'expédition de ", '');
     kin.goal = `retrouver ${leader}, parti avec l'expédition`;
     kin.memories.push({ kind: 'perte', subject: leader, day: 0, weight: 1, text: `${leader} n'est jamais revenu des ruines.` });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- quartiers (étape 55)
+type DistrictRole = 'tavernier' | 'étal' | 'barde' | 'échoppe' | 'atelier' | 'aisé' | 'habitant';
+const RICH_SHIRTS = [0x6a2a4a, 0x2a3a6a, 0x4a2a5a, 0x7a5a2a, 0x2a5a4a];
+
+/** Emploi du temps des habitants des quartiers : étal le jour, taverne le soir, flânerie au marché. */
+function districtSchedule(role: DistrictRole, rng: RNG, market: boolean, tavern: boolean): ScheduleBlock[] {
+  const j = () => rng.int(-20, 20);
+  const B = (a: number, b: number, act: Activity, place: PlaceRef): ScheduleBlock => ({ from: a, to: b, act, place });
+  const out: PlaceRef = market ? 'market' : 'plaza', eve: PlaceRef = tavern && rng.chance(0.6) ? 'tavern' : 'home';
+  switch (role) {
+    case 'tavernier': return [B(0, h(1, 30), 'travailler', 'work'), B(h(1, 30), h(9, 30), 'dormir', 'home'), B(h(9, 30), h(10, 30), 'manger', 'home'), B(h(10, 30), 1440, 'travailler', 'work')];
+    case 'étal': {
+      const wake = h(5, 30) + j(), bed = h(21, 30) + j();
+      return [B(0, wake, 'dormir', 'home'), B(wake, h(6, 45), 'manger', 'home'), B(h(6, 45), h(12, 15), 'travailler', 'market'), B(h(12, 15), h(13), 'manger', 'market'), B(h(13), h(18, 30), 'travailler', 'market'), B(h(18, 30), bed, 'loisir', eve), B(bed, 1440, 'dormir', 'home')];
+    }
+    case 'barde': return [B(0, h(1), 'travailler', 'tavern'), B(h(1), h(10, 30), 'dormir', 'home'), B(h(10, 30), h(11, 30), 'manger', 'home'), B(h(11, 30), h(14), 'loisir', out), B(h(14), h(17, 30), 'loisir', 'plaza'), B(h(17, 30), h(19), 'manger', tavern ? 'tavern' : 'home'), B(h(19), 1440, 'travailler', 'tavern')];
+    case 'échoppe': case 'atelier': {
+      const wake = h(6, 30) + j(), eve2 = h(18, 30) + j(), bed = h(22) + j();
+      return [B(0, wake, 'dormir', 'home'), B(wake, h(7, 30), 'manger', 'home'), B(h(7, 30), h(12), 'travailler', 'work'), B(h(12), h(13), 'manger', tavern && rng.chance(0.4) ? 'tavern' : 'home'), B(h(13), eve2, 'travailler', 'work'), B(eve2, bed, 'loisir', eve), B(bed, 1440, 'dormir', 'home')];
+    }
+    default: {
+      const wake = h(6, 45) + j(), bed = h(22) + j(), pm: PlaceRef = role === 'aisé' && rng.chance(0.5) ? 'temple' : out;
+      return [B(0, wake, 'dormir', 'home'), B(wake, h(8), 'manger', 'home'), B(h(8), h(11, 30), 'loisir', out), B(h(11, 30), h(13), 'manger', 'home'), B(h(13), h(15), 'loisir', 'home'), B(h(15), h(17, 30), 'loisir', pm), B(h(17, 30), h(19), 'manger', 'home'), B(h(19), bed, 'loisir', eve), B(bed, 1440, 'dormir', 'home')];
+    }
+  }
+}
+
+const DISTRICT_GOALS: Record<DistrictRole, string> = {
+  tavernier: 'faire de sa taverne la plus courue de la ville', étal: 'vendre tout son étal avant midi', barde: 'composer une chanson qu’on chantera encore dans cent ans',
+  échoppe: 'ouvrir une seconde boutique', atelier: 'prendre un apprenti et lui transmettre le métier', aisé: 'tenir son rang en ville', habitant: 'vivre tranquille',
+};
+
+/**
+ * Habitants des quartiers (étape 55) : taverniers, marchands du marché, barde, boutiquiers, artisans, puis les familles des
+ * nouvelles maisons. Flux propre (« quartiers ») : les PNJ d'origine (generateNPCs) ne changent pas ; les nouveaux prennent les
+ * numéros suivants (`n<sid>:<base.length + k>`), vivent dans les bâtiments ajoutés, et sont au plus la moitié des PNJ d'origine.
+ */
+export function generateDistrictNPCs(civ: Civilization, s: Settlement, L: Layout, base: readonly NPCData[]): NPCData[] {
+  const D = L.district;
+  if (!D || s.abandoned || s.type === 'camp') return [];
+  const budget = Math.floor(base.length * 0.5);
+  if (budget <= 0) return [];
+  const rng = civ.seed.stream('quartiers', 'pnj', s.id);
+  const names = new NameGen(rng.fork('noms'));
+  const taken = new Set(base.map((n) => `${n.first} ${n.last}`));
+  const added = L.buildings.filter((b) => b.quarter !== undefined);
+  const houses = added.filter((b) => b.kind === 'maison');
+  const count = new Map<number, number>();
+  const market = D.stalls.length > 0, tavern = D.taverns.length > 0;
+  const out: NPCData[] = [];
+  /** maison ajoutée la moins peuplée (deux habitants au plus), de préférence dans le quartier demandé */
+  const homeFor = (q: QuarterKind | undefined): number => {
+    let best = -1, bk = Infinity;
+    for (const b of houses) {
+      const n = count.get(b.id) ?? 0;
+      if (n >= 2) continue;
+      const k = n * 10 + (q && b.quarter !== q ? 1 : 0);
+      if (k < bk) { bk = k; best = b.id; }
+    }
+    return best;
+  };
+  const make = (role: DistrictRole, prof: Profession, home: number, work: number, q: QuarterKind, title: (sex: 'm' | 'f') => string, opts: Partial<NPCData> = {}): NPCData | null => {
+    if (out.length >= budget || home < 0) return null;
+    const sex: 'm' | 'f' = opts.sex ?? (rng.chance(0.5) ? 'f' : 'm');
+    let nm = names.person(sex);
+    for (let k = 0; k < 6 && taken.has(`${nm.first} ${nm.last}`); k++) nm = names.person(sex);
+    taken.add(`${nm.first} ${nm.last}`);
+    const rich = prof === 'bourgeois';
+    const n: NPCData = {
+      id: `n${s.id}:${base.length + out.length}`, sid: s.id, first: nm.first, last: nm.last, sex, age: rng.int(role === 'barde' ? 18 : 20, role === 'aisé' ? 70 : 62),
+      profession: prof, home, work, factionId: s.factionId,
+      traits: { bravery: rng.next(), kindness: rng.next(), greed: rng.next(), piety: rng.next(), sociability: rng.next(), honesty: rng.next() },
+      relations: [], wealth: Math.round(WEALTH[prof] * rng.float(0.6, 1.5)), inventory: [],
+      needs: { faim: rng.float(0, 0.4), fatigue: rng.float(0, 0.3), social: rng.float(0.2, 0.6), sécurité: 0 },
+      knowledge: [], goal: DISTRICT_GOALS[role], schedule: districtSchedule(role, rng, market, tavern), shift: 'jour',
+      colors: { skin: rng.pick(SKINS), shirt: rich ? rng.pick(RICH_SHIRTS) : rng.pick(SHIRTS), pants: rng.pick(PANTS), hair: rng.pick(HAIRS) },
+      look: 'civil', alive: true, hp: 30, memories: [], quarter: q, ...opts,
+    };
+    n.title = title(sex);
+    if (role === 'barde') n.traits.sociability = Math.max(n.traits.sociability, 0.7);
+    count.set(home, (count.get(home) ?? 0) + 1);
+    out.push(n);
+    return n;
+  };
+  const fm = (m: string, f: string) => (sex: 'm' | 'f') => (sex === 'f' ? f : m);
+  const resident = (sex: 'm' | 'f') => rng.pick(RESIDENT_TITLES[sex]);
+
+  // tenanciers (dans une maison du quartier de leur taverne ; à défaut, le lit de la taverne)
+  for (const tid of D.taverns) {
+    const tb = L.buildings[tid], hm = homeFor(tb.quarter);
+    make('tavernier', 'tavernier', hm >= 0 ? hm : tid, tid, tb.quarter ?? 'marchand', fm('tavernier', 'tavernière'));
+  }
+  // un marchand par étal (ceux du plan d'origine compris)
+  D.stalls.forEach((st, i) => make('étal', 'marchand', homeFor('marchand'), -1, 'marchand', fm(STALLS[st.kind].m, STALLS[st.kind].f), { stall: i }));
+  // le barde (pas dans toutes les villes)
+  if (tavern && rng.chance(0.75)) make('barde', 'barde', homeFor('résidentiel'), -1, 'résidentiel', () => 'barde');
+  // boutiquiers et artisans
+  for (const b of added) if (b.kind === 'échoppe') make('échoppe', 'marchand', homeFor('marchand'), b.id, 'marchand', fm('marchand', 'marchande'));
+  for (const b of added) {
+    const c = craftOf(b);
+    if (c) make('atelier', 'artisan', homeFor('artisan'), b.id, 'artisan', fm(CRAFT_DEFS[c].m, CRAFT_DEFS[c].f));
+  }
+  // une personne par maison encore vide, puis un conjoint dans les maisons d'une seule personne
+  for (const b of houses) if (!count.get(b.id)) {
+    const rich = b.quarter === 'aisé';
+    make(rich ? 'aisé' : 'habitant', rich ? 'bourgeois' : 'artisan', b.id, -1, b.quarter!, rich ? fm('bourgeois', 'bourgeoise') : resident);
+  }
+  for (const b of houses) {
+    if (count.get(b.id) !== 1) continue;
+    const first = out.find((n) => n.home === b.id);
+    if (!first) continue;
+    const rich = first.profession === 'bourgeois';
+    make(rich ? 'aisé' : 'habitant', rich ? 'bourgeois' : 'artisan', b.id, -1, b.quarter!, rich ? fm('bourgeois', 'bourgeoise') : resident, { sex: first.sex === 'm' ? 'f' : 'm', last: first.last });
+  }
+  // relations entre nouveaux habitants : couples sous un même toit, amis et rivaux
+  for (const b of houses) {
+    const pair = out.filter((n) => n.home === b.id);
+    if (pair.length === 2 && pair[0].sex !== pair[1].sex) {
+      pair[0].relations.push({ id: pair[1].id, kind: 'époux', value: 0.8 });
+      pair[1].relations.push({ id: pair[0].id, kind: 'époux', value: 0.8 });
+    }
+  }
+  for (const n of out) {
+    if (out.length < 3) break;
+    const o = out[rng.int(0, out.length - 1)];
+    if (o.id === n.id || n.relations.some((r) => r.id === o.id)) continue;
+    const rival = rng.chance(0.2);
+    n.relations.push({ id: o.id, kind: rival ? 'rival' : 'ami', value: rival ? -0.5 : 0.5 });
+    o.relations.push({ id: n.id, kind: rival ? 'rival' : 'ami', value: rival ? -0.5 : 0.5 });
+  }
+  // connaissances : lieux proches, histoire récente, routes du lieu
+  const near = civ.pois.filter((p) => Math.hypot(p.x - s.x, p.z - s.z) < 1800 && p.kind !== 'pont');
+  for (const n of out) {
+    for (const p of near) if (rng.chance(n.profession === 'tavernier' || n.profession === 'barde' ? 0.85 : 0.5)) n.knowledge.push(`poi:${p.id}`);
+    for (const e of civ.events) {
+      const old = civ.presentYear - e.year;
+      if ((old < 30 && rng.chance(0.5)) || (n.profession === 'barde' && rng.chance(0.6))) n.knowledge.push(`event:${e.id}`);
+    }
+    for (const r of civ.roads) if (r.a === s.id || r.b === s.id) n.knowledge.push(`settlement:${r.a === s.id ? r.b : r.a}`);
   }
   return out;
 }

@@ -99,7 +99,6 @@ export class Economy {
 
   /** Marchandise d'un PNJ pour la journée (déterministe), réduite en cas de pénurie. */
   stock(n: NPCData, day: number): { id: string; qty: number }[] {
-    const rng = this.seed.stream('economy', n.id, day);
     const lists: Record<string, string[]> = {
       marchand: ['pain', 'fromage', 'pomme', 'sel', 'étoffe', 'outils', 'potion de soin', 'antidote', 'flèche', 'bottes', 'gants', 'bois', 'hache de bûcheron', 'pioche', 'crochet', 'canne à pêche', 'cuir'],
       forgeron: ['hache de bûcheron', 'pioche', 'épée courte', 'épée longue', 'hache', 'masse', 'lance', 'dague', 'casque de fer', 'cotte de mailles', 'bouclier en bois', 'bouclier de fer', 'lingot de fer', 'charbon', 'flèche', 'gantelets de fer', 'bottes ferrées'],
@@ -116,6 +115,18 @@ export class Economy {
     };
     const list = lists[n.profession];
     if (!list) return [];
+    const out = this.listStock(n, day, list);
+    // outils de récolte : toujours disponibles chez le forgeron et le mineur
+    if (n.profession === 'forgeron' || n.profession === 'mineur') for (const id of ['hache de bûcheron', 'pioche']) if (!out.some((o) => o.id === id) && (n.profession === 'forgeron' || id === 'pioche')) out.unshift({ id, qty: 1 });
+    return out;
+  }
+
+  /**
+   * Marchandise du jour tirée d'une liste (même règle que stock : flux « economy » du PNJ et du jour, quantités selon l'offre
+   * régionale, pénuries) : étals du marché, tavernes et ateliers des quartiers (étape 55).
+   */
+  listStock(n: NPCData, day: number, list: readonly string[]): { id: string; qty: number }[] {
+    const rng = this.seed.stream('economy', n.id, day);
     const out: { id: string; qty: number }[] = [];
     for (const id of list) {
       const d = item(id);
@@ -125,8 +136,6 @@ export class Economy {
       const qty = Math.max(0, Math.round(base * sup * rng.float(0.5, 1.5) - (sup < 0.7 ? 1 : 0)));
       if (qty > 0 && (d.cat === 'munition' || rng.chance(Math.min(1, 0.55 + sup * 0.35)))) out.push({ id, qty });
     }
-    // outils de récolte : toujours disponibles chez le forgeron et le mineur
-    if (n.profession === 'forgeron' || n.profession === 'mineur') for (const id of ['hache de bûcheron', 'pioche']) if (!out.some((o) => o.id === id) && (n.profession === 'forgeron' || id === 'pioche')) out.unshift({ id, qty: 1 });
     return out;
   }
 }

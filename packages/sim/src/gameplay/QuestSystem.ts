@@ -75,7 +75,7 @@ export class QuestSystem {
   private active(kind: QuestKind): Quest[] { return this.quests.filter((q) => q.kind === kind && q.status === 'active'); }
 
   private npcWith(sid: number, profs: string[]): NPCData | undefined {
-    const npcs = this.h.entities.npcsOf(sid);
+    const npcs = this.h.entities.baseNpcsOf(sid);   // PNJ d'origine (étape 55 : mêmes commanditaires)
     for (const p of profs) { const n = npcs.find((x) => x.profession === p && x.alive); if (n) return n; }
     return undefined;
   }

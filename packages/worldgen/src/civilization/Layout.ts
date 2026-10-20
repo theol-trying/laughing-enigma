@@ -8,7 +8,9 @@ import { segDist } from '@ascii-fort/core/math';
 
 export type BuildingKind =
   | 'maison' | 'auberge' | 'forge' | 'échoppe' | 'chapelle' | 'corps de garde' | 'ferme' | 'grange'
-  | 'moulin' | 'temple' | 'caserne' | 'donjon' | 'dortoir' | 'ruine' | 'mausolée' | 'cabane';
+  | 'moulin' | 'temple' | 'caserne' | 'donjon' | 'dortoir' | 'ruine' | 'mausolée' | 'cabane'
+  // quartiers des villes (étape 55)
+  | 'taverne' | 'atelier';
 
 export type FurnitureKind =
   | 'lit' | 'table' | 'banc' | 'coffre' | 'tonneau' | 'âtre' | 'comptoir' | 'enclume' | 'foyer de forge'
@@ -24,6 +26,30 @@ export interface Building {
   furniture: Furniture[];
   floorY: number;              // calculé à la construction (NaN avant)
   dungeonId: number;
+  /** bâtiment ajouté par les quartiers (étape 55) : quartier d'appartenance ; absent pour le plan d'origine */
+  quarter?: QuarterKind;
+}
+
+/** Quartiers d'une ville (étape 55). */
+export type QuarterKind = 'artisan' | 'marchand' | 'résidentiel' | 'aisé';
+/** Spécialités des étals du marché (marchandises et titre du marchand : sim/gameplay/Market.ts). */
+export type StallKind =
+  | 'maraîcher' | 'boulanger' | 'fromager' | 'poissonnier' | 'boucher' | 'drapier' | 'herboriste' | 'saunier'
+  | 'vigneron' | 'quincaillier' | 'boisselier';
+/**
+ * Étal permanent du marché : décor « étal » (`decor` : indice dans layout.decor). Le marchand se tient du côté −z local,
+ * les clients du côté +z. `existing` : étal du plan d'origine, repris tel quel.
+ */
+export interface Stall { x: number; z: number; yaw: number; decor: number; kind: StallKind; existing: boolean }
+/** Ajouts des quartiers (étape 55) : tout est en fin de liste, rien du plan d'origine ne bouge. */
+export interface District {
+  quarters: { kind: QuarterKind; x: number; z: number; r: number }[];
+  stalls: Stall[];
+  /** ids des tavernes (bâtiments ajoutés) */
+  taverns: number[];
+  /** ruelles et petites places (revêtement du sol seulement, sans effet sur le relief) */
+  paths: { ax: number; az: number; bx: number; bz: number; w: number }[];
+  squares: { x: number; z: number; r: number }[];
 }
 
 export type DecorKind =
@@ -46,11 +72,15 @@ export interface Layout {
   towers: Tower[];
   decor: Decor[];
   fields: Field[];
+  /** taille du plan d'origine (avant l'étape 55) : les bâtiments et décors au-delà sont des ajouts des quartiers */
+  base?: { buildings: number; decor: number };
+  /** quartiers, marché et tavernes ajoutés (étape 55) ; absent : aucun ajout */
+  district?: District;
 }
 
-const TOWN = new Set(['bourg', 'ville', 'capitale']);
+export const TOWN = new Set(['bourg', 'ville', 'capitale']);
 
-interface Ctx { civ: Civilization; L: Layout; rng: RNG; s: Settlement | null }
+export interface Ctx { civ: Civilization; L: Layout; rng: RNG; s: Settlement | null }
 
 function overlaps(L: Layout, x: number, z: number, r: number): boolean {
   for (const b of L.buildings) if (Math.hypot(b.x - x, b.z - z) < (Math.hypot(b.w, b.d) / 2 + r) * 0.92) return true;
@@ -58,7 +88,7 @@ function overlaps(L: Layout, x: number, z: number, r: number): boolean {
   return false;
 }
 
-function terrainOk(civ: Civilization, x: number, z: number, r: number): boolean {
+export function terrainOk(civ: Civilization, x: number, z: number, r: number): boolean {
   const m = civ.macro;
   const riv = m.riverIndex.nearest(x, z);
   if (riv && riv.d < riv.width / 2 + r + 4) return false;
@@ -114,6 +144,23 @@ function furnish(kind: BuildingKind, w: number, d: number, rng: RNG): Furniture[
     case 'moulin': add('meule', 0, -0.4); add('foin', hw - 0.6, -hd + 0.6); add('lit', -hw + 0.2, -hd + 0.6); add('coffre', hw - 0.3, hd - 1, Math.PI / 2); break;
     case 'donjon': add('trône', 0, -hd + 0.8); add('table', 0, 0.5); add('banc', -1, 1.3); add('banc', 1, 1.3); add('râtelier', hw - 0.1, 0, Math.PI / 2); add('coffre', -hw + 0.3, -hd + 0.4); add('âtre', -hw + 0.3, 0.5, Math.PI / 2); break;
     case 'mausolée': add('escalier', 0, -0.5); break;
+    case 'taverne': {
+      // comptoir et tonneaux au fond, lit du tavernier au fond à gauche, cheminée à gauche, quatre tables de part et
+      // d'autre de l'allée centrale (la porte est au milieu de la façade)
+      add('comptoir', 0.4, -hd + 1.6);
+      add('tonneau', hw - 0.3, -hd + 0.3); add('tonneau', hw - 1.2, -hd + 0.3); add('tonneau', hw - 0.3, -hd + 1.2);
+      add('lit', -hw + 0.2, -hd + 0.6, 0);
+      add('âtre', -hw + 0.3, 1.0, Math.PI / 2);
+      const tx = Math.min(2.2, hw - 2.4);
+      for (const z of [0.2, 2.1]) for (const sx of [-1, 1]) { add('table', sx * tx, z); add('banc', sx * tx, z + 0.75); }
+      add('coffre', hw - 0.2, -hd + 2.4, Math.PI / 2);
+      break;
+    }
+    case 'atelier':
+      add('établi', -hw + 1.2, -hd + 0.4); add('établi', hw - 1.2, -hd + 0.4);
+      add('étagère', -hw, 0.8, Math.PI / 2); add('tonneau', hw - 0.3, -0.5);
+      add('table', 0.3, 0.9); add('coffre', hw - 0.2, hd - 1.2, Math.PI / 2);
+      break;
     default: break;
   }
   separate(F, hw + 0.9, hd + 0.9);
@@ -145,7 +192,7 @@ function separate(F: Furniture[], halfW: number, halfD: number) {
 
 const NAMES_INN = ['du Sanglier Gris', 'du Pot d\'Étain', 'de la Chèvre Borgne', 'du Gué Tranquille', 'des Trois Corbeaux', 'du Chêne Creux', 'de la Lanterne', 'du Cerf Blanc'];
 
-function addBuilding(ctx: Ctx, kind: BuildingKind, x: number, z: number, yaw: number, w: number, d: number, extra: Partial<Building> = {}): Building {
+export function addBuilding(ctx: Ctx, kind: BuildingKind, x: number, z: number, yaw: number, w: number, d: number, extra: Partial<Building> = {}): Building {
   const { L, rng, s } = ctx;
   const stone = extra.stone ?? (s ? TOWN.has(s.type) || s.type === 'fort' || s.type === 'château' || s.type === 'monastère' : true);
   const b: Building = {
@@ -230,7 +277,7 @@ function ring(ctx: Ctx, R: number, stone: boolean, towers: boolean, ruined = fal
   }
 }
 
-function decor(L: Layout, kind: DecorKind, x: number, z: number, yaw = 0, s = 1, dungeonId = -1): void {
+export function decor(L: Layout, kind: DecorKind, x: number, z: number, yaw = 0, s = 1, dungeonId = -1): void {
   L.decor.push({ kind, x, z, yaw, s, key: `${L.sid >= 0 ? 's' + L.sid : 'p' + L.poiId}:d${L.decor.length}`, dungeonId });
 }
 

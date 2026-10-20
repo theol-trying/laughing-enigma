@@ -4,7 +4,7 @@
 // tambourin. Chaque ambiance a son mode, son tempo, sa progression d'accords et sa densité ; les
 // accords, arpèges et phrases de flûte sont tirés au fil de l'eau. Changement d'ambiance : fondu.
 
-export type Mood = 'silence' | 'exploration' | 'village' | 'nuit' | 'donjon' | 'combat' | 'fête';
+export type Mood = 'silence' | 'exploration' | 'village' | 'nuit' | 'donjon' | 'combat' | 'fête' | 'taverne';
 
 interface Theme {
   tempo: number; root: number; scale: number[]; prog: number[];
@@ -25,6 +25,8 @@ const THEMES: Record<Exclude<Mood, 'silence'>, Theme> = {
   combat: { tempo: 138, root: 52, scale: HARMONIC, prog: [0, 5, 6, 4, 0, 5, 3, 4], lute: 0.85, flute: 0.3, drone: 0.6, drums: 1, play: [999, 999], rest: [0, 0], reverb: 0.2 },
   // jour de fête : branle sautillant, flûte enjouée, tambourin et tambour sur chaque temps, presque sans respiration
   fête: { tempo: 126, root: 57, scale: IONIAN, prog: [0, 3, 4, 0, 5, 3, 4, 0], lute: 1, flute: 0.9, drone: 0.3, drums: 0.8, play: [24, 40], rest: [1, 3], reverb: 0.22 },
+  // le barde d'une taverne (étape 55) : gigue au luth, flûte discrète, tambourin, salle close (peu de réverbération)
+  taverne: { tempo: 116, root: 50, scale: DORIAN, prog: [0, 6, 0, 4, 0, 6, 3, 4], lute: 1, flute: 0.45, drone: 0.12, drums: 0.5, play: [20, 32], rest: [2, 4], reverb: 0.1 },
 };
 
 const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);

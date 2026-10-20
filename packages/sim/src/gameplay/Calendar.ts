@@ -322,7 +322,8 @@ export class Calendar {
     const L = this.layouts.get(s.id);
     if (L && raider !== 'loup') {
       const d = Math.hypot(lx - s.x, lz - s.z) || 1, ex = s.x + ((lx - s.x) / d) * s.radius, ez = s.z + ((lz - s.z) / d) * s.radius;
-      const houses = L.buildings.filter((b) => !b.ruined && (b.kind === 'maison' || b.kind === 'ferme' || b.kind === 'grange' || b.kind === 'cabane'))
+      // maisons du plan d'origine (les quartiers de l'étape 55 ne changent pas les plans des raids)
+      const houses = L.buildings.filter((b) => !b.ruined && b.quarter === undefined && (b.kind === 'maison' || b.kind === 'ferme' || b.kind === 'grange' || b.kind === 'cabane'))
         .sort((a, b) => Math.hypot(a.x - ex, a.z - ez) - Math.hypot(b.x - ex, b.z - ez) || a.id - b.id).slice(0, 6);
       burnRng.shuffle(houses);
       const n = Math.min(houses.length, 1 + Math.floor(rBurnN * (s.type === 'hameau' ? 2 : 3)));

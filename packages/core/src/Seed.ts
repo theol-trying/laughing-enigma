@@ -11,7 +11,9 @@ export type StreamName =
   // caravanes et voyageurs sur les routes (étape 53) : flux propre, lu au moment de l'exécution
   | 'convois'
   // événements vivants (étape 54 : raids, fêtes, épidémies, guerres) : flux propre, lu au moment de l'exécution
-  | 'événements';
+  | 'événements'
+  // quartiers des villes (étape 55 : maisons, ateliers, tavernes, étals, habitants) : flux propre, ajouts en fin de liste
+  | 'quartiers';
 
 /** Normalise une saisie de seed : majuscules, séparateurs « - », caractères sûrs. */
 export function normalizeSeed(input: string): string {

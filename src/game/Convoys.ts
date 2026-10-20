@@ -679,7 +679,7 @@ export class Convoys implements ConvoyHost {
   }
   /** Destinataire d'un pli : un notable vivant du lieu, qui n'attend pas déjà autre chose du joueur. */
   private recipient(sid: number): NPCData | undefined {
-    const g = this.g, npcs = g.entities.npcsOf(sid).filter((n) => n.alive && !g.quests.quests.some((q) => q.giver === n.id));
+    const g = this.g, npcs = g.entities.baseNpcsOf(sid).filter((n) => n.alive && !g.quests.quests.some((q) => q.giver === n.id));
     for (const prof of ['noble', 'marchand', 'aubergiste', 'prêtre', 'forgeron', 'garde']) { const n = npcs.find((x) => x.profession === prof); if (n) return n; }
     return npcs[0];
   }

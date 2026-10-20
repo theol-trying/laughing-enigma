@@ -399,7 +399,7 @@ export class Happenings implements EventHost {
       if (rec) { for (const gd of s.produces) rec[gd] = Math.max(0.3, rec[gd] - 0.35); rec.grain = Math.max(0.3, rec.grain - 0.3); }
       // combat observé (ici ou par un autre joueur) : les morts sont celles du combat, partagées par les faits « npc: » ;
       // sans témoin, victimes tirées (les mêmes chez tous les joueurs)
-      const dead = this.outcomes.has(p.id) ? [] : pickVictims(g.entities.npcsOf(p.sid), p.deaths, g.seed, p.id, this.spare);
+      const dead = this.outcomes.has(p.id) ? [] : pickVictims(g.entities.baseNpcsOf(p.sid), p.deaths, g.seed, p.id, this.spare);
       for (const n of dead) this.kill(n, p.id);
       const all = this.victims.get(p.id) ?? [];
       const burnt = p.burn.length ? `${p.burn.length} maison${p.burn.length > 1 ? 's ont' : ' a'} brûlé` : 'des bêtes ont été égorgées';
@@ -447,7 +447,7 @@ export class Happenings implements EventHost {
     const g = this.g, s = this.place(p.sid), end = epidemicEnd(p, this.outcomes.get(p.id));
     const near = Math.hypot(s.x - g.player.x, s.z - g.player.z) < s.radius + 200 && !g.dungeon;
     if (!end.stopped) {
-      const dead = pickVictims(g.entities.npcsOf(p.sid), p.deaths, g.seed, p.id, this.spare, (n) => bedridden(n, p));
+      const dead = pickVictims(g.entities.baseNpcsOf(p.sid), p.deaths, g.seed, p.id, this.spare, (n) => bedridden(n, p));
       for (const n of dead) this.kill(n, p.id);
       this.rumor(dead.length ? `${cap(p.disease)} a quitté ${s.name}, mais elle a emporté ${this.names(dead)}.` : `${cap(p.disease)} a quitté ${s.name} d’elle-même. On respire.`, p.sid, p.id);
       if (near && live) this.say(`${cap(p.disease)} quitte ${s.name}${dead.length ? ` : ${this.names(dead)} n’${dead.length > 1 ? 'ont' : 'a'} pas survécu` : ''}.`, dead.length ? C.orange : C.green);

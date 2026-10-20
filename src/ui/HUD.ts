@@ -88,6 +88,16 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
     }
   }
 
+  // bulles des PNJ des quartiers (criées du marché, toasts et chansons des tavernes, le barde)
+  if (!game.dungeon) for (const b of game.quarters.bubbles) {
+    const e = b.e;
+    if (!e || b.t <= 0 || !e.alive || Math.hypot(e.x - p.x, e.z - p.z) > 30) continue;
+    const pr = game.camera.project(e.x, e.y + e.model.height + 0.45, e.z);
+    if (!pr || pr.u < 0 || pr.u > 1 || pr.v < 0 || pr.v > 1) continue;
+    const x = Math.max(0, Math.min(cols - b.text.length, Math.round(pr.u * cols - b.text.length / 2)));
+    g.text(x, Math.max(2, Math.round(pr.v * rows) - 1), b.text, b.color, C.panel, 0.75);
+  }
+
   // suivi de la quête choisie (la dernière acceptée ou avancée, ou celle suivie depuis le journal) : titre, étape, distance et direction
   const tq = game.quests.trackedQuest();
   if (tq && !st.debug) {
@@ -107,7 +117,7 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
   const civ = game.world.civ, m = game.world.macro;
   const here = civ.settlements.find((s) => !s.abandoned && Math.hypot(s.x - p.x, s.z - p.z) < s.radius + 20);
   const region = m.regions[m.region[m.cellOf(p.x, p.z)]]?.name ?? '';
-  const place = game.dungeon ? game.dungeon.layout.name : game.poss.atHome ? `♥ Chez vous · ${here?.name ?? ''}` : here ? here.name : region;
+  const place = game.dungeon ? game.dungeon.layout.name : game.poss.atHome ? `♥ Chez vous · ${here?.name ?? ''}` : here ? (game.quarters.place ? `${here.name} · ${game.quarters.place}` : here.name) : region;
   const right = ` ${game.time.label()} · ${game.time.phase} · ${game.weather()} `;
   g.text(cols - right.length - 1, 0, right, C.text, C.panel, 0.6);
   g.text(cols - place.length - 3, 1, ` ${place} `, C.title, C.panel, 0.6);

@@ -57,9 +57,15 @@ export class NavGrid {
     // les portes connues sont rouvertes (la grille de 1 m les boucherait)
     for (const [ax, az, bx, bz] of doors) {
       const steps = Math.ceil(Math.hypot(bx - ax, bz - az) * 2);
+      let prev = -1;
       for (let k = 0; k <= steps; k++) {
         const kk = g.idx(ax + (bx - ax) * k / steps, az + (bz - az) * k / steps);
-        if (kk >= 0) B[kk] = 0;
+        if (kk < 0) { prev = -1; continue; }
+        B[kk] = 0;
+        // porte en biais : deux cases successives qui ne se touchent que par un coin ne laissent pas passer (pas de coupe
+        // d'angle, zones en 4-voisinage) ; on rouvre aussi la case qui les relie
+        if (prev >= 0 && prev % n !== kk % n && ((prev / n) | 0) !== ((kk / n) | 0)) B[((prev / n) | 0) * n + (kk % n)] = 0;
+        prev = kk;
       }
     }
     g.label();

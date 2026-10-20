@@ -1,5 +1,5 @@
 import { MACRO, CELL, CHUNK, CHUNKS, WORLD } from '../constants';
-import { lerp, smoothstep } from '@ascii-fort/core/math';
+import { lerp, smoothstep, segDist } from '@ascii-fort/core/math';
 import type { TerrainFeature, Sample, TerrainSampler } from '../terrain/TerrainSampler';
 import type { ChunkExtras, ChunkData } from '../Chunk';
 import { MeshBuilder } from '@ascii-fort/ascii-engine/Mesh';
@@ -8,6 +8,7 @@ import type { Civilization } from './Civilization';
 import type { Settlement, Bridge } from './types';
 import { generateLayouts, type Layout, type Building, type WallSeg, type Tower, type Decor } from './Layout';
 import { buildBuilding, buildWall, buildTower, buildDecor, buildBridge } from './Builders';
+import { addDistricts } from './Districts';
 
 // Pont entre la civilisation (données) et le monde physique : terrain, chunks, horizon.
 
@@ -26,6 +27,7 @@ export class CivWorld {
 
   constructor(readonly civ: Civilization) {
     this.layouts = generateLayouts(civ);
+    addDistricts(civ, this.layouts);   // quartiers (étape 55) : ajouts en fin de liste, le plan d'origine ne bouge pas
     const put = <T>(map: Map<number, T[]>, key: number, v: T) => { let l = map.get(key); if (!l) map.set(key, (l = [])); l.push(v); };
     const chunkKey = (x: number, z: number) => Math.floor(z / CHUNK) * CHUNKS + Math.floor(x / CHUNK);
     for (const L of this.layouts) {
@@ -83,6 +85,15 @@ export class CivWorld {
           for (const f of L.fields) {
             const c = Math.cos(f.yaw), sn = Math.sin(f.yaw), dx = x - f.x, dz = z - f.z;
             if (Math.abs(dx * c - dz * sn) < f.w / 2 && Math.abs(dx * sn + dz * c) < f.d / 2 && !s.road) { s.field = f.crop; s.occupied = true; }
+          }
+          // ruelles et petites places des quartiers (étape 55) : revêtement seulement, le relief ne change pas
+          const D = L.district;
+          if (D && !s.road && !s.field) {
+            for (const q of D.squares) if (Math.abs(x - q.x) < q.r && Math.abs(z - q.z) < q.r && Math.hypot(x - q.x, z - q.z) < q.r) { s.road = town ? 3 : 1; s.occupied = true; }
+            for (const q of D.paths) {
+              if (s.road || x < Math.min(q.ax, q.bx) - q.w || x > Math.max(q.ax, q.bx) + q.w || z < Math.min(q.az, q.bz) - q.w || z > Math.max(q.az, q.bz) + q.w) continue;
+              if (segDist(x, z, q.ax, q.az, q.bx, q.bz).d < q.w / 2) { s.road = town ? 3 : 1; s.occupied = true; }
+            }
           }
           for (const b of L.buildings) if (Math.hypot(x - b.x, z - b.z) < Math.hypot(b.w, b.d) / 2 + 2) s.occupied = true;
           for (const d of L.decor) if (Math.abs(x - d.x) < 3 && Math.abs(z - d.z) < 3) s.occupied = true;

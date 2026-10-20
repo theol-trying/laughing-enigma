@@ -41,6 +41,8 @@ const HELP = [
   'finir [id] [r|s|a|d]                    finit l’événement en cours le plus proche (raid repoussé/réussi, bataille gagnée par a/d)',
   'proprietaire [lieu] [faction|reset]     change le propriétaire d’une place (tabards, bannières, prix, carte)',
   'guerre [declarer|paix] | malade [guerir]   état de la guerre, en déclarer une, signer la paix ; attraper ou soigner la fièvre',
+  'quartiers [lieu]                        bâtiments et PNJ ajoutés par les quartiers du lieu le plus proche (ou nommé)',
+  'taverne [lieu] | marche [lieu]          se téléporter devant la taverne la plus proche, ou au marché le plus proche',
 ];
 
 export class DevConsole implements Screen {
@@ -178,6 +180,11 @@ export class DevConsole implements Screen {
       }
       case 'evenements': case 'événements': case 'evenement': case 'événement': case 'finir': case 'proprietaire': case 'propriétaire': case 'guerre': case 'malade': {
         const res = g.happenings.dev(c, args);
+        for (const l of res) this.print(l.text, l.err ? C.red : C.text);
+        break;
+      }
+      case 'quartiers': case 'taverne': case 'marché': case 'marche': {
+        const res = g.quarters.dev(c, args);
         for (const l of res) this.print(l.text, l.err ? C.red : C.text);
         break;
       }
