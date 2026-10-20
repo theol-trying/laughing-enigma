@@ -7,6 +7,7 @@ import { B } from './terrain/Biomes';
 import { W_NONE } from './terrain/Hydrology';
 import { Civilization } from './civilization/Civilization';
 import { CivWorld } from './civilization/CivWorld';
+import { CaveAtlas } from './caves/Caves';
 
 /** Façade du monde : macro + relief détaillé + chunks chargés. */
 export class World<T = unknown> {
@@ -23,8 +24,14 @@ export class World<T = unknown> {
     this.sampler = new TerrainSampler(this.macro);
     this.sampler.addFeature(this.civWorld.feature());
     this.chunks = new ChunkManager<T>(this.sampler, gpu);
-    this.chunks.extras = this.civWorld.extras(this.sampler);
+    // civilisation, puis entrées des grottes (étape 55) : un ajout construit après tout le reste, qui ne déplace rien
+    const civEx = this.civWorld.extras(this.sampler);
+    this.chunks.extras = { build: (cx, cz, mb, ch) => { civEx.build(cx, cz, mb, ch); this.caves.build(cx, cz, mb, ch); } };
   }
+
+  private caveAtlas: CaveAtlas | null = null;
+  /** Réseaux de grottes (choisis une fois, au premier besoin : premier chunk construit, carte, souterrain). */
+  get caves(): CaveAtlas { return this.caveAtlas ??= new CaveAtlas(this.civ, this.sampler, this.seed); }
 
   heightAt(x: number, z: number): number { return this.chunks.heightAt(x, z); }
   waterAt(x: number, z: number): number { return this.chunks.waterAt(x, z); }

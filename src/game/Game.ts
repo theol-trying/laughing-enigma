@@ -6,7 +6,11 @@ import { World } from '@ascii-fort/worldgen/World';
 import type { MacroWorld } from '@ascii-fort/worldgen/MacroWorld';
 import type { Civilization } from '@ascii-fort/worldgen/civilization/Civilization';
 import { buildFarTerrain } from '@ascii-fort/worldgen/FarTerrain';
-import { generateDungeon, buildDungeon, type DungeonLayout } from '@ascii-fort/worldgen/dungeons/DungeonGenerator';
+import { generateDungeon, buildDungeon } from '@ascii-fort/worldgen/dungeons/DungeonGenerator';
+import type { UnderLayout } from '@ascii-fort/worldgen/dungeons/Under';
+import type { FloorLayout } from '@ascii-fort/worldgen/dungeons/Floors';
+import type { CaveLayout } from '@ascii-fort/worldgen/caves/CaveInterior';
+import type { MeshData } from '@ascii-fort/ascii-engine/Mesh';
 import type { ChunkData, Prop, HarvestNode } from '@ascii-fort/worldgen/Chunk';
 import { Player } from '@ascii-fort/sim/entities/Player';
 import { EntityManager } from '@ascii-fort/sim/entities/EntityManager';
@@ -29,6 +33,7 @@ import { Exploits } from './Exploits';
 import { Convoys } from './Convoys';
 import { Happenings } from './Happenings';
 import { Quarters } from './Quarters';
+import { Underground } from './Underground';
 import { CraftingScreen, type Feedback } from '../ui/CraftingScreen';
 import { Particles } from './Particles';
 import { Birds } from './Birds';
@@ -53,7 +58,18 @@ import { M } from '@ascii-fort/ascii-engine/Materials';
 import { trsYawPitch, mat4 } from '@ascii-fort/core/math';
 import { InstanceBuffer, type Renderer, type GpuMesh, type DrawItem, type PointLight } from '@ascii-fort/ascii-engine/Renderer';
 
-interface ActiveDungeon { layout: DungeonLayout; mesh: GpuMesh; data: ChunkData; ret: { x: number; z: number; heading: number } }
+type Ret = { x: number; z: number; heading: number };
+/**
+ * Souterrain actif : plan d'origine d'un donjon (étage 1), étage inférieur (2, 3) ou grotte (étage 0). `layout.id` : donjon ou
+ * réseau de grottes ; `code` : monde souterrain (Companions.worldOf, comparé entre joueurs) ; `ret` : où l'on ressort.
+ */
+interface ActiveDungeon {
+  layout: UnderLayout; mesh: GpuMesh; data: ChunkData; ret: Ret;
+  floor: number; code: number; zone: string;
+  /** maillages ajoutés (escalier du niveau 1, filons d'une grotte) et leurs objets */
+  extra: { mesh: GpuMesh; data: ChunkData | null }[];
+  floorPlan: FloorLayout | null; cave: CaveLayout | null;
+}
 
 /** Ce que le joueur vise : objet, personnage ou créature (vivante ou morte), objet au sol. */
 /** Bonus temporaire : dégâts (fraction), armure, soins par seconde, récupération d'endurance (fraction). */
@@ -98,6 +114,8 @@ export class Game {
   readonly happenings: Happenings;
   /** quartiers des villes (étape 55) : marché animé, tavernes (commandes, rumeurs, tournée, dés), criées, chansons, barde */
   readonly quarters: Quarters;
+  /** étages inférieurs des donjons et réseaux de grottes (étape 55, passe 2) */
+  readonly under: Underground;
   /** ajouts du jeu aux dialogues (lus par DialogueSystem) */
   hooks: DialogueHooks | undefined;
   readonly weatherSys: Weather;
@@ -167,7 +185,7 @@ export class Game {
   /** mode coopératif en ligne (null en solo) */
   coop: Coop | null = null;
 
-  dispose(): void { this.coop?.dispose(); this.coop = null; this.world.chunks.clear(); this.renderer.deleteMesh(this.far); if (this.dungeon) this.renderer.deleteMesh(this.dungeon.mesh); }
+  dispose(): void { this.coop?.dispose(); this.coop = null; this.world.chunks.clear(); this.renderer.deleteMesh(this.far); if (this.dungeon) { this.renderer.deleteMesh(this.dungeon.mesh); for (const x of this.dungeon.extra) this.renderer.deleteMesh(x.mesh); } }
 
   constructor(seedText: string, private renderer: Renderer, macro?: MacroWorld, civ?: Civilization) {
     this.seed = new WorldSeed(seedText);
@@ -193,6 +211,7 @@ export class Game {
     this.entities.convoyHost = this.convoys;
     this.happenings = new Happenings(this);
     this.quarters = new Quarters(this);
+    this.under = new Underground(this);
     this.entities.eventHost = this.happenings;
     // la réputation (opinion, prix) suit le propriétaire du lieu : la guerre la change
     this.rep.factionOf = (n) => (n.road || n.id.startsWith('e') ? n.factionId : this.ownerOf(n.sid));
@@ -234,6 +253,8 @@ export class Game {
   }
 
   inDungeon(): boolean { return this.dungeon !== null; }
+  /** Monde souterrain où l'on est (-1 : surface ; id du donjon au niveau 1 ; voir Companions.worldOf pour les étages et grottes). */
+  underId(): number { return this.dungeon ? this.dungeon.code : -1; }
   weather(): string { return this.dungeon ? 'souterrain' : this.wx.state; }
 
   /** Stock du jour d'un marchand (les achats le vident). */
@@ -357,6 +378,7 @@ export class Game {
       case 'puits': return "Boire l'eau du puits";
       case 'âtre': case 'feu': case 'foyer': case 'enclume': case 'établi': return WORKSHOP_LABEL[this.workshop(pr)!];
       case 'piège': return this.state.flags.get(pr.key) ? '' : 'Désamorcer le piège';
+      case 'escalier': case 'grotte': case 'issue': case 'levier': case 'herse': case 'champignons': return this.under.propLabel(pr);
       default: return '';
     }
   }
@@ -378,7 +400,7 @@ export class Game {
     const fx = Math.sin(p.heading), fz = -Math.cos(p.heading);
     // un autre joueur juste devant : on peut lui proposer un échange
     if (this.coop) {
-      const dg = this.dungeon ? this.dungeon.layout.id : -1;
+      const dg = this.underId();
       for (const r of this.coop.players.values()) {
         const dx = r.x - p.x, dz = r.z - p.z, d = Math.hypot(dx, dz);
         if (!r.seen || r.dungeon !== dg || d > 3 || (d > 0.6 && (dx * fx + dz * fz) / d < 0.6) || r.pose.dead > 0.5 || !see(r.x, r.z)) continue;
@@ -564,6 +586,7 @@ export class Game {
         this.events.emit('message', { text: "L'eau est fraîche : vous êtes désaltéré (endurance +50 %, 2 min)." });
         break;
       case 'âtre': case 'feu': case 'foyer': case 'enclume': case 'établi': this.openCrafting(pr); break;
+      case 'escalier': case 'grotte': case 'issue': case 'levier': case 'herse': case 'champignons': this.under.interact(pr); break;
       case 'piège':
         if (ch.skills.furtivité >= 15 || ch.stats.AGI >= 7) { this.setFlag(pr.key, true); ch.practice('furtivité', 3); this.events.emit('message', { text: 'Piège désamorcé.' }); }
         else this.events.emit('message', { text: 'Le mécanisme est trop délicat pour vous (Furtivité 15 requise).' });
@@ -674,11 +697,15 @@ export class Game {
     const ch = this.character;
     this.state.opened.add(pr.key);
     let building = this.buildingKind(pr), questItem: string | null = null, depth = 0;
-    if (pr.key.startsWith('dj') && this.dungeon) {
-      const c = this.dungeon.layout.chests.find((x) => x.key === pr.key);
-      building = `coffre${c?.tier ?? 1}`; depth = this.world.civ.dungeons[this.dungeon.layout.id]?.depth ?? 1;
-      if (c?.hasKey) questItem = this.dungeon.layout.keyItem;
-      if (c && c.tier >= 3) { const k = this.dungeon.layout.kind; if (k === 'crypte') questItem = `quête:relique:${this.dungeon.layout.id}`; if (k === 'forteresse') questItem = `quête:journal:${this.dungeon.layout.id}`; }
+    if ((pr.key.startsWith('dj') || pr.key.startsWith('gr')) && this.dungeon) {
+      const dg = this.dungeon, c = dg.layout.chests.find((x) => x.key === pr.key);
+      building = `coffre${c?.tier ?? 1}`;
+      // étages inférieurs plus riches ; grottes selon leur danger ; objets de quête au niveau 1 seulement
+      depth = dg.cave ? Math.ceil(dg.cave.danger / 2) : (this.world.civ.dungeons[dg.layout.id]?.depth ?? 1) + 2 * Math.max(0, dg.floor - 1);
+      if (dg.floor === 1) {
+        if (c?.hasKey) questItem = dg.layout.keyItem;
+        if (c && c.tier >= 3) { const k = dg.layout.kind; if (k === 'crypte') questItem = `quête:relique:${dg.layout.id}`; if (k === 'forteresse') questItem = `quête:journal:${dg.layout.id}`; }
+      }
     }
     if (building === 'camp' && !this.state.flags.get(`marchandises:${pr.sid}`)) { questItem = `quête:marchandises:${pr.sid}`; this.state.flags.set(`marchandises:${pr.sid}`, true); }
     this.giveLoot(containerLoot(this.seed, pr.key, { building, depth, questItem }), pr.kind === 'coffre' ? 'Coffre' : pr.kind === 'tonneau' ? 'Tonneau' : 'Caisse');
@@ -702,7 +729,7 @@ export class Game {
       if (d > reach || (d > 0.5 && (dx * fx + dz * fz) / d < 0.55) || Math.abs(n.y - p.y) > 2.5 || d >= bd) continue;
       node = n; bd = d;
     }
-    if (!node || this.dungeon) return;
+    if (!node || (this.dungeon && node.kind !== 'filon')) return;
     const ch = this.character;
     const pos = { x: node.x, y: node.y + 1, z: node.z };
     const tree = node.kind === 'arbre';
@@ -737,6 +764,15 @@ export class Game {
       if (r() < 0.7) lines.push({ id: 'écorce', qty: ri(1, 2) });
       if ((biome === B.FOREST || biome === B.SWAMP || biome === B.TAIGA) && r() < 0.3) lines.push({ id: 'champignon', qty: ri(1, 2) });
       this.audio.timber(pos);
+    } else if (node.kind === 'filon') {
+      // filon d'une grotte : son minerai, plus généreux qu'un rocher
+      const ore = node.ore ?? 'fer';
+      lines.push({ id: 'pierre', qty: ri(1, 2) });
+      if (ore === 'fer') lines.push({ id: 'minerai de fer', qty: ri(2, 4) });
+      else if (ore === 'charbon') lines.push({ id: 'charbon', qty: ri(2, 4) });
+      else if (ore === 'or') lines.push({ id: 'pépite d’or', qty: ri(1, 2) });
+      else lines.push({ id: 'gemme brute', qty: ri(1, 2) });
+      if (r() < 0.25) lines.push({ id: ore === 'fer' ? 'charbon' : 'minerai de fer', qty: 1 });
     } else {
       lines.push({ id: 'pierre', qty: ri(1, 3) + Math.round(node.size) });
       if (r() < (high ? 0.6 : 0.35)) lines.push({ id: 'minerai de fer', qty: ri(1, 2) });
@@ -823,7 +859,7 @@ export class Game {
   lockLevel(pr: Prop): number {
     if (pr.kind !== 'coffre') return 0;
     const h = hashString(pr.key) % 100;
-    if (pr.key.startsWith('dj')) { const c = this.dungeon?.layout.chests.find((x) => x.key === pr.key); return c && c.tier >= 2 && h < 60 ? Math.min(3, c.tier) : 0; }
+    if (pr.key.startsWith('dj') || pr.key.startsWith('gr')) { const c = this.dungeon?.layout.chests.find((x) => x.key === pr.key); return c && c.tier >= 2 && h < 60 ? Math.min(3, c.tier) : 0; }
     return this.isOwned(pr) && h < 40 ? 1 + (h % 2) : 0;
   }
 
@@ -1038,30 +1074,63 @@ export class Game {
     const layout = generateDungeon(this.seed, d);
     const built = buildDungeon(layout);
     const p = this.player;
-    this.dungeon = { layout, mesh: this.renderer.createMesh(built.mesh), data: built.data, ret: { x: p.x, z: p.z, heading: p.heading + Math.PI } };
-    this.world.chunks.overlays = [built.data];
+    // plan d'origine (niveau 1), avec l'escalier ajouté vers le niveau 2 si le donjon descend plus bas (étape 55)
+    this.mountUnder({ layout, built, extra: this.under.levelOneExtras(d, layout), floor: 1, code: id, zone: 'd' + id, prefix: 'dj' + id, level: 0, ret: { x: p.x, z: p.z, heading: p.heading + Math.PI }, at: { x: layout.entrance.x, z: layout.entrance.z, heading: 0 } });
+    this.events.emit('message', { text: `Vous descendez dans ${d.name}.` });
+  }
+
+  /**
+   * Installe un lieu souterrain : depuis la surface (les convois, événements et zones quittent la simulation), ou à la place du
+   * souterrain actuel (changement d'étage : rien ne repasse par la surface). Étage 1 : créatures du plan d'origine, à l'identique.
+   */
+  mountUnder(u: { layout: UnderLayout; built: { mesh: MeshData; data: ChunkData }; extra?: { mesh: MeshData; data: ChunkData | null }[]; floor: number; code: number; zone: string; prefix: string; level: number; ret: Ret; at: Ret; floorPlan?: FloorLayout | null; cave?: CaveLayout | null }): void {
+    const p = this.player, fromSurface = !this.dungeon;
+    if (p.mounted) this.poss.dismount('Pas de cheval là-dedans : vous mettez pied à terre.', 0xf0d060);
+    if (!fromSurface) this.unmountUnder();
+    const extra = (u.extra ?? []).map((x) => ({ mesh: this.renderer.createMesh(x.mesh), data: x.data }));
+    this.dungeon = { layout: u.layout, mesh: this.renderer.createMesh(u.built.mesh), data: u.built.data, ret: u.ret, floor: u.floor, code: u.code, zone: u.zone, extra, floorPlan: u.floorPlan ?? null, cave: u.cave ?? null };
+    this.world.chunks.overlays = [u.built.data];
+    for (const x of extra) if (x.data) this.world.chunks.overlays.push(x.data);
     this.applyDoor();
-    this.convoys.onWorldChange();   // les convois quittent la simulation (un combat en cours se décide)
-    this.happenings.onWorldChange();   // raids, batailles et foires incarnés aussi
-    this.entities.clear();
-    this.entities.spawnDungeon(layout);
+    if (fromSurface) {
+      this.convoys.onWorldChange();   // les convois quittent la simulation (un combat en cours se décide)
+      this.happenings.onWorldChange();   // raids, batailles et foires incarnés aussi
+      this.entities.clear();
+    }
+    if (u.floor === 1) this.entities.spawnDungeon(u.layout);
+    else this.entities.spawnDungeon(u.layout, { prefix: u.prefix, zone: u.zone, level: u.level });
     this.exploits.onWorldChange();
     p.bounded = false;
-    p.x = layout.entrance.x; p.z = layout.entrance.z; p.y = 0.05; p.vx = p.vz = p.vy = 0;
-    p.heading = 0;
-    this.events.emit('message', { text: `Vous descendez dans ${d.name}.` });
+    p.x = u.at.x; p.z = u.at.z; p.y = 0.05; p.vx = p.vz = p.vy = 0;
+    p.heading = u.at.heading;
+  }
+
+  /** Retire le souterrain actif (maillages, collisions, créatures) sans replacer le joueur. */
+  private unmountUnder(): void {
+    const dg = this.dungeon;
+    if (!dg) return;
+    this.renderer.deleteMesh(dg.mesh);
+    for (const x of dg.extra) this.renderer.deleteMesh(x.mesh);
+    this.world.chunks.overlays = [];
+    this.entities.clearDungeon();
+    this.dungeon = null;
+  }
+
+  /** Remplace un maillage ajouté du souterrain actif (filons d'une grotte refaits quand l'un d'eux est épuisé). */
+  swapUnderMesh(i: number, m: MeshData): void {
+    const x = this.dungeon?.extra[i];
+    if (!x) return;
+    this.renderer.deleteMesh(x.mesh);
+    x.mesh = this.renderer.createMesh(m);
   }
 
   exitDungeon(): void {
     const dg = this.dungeon;
     if (!dg) return;
-    this.renderer.deleteMesh(dg.mesh);
-    this.world.chunks.overlays = [];
-    this.entities.clearDungeon();
+    this.unmountUnder();
     const p = this.player;
     p.bounded = true;
     p.x = dg.ret.x; p.z = dg.ret.z; p.heading = dg.ret.heading; p.vx = p.vz = p.vy = 0;
-    this.dungeon = null;
     this.exploits.onWorldChange();
     this.world.chunks.update(p.x, p.z, -1);
     p.y = this.world.heightAt(p.x, p.z) + 0.1;
@@ -1069,6 +1138,7 @@ export class Game {
 
   /** Collision de la porte verrouillée (retirée quand elle est ouverte). */
   applyDoor(): void {
+    this.under.applyGate();   // herse des étages (leviers)
     const dg = this.dungeon;
     if (!dg || !dg.layout.lockedDoor) return;
     const d = dg.layout.lockedDoor, segs = dg.data.segs;
@@ -1168,6 +1238,7 @@ export class Game {
     this.convoys.tick(dt);   // après entities.update : obstacles des chariots pour l'image suivante
     this.happenings.tick(dt);   // raids, fêtes, épidémies, guerres (étals et cibles : obstacles de l'image suivante)
     this.quarters.tick(dt);     // marché et tavernes des quartiers : criées, toasts, chansons, barde
+    this.under.tick(dt);        // entrées de grottes découvertes, herse, filons épuisés, rumeurs
     this.coop?.update(dt);
     if (!this.wasGround && p.onGround && this.prevVy < -7 && !this.dungeon) this.particles.emit('poussière', p.x, p.y + 0.05, p.z, 10);
     this.wasGround = p.onGround; this.prevVy = p.vy;
@@ -1313,7 +1384,7 @@ export class Game {
       if (pr.kind !== 'piège' || this.state.flags.get(pr.key)) continue;
       if (Math.hypot(pr.x - p.x, pr.z - p.z) < 0.9) {
         this.state.flags.set(pr.key, true);
-        p.hp -= 15; p.hurt = 0.5;
+        p.hp -= 15 + 6 * Math.max(0, this.dungeon.floor - 1); p.hurt = 0.5;   // plus bas, plus cruels
         this.events.emit('message', { text: 'Des piques jaillissent du sol !', color: 0xe05040 });
         if (p.hp <= 0) { p.hp = 0; p.dead = true; this.onPlayerDeath(); }
       }
@@ -1413,10 +1484,13 @@ export class Game {
       if (e) n.hp = e.alive ? e.hp : 0;
       npcs.push({ id: n.id, alive: n.alive, hp: n.hp, wealth: n.wealth, memories: n.memories });
     }
-    const est = this.poss.toSave(), ex = this.exploits.toSave(), cv = this.convoys.toSave(), ev = this.happenings.toSave();
+    const est = this.poss.toSave(), ex = this.exploits.toSave(), cv = this.convoys.toSave(), ev = this.happenings.toSave(), under = this.under.toSave();
     return {
       format: 1, game: GAME_VERSION, generator: GENERATOR_VERSION, seed: this.seed.text, savedAt: Date.now(), label, time: this.time.minutes,
-      player: { x: p.x, y: p.y, z: p.z, heading: p.heading, pitch: p.pitch, hp: p.hp, stamina: p.stamina, mana: p.mana, dungeon: this.dungeon ? this.dungeon.layout.id : -1, ret: this.dungeon ? this.dungeon.ret : null },
+      // niveau 1 d'un donjon : format d'origine ; étage inférieur ou grotte : la position de surface (devant l'entrée) et `under`
+      player: under ? { x: under.ret.x, y: this.world.heightAt(under.ret.x, under.ret.z) + 0.1, z: under.ret.z, heading: under.ret.heading, pitch: p.pitch, hp: p.hp, stamina: p.stamina, mana: p.mana, dungeon: -1, ret: null }
+        : { x: p.x, y: p.y, z: p.z, heading: p.heading, pitch: p.pitch, hp: p.hp, stamina: p.stamina, mana: p.mana, dungeon: this.dungeon ? this.dungeon.layout.id : -1, ret: this.dungeon ? this.dungeon.ret : null },
+      ...(under ? { under } : {}),
       character: { stats: { ...ch.stats }, skills: { ...ch.skills }, skillXp: { ...ch.skillXp }, level: ch.level, xp: ch.xp, statPoints: ch.statPoints, inv: [...ch.inv.items], gold: ch.inv.gold, equip: { ...ch.equip }, spells: [...ch.spells], spellR: ch.spellR, spellF: ch.spellF, talents: { ...ch.talents } },
       state: { opened: [...st.opened], dropped: st.dropped, flags: [...st.flags].filter(([k, v]) => !k.startsWith('cueilli:') || v === this.time.day), discovered: [...st.discovered], explored: packBits(st.explored) },
       npcs,
@@ -1473,6 +1547,7 @@ export class Game {
     } else this.world.chunks.update(d.player.x, d.player.z, -1);
     p.x = d.player.x; p.y = d.player.y; p.z = d.player.z; p.heading = d.player.heading; p.pitch = d.player.pitch;
     p.vx = p.vy = p.vz = 0; p.dead = false;
+    if (d.under) { try { this.under.restore(d.under); } catch { if (this.dungeon) this.exitDungeon(); } }   // étage inférieur ou grotte (étape 55)
     this.syncStats();
     p.hp = d.player.hp; p.stamina = d.player.stamina; p.mana = d.player.mana;
     this.lastHp = p.hp;
@@ -1497,9 +1572,12 @@ export class Game {
     if (dg) {
       atmo.sunColor = [0, 0, 0]; atmo.ambSky = [0.13, 0.115, 0.1]; atmo.ambGround = [0.08, 0.07, 0.06];
       atmo.fogColor = [0.012, 0.01, 0.01]; atmo.fogDensity = 0.03; atmo.shadows = false;
+      // grottes : roche froide et bleutée ; étages inférieurs : un peu plus sombres
+      if (dg.floor === 0) { atmo.ambSky = [0.085, 0.09, 0.105]; atmo.ambGround = [0.05, 0.05, 0.06]; atmo.fogColor = [0.008, 0.01, 0.014]; }
+      else if (dg.floor > 1) { atmo.ambSky = [0.11, 0.1, 0.09]; atmo.ambGround = [0.065, 0.06, 0.055]; atmo.fogDensity = 0.035; }
     }
     const items: DrawItem[] = [];
-    if (dg) items.push({ mesh: dg.mesh });
+    if (dg) { items.push({ mesh: dg.mesh }); for (const x of dg.extra) items.push({ mesh: x.mesh }); }
     else {
       items.push({ mesh: this.far, clip: 1 });
       for (const g of this.world.chunks.gpuItems()) items.push({ mesh: g.gpu, clip: 2, shadow: true, cx: g.cx, cz: g.cz });
@@ -1525,6 +1603,7 @@ export class Game {
     this.coop?.render(this.instances, c.x, c.z);
     this.particles.render(this.instances, c.x, c.z);
     this.exploits.render(this.instances, c.x, c.z, this.elapsed);   // tableaux des primes, objets de quête
+    if (dg) this.under.render(this.instances);   // leviers et herse des étages
     if (!dg) { this.renderBanners(c.x, c.z); this.birds.render(this.instances, c.x, c.z); this.renderFishing(); this.convoys.render(this.instances, c.x, c.z); this.happenings.render(this.instances, c.x, c.z); this.quarters.render(this.instances, c.x, c.z); }
     if (dg && dg.layout.lockedDoor && !this.state.flags.get(`door:dj${dg.layout.id}`)) {
       const d = dg.layout.lockedDoor;

@@ -124,7 +124,7 @@ export class Coop implements EntityNet {
       if (this.applying) return;
       const e = game.entities.entities.find((x) => x.id === k.victimId);
       if (e?.mon?.unique) this.fact('killed:' + e.mon.unique, 1);
-      if (k.victimId.startsWith('dj')) this.fact('killed:' + k.victimId, 1);
+      if (k.victimId.startsWith('dj') || k.victimId.startsWith('gr')) this.fact('killed:' + k.victimId, 1);
       if (k.kind === 'npc') this.fact('npc:' + k.victimId, 0);
       // coup fatal porté par un autre joueur : il reçoit le crédit (XP, quêtes, délit)
       if (k.killerId?.startsWith('p:') && k.kind !== 'player') this.direct(k.killerId.slice(2), { k: 'kill', id: k.victimId, type: k.type, kind: k.kind as 'npc' | 'monster', sid: k.settlementId, fid: k.factionId, camp: k.campId, x: k.x, z: k.z });
@@ -132,7 +132,7 @@ export class Coop implements EntityNet {
     ev.on('camp:cleared', (c) => { if (!this.applying) this.fact('camp:' + c.campId, 1); });
     game.entities.net = this;
     // nos tirs et sorts sont montrés aux autres joueurs
-    game.fight.onCast = (fx) => { if (this.players.size) this.net.send({ t: 'fx', d: { ...fx, dg: game.dungeon ? game.dungeon.layout.id : -1 } }); };
+    game.fight.onCast = (fx) => { if (this.players.size) this.net.send({ t: 'fx', d: { ...fx, dg: game.underId() } }); };
   }
 
   dispose(): void {
@@ -215,7 +215,7 @@ export class Coop implements EntityNet {
 
   private onFx(from: string, f: CastFx & { dg: number }) {
     if (!f || typeof f.x !== 'number') return;
-    const g = this.game, here = g.dungeon ? g.dungeon.layout.id : -1;
+    const g = this.game, here = g.underId();
     if (f.dg !== here) return;
     if ((f as unknown as { k: string }).k === 'emote') {
       const r = this.players.get(from), em = (f as unknown as { e: string }).e;
@@ -506,9 +506,9 @@ export class Coop implements EntityNet {
       const hz = g.entities.horse, mc = g.entities.merc;
       const s: PlayerState = {
         x: r2(p.x), y: r2(p.y), z: r2(p.z), h: r2(p.heading), sw: r2(g.fight.swing), bl: p.blocking ? 1 : 0, d: p.dead ? 1 : 0,
-        hp: Math.round(p.hp), mhp: p.maxHp, lk, dg: g.dungeon ? g.dungeon.layout.id : -1, cr: p.crouch ? 1 : 0, sp: p.sprinting ? 1 : 0, iv: p.invisible ? 1 : 0, nm: r2(p.noiseMul), sb: r2(p.stealthBonus),
+        hp: Math.round(p.hp), mhp: p.maxHp, lk, dg: g.underId(), cr: p.crouch ? 1 : 0, sp: p.sprinting ? 1 : 0, iv: p.invisible ? 1 : 0, nm: r2(p.noiseMul), sb: r2(p.stealthBonus),
         ...(hz?.alive && hz.ally?.mounted ? { mt: hz.ally.look + 1 } : {}),
-        ...(mc?.alive && mc.ally && worldOf(mc.x) === worldOf(p.x) ? { mc: [r2(mc.x), r2(mc.z), r2(mc.heading), mercCode(mc.ally.look, mc.ally.arch, mercStats(mc.ally.level, mc.ally.arch).tier, mc.ally.sex), mc.ally.ko > 0 ? 1 : 0] } : {}),
+        ...(mc?.alive && mc.ally && worldOf(mc.x, mc.z) === worldOf(p.x, p.z) ? { mc: [r2(mc.x), r2(mc.z), r2(mc.heading), mercCode(mc.ally.look, mc.ally.arch, mercStats(mc.ally.level, mc.ally.arch).tier, mc.ally.sex), mc.ally.ko > 0 ? 1 : 0] } : {}),
       };
       this.net.send({ t: 'st', s });
       const zs: ZoneEnts[] = g.entities.snapshot();
@@ -534,7 +534,7 @@ export class Coop implements EntityNet {
   }
 
   render(ib: InstanceBuffer, cx: number, cz: number): void {
-    const dg = this.game.dungeon ? this.game.dungeon.layout.id : -1;
+    const dg = this.game.underId();
     for (const r of this.players.values()) {
       if (!r.seen || r.dungeon !== dg || r.invisible || Math.hypot(r.x - cx, r.z - cz) > 170) continue;
       if (r.mount) { drawModel(ib, horseModel(r.mount - 1), r.x, r.y, r.z, r.heading, r.hpose); drawModel(ib, r.model, r.x, r.y + MOUNT.lift, r.z, r.heading, r.pose); }

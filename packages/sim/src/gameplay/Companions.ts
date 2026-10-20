@@ -1,7 +1,7 @@
 import type { WorldSeed } from '@ascii-fort/core/Seed';
 import { MIN_PER_DAY } from '@ascii-fort/core/Time';
 import { NameGen } from '@ascii-fort/worldgen/civilization/Names';
-import { DUNGEON_ORIGIN_X } from '@ascii-fort/worldgen/constants';
+import { DUNGEON_ORIGIN_X, FLOOR_Z0, FLOOR_STEP, FLOOR_CODE, CAVE_ORIGIN_Z, CAVE_SLOT, CAVE_COLS, CAVE_CODE } from '@ascii-fort/worldgen/constants';
 
 // Compagnons du joueur : cheval (monture) et mercenaire. Données, prix, contrat, endurance, états
 // sauvegardables et leur assainissement. Logique pure (ni DOM, ni Math.random) : tout ce qui se teste
@@ -158,7 +158,17 @@ export function allyTargetable(a: AllyState): boolean { return !a.dormant && !a.
  * jusqu'à ~90 m à droite ; la tranche du donjon d couvre donc de ox + 220 d − 100 à ox + 220 d + 120.
  */
 const WORLD_MARGIN = 100;
-export function worldOf(x: number): number { return x < DUNGEON_ORIGIN_X - WORLD_MARGIN ? -1 : Math.floor((x - DUNGEON_ORIGIN_X + WORLD_MARGIN) / 220); }
+/**
+ * Étape 55 : z distingue aussi les étages inférieurs (tous les 400 m au-delà de z = 1250 : code d + 1000 × (n − 1)) et les
+ * grottes (z ≥ 5800, cases de 400 m : code 100000 + g). Sans z (ou z du niveau 1), le classement d'origine est inchangé.
+ */
+export function worldOf(x: number, z = FLOOR_Z0): number {
+  if (x < DUNGEON_ORIGIN_X - WORLD_MARGIN) return -1;
+  if (z >= CAVE_ORIGIN_Z - CAVE_SLOT / 2) return CAVE_CODE + Math.floor((z - CAVE_ORIGIN_Z + CAVE_SLOT / 2) / CAVE_SLOT) * CAVE_COLS + Math.floor((x - DUNGEON_ORIGIN_X + CAVE_SLOT / 2) / CAVE_SLOT);
+  const slice = Math.floor((x - DUNGEON_ORIGIN_X + WORLD_MARGIN) / 220);
+  const band = z < FLOOR_Z0 + 250 ? 0 : Math.floor((z - FLOOR_Z0 - 250) / FLOOR_STEP) + 1;
+  return slice + FLOOR_CODE * band;
+}
 
 // ---------------------------------------------------------------- sauvegarde et réseau (tout est assaini : un champ absent ou invalide = rien)
 

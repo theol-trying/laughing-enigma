@@ -75,7 +75,7 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
     const n = coop.players.size + 1, st = coop.net.status;
     const info = st === 'en ligne' ? ` Salon ${coop.net.code} · ${n} joueur${n > 1 ? 's' : ''} · ${Math.round(coop.net.rtt)} ms ` : ` Salon ${coop.net.code} · ${st}… `;
     g.text(1, 2, info, st === 'en ligne' ? C.cyan : C.orange, C.panel, 0.6);
-    const cam = game.camera, dg = game.dungeon ? game.dungeon.layout.id : -1;
+    const cam = game.camera, dg = game.underId();
     for (const r of coop.players.values()) {
       if (!r.seen || r.dungeon !== dg) continue;
       const d = Math.hypot(r.x - p.x, r.z - p.z);
@@ -113,11 +113,19 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
     }
   }
 
+  // étage (donjon à plusieurs niveaux) ou grotte, sous la boussole, s'il ne chevauche ni le salon ni le suivi de quête
+  const ft = game.under.floorTag();
+  if (ft) {
+    const fx = cx0 + Math.floor((cw - ft.length - 2) / 2);
+    const busy = Math.max(coop ? 32 : 0, tq && !st.debug ? Math.min(50, cols - 4) + 2 : 0);
+    if (fx > busy) g.text(fx, 2, ` ${ft} `, C.cyan, C.panel, 0.6);
+  }
+
   // heure, météo, lieu
   const civ = game.world.civ, m = game.world.macro;
   const here = civ.settlements.find((s) => !s.abandoned && Math.hypot(s.x - p.x, s.z - p.z) < s.radius + 20);
   const region = m.regions[m.region[m.cellOf(p.x, p.z)]]?.name ?? '';
-  const place = game.dungeon ? game.dungeon.layout.name : game.poss.atHome ? `♥ Chez vous · ${here?.name ?? ''}` : here ? (game.quarters.place ? `${here.name} · ${game.quarters.place}` : here.name) : region;
+  const place = game.dungeon ? game.under.label() : game.poss.atHome ? `♥ Chez vous · ${here?.name ?? ''}` : here ? (game.quarters.place ? `${here.name} · ${game.quarters.place}` : here.name) : region;
   const right = ` ${game.time.label()} · ${game.time.phase} · ${game.weather()} `;
   g.text(cols - right.length - 1, 0, right, C.text, C.panel, 0.6);
   g.text(cols - place.length - 3, 1, ` ${place} `, C.title, C.panel, 0.6);

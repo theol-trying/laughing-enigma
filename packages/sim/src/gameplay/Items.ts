@@ -139,6 +139,10 @@ const D: ItemDef[] = [
   { id: 'os', name: 'Os', cat: 'matériau', value: 1, weight: 0.3, desc: 'Pointes de flèches de fortune (enclume).' },
   { id: 'essence spectrale', name: 'Essence spectrale', cat: 'matériau', value: 40, weight: 0.1, desc: 'Froide comme la tombe. Potions de mana (établi).' },
   { id: 'cœur de troll', name: 'Cœur de troll', cat: 'matériau', value: 150, weight: 3, desc: 'Il bat encore, faiblement.' },
+  // créatures des grottes (étape 55)
+  { id: 'peau d’ours', name: 'Peau d’ours', cat: 'matériau', value: 30, weight: 3, desc: 'Épaisse et chaude. Se tanne en cuir à l’établi.', good: 'laine' },
+  { id: 'griffe d’ours', name: 'Griffe d’ours', cat: 'matériau', value: 9, weight: 0.05, desc: 'Potion de force (établi).', good: 'gibier' },
+  { id: 'aile de chauve-souris', name: 'Aile de chauve-souris', cat: 'matériau', value: 6, weight: 0.05, desc: 'Membrane séchée : potion de mana (établi).', good: 'herbes' },
   { id: 'étoffe', name: 'Rouleau d’étoffe', cat: 'matériau', value: 10, weight: 1, desc: 'Gambison (enclume) ; répare les armures d’étoffe.', good: 'étoffe' },
   { id: 'sel', name: 'Sac de sel', cat: 'matériau', value: 8, weight: 2, desc: '', good: 'sel' },
   { id: 'outils', name: 'Outils', cat: 'matériau', value: 15, weight: 2, desc: '', good: 'outils' },

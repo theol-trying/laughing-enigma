@@ -62,7 +62,7 @@ function R(tab: Recipe['tab'], out: string, qty: number, ins: In[], skill: numbe
 /** poissons crus, du moins cher au plus cher (consommés dans cet ordre) */
 const FISH_CHEAP = [...FISH].sort((a, b) => item(a).value - item(b).value);
 const BOIS: In = [['branche', 'bois'], 1, 'Branches ou bûches'];
-const PEAU: In = [['peau de sanglier', 'peau de cerf', 'peau de loup'], 1, 'Peau de bête'];
+const PEAU: In = [['peau de sanglier', 'peau de cerf', 'peau de loup', 'peau d’ours'], 1, 'Peau de bête'];
 const TANIN: In = [['écorce', 'sel'], 1, 'Écorce ou sel'];
 const POISSON = (n: number): In => [FISH_CHEAP, n, 'Poisson cru (au choix)'];
 
@@ -103,8 +103,9 @@ export const RECIPES: Recipe[] = [
   R('Potions', 'potion d’endurance', 1, [['baies', 2], ['herbe médicinale', 1]], 10, 3, 'Préparer'),
   R('Potions', 'potion de chaleur', 1, [['bois de cerf', 1], ['herbe médicinale', 1]], 15, 3, 'Préparer'),
   R('Potions', 'potion de mana', 1, [['champignon', 2], ['herbe médicinale', 1]], 15, 4, 'Préparer'),
-  R('Potions', 'potion de force', 1, [[['croc de loup', 'défense de sanglier'], 2, 'Crocs ou défenses'], ['herbe médicinale', 1]], 20, 4, 'Préparer'),
+  R('Potions', 'potion de force', 1, [[['croc de loup', 'défense de sanglier', 'griffe d’ours'], 2, 'Crocs, défenses ou griffes'], ['herbe médicinale', 1]], 20, 4, 'Préparer'),
   R('Potions', 'potion de mana', 2, [['essence spectrale', 1], ['champignon', 1]], 25, 5, 'Préparer', { id: 'potion de mana:essence', label: 'Potion de mana (à l’essence)' }),
+  R('Potions', 'potion de mana', 1, [['aile de chauve-souris', 2], ['champignon', 1]], 20, 4, 'Préparer', { id: 'potion de mana:ailes', label: 'Potion de mana (aux ailes)' }),
   R('Potions', 'grande potion de soin', 1, [['potion de soin', 1], ['herbe médicinale', 2], ['champignon', 1]], 30, 6, 'Préparer'),
   // établi : tannage
   R('Tannage', 'cuir', 2, [PEAU, TANIN], 0, 1.5, 'Tanner', { bulk: true }),
@@ -119,17 +120,18 @@ export const RECIPES: Recipe[] = [
 /** Où trouver un ingrédient (affiché sous un ingrédient manquant). */
 export const SOURCES: Record<string, string> = {
   'lingot de fer': 'foyer de forge (2 minerais + 1 charbon) · forgeron, mineur',
-  'minerai de fer': 'rochers (pioche), surtout en montagne · mineur',
-  charbon: 'rochers (pioche) · foyer de forge (3 bûches) · forgeron',
+  'minerai de fer': 'rochers (pioche), surtout en montagne · filons des grottes · mineur',
+  charbon: 'rochers (pioche) · filons des grottes · foyer de forge (3 bûches) · forgeron',
   cuir: 'établi : tanner une peau (+ écorce ou sel) · chasseur, marchand',
   bois: 'arbres (hache de bûcheron) · marchand', branche: 'arbres (hache de bûcheron)', écorce: 'arbres (hache de bûcheron)',
   étoffe: 'marchand · maisons', os: 'squelettes, gobelins', plume: 'perdrix', sel: 'marchand, pêcheur',
   'herbe médicinale': 'buissons (forêt, marais) · guérisseuse', baies: 'buissons (lande, forêt, plaine) · fermier, guérisseuse',
-  champignon: 'buissons (forêt, marais, taïga) · arbres abattus · guérisseuse',
+  champignon: 'buissons (forêt, marais, taïga) · arbres abattus · grottes · guérisseuse',
   'glande à venin': 'araignées (marais)', 'bois de cerf': 'cerfs', 'croc de loup': 'loups', 'défense de sanglier': 'sangliers',
   'essence spectrale': 'spectres (cimetières, la nuit)', 'potion de soin': 'établi · guérisseuse, prêtre, marchand',
   'remède contre la fièvre': 'établi ou âtre de la guérisseuse (2 herbes médicinales + 1 écorce) · herboriste des foires',
   'peau de sanglier': 'sangliers', 'peau de cerf': 'cerfs', 'peau de loup': 'loups',
+  'peau d’ours': 'ours des cavernes (grottes)', 'griffe d’ours': 'ours des cavernes (grottes)', 'aile de chauve-souris': 'chauves-souris (grottes, souterrains)',
   'viande crue': 'chasse (cerfs, sangliers, loups) · fermier, chasseur', pain: 'fermier, aubergiste, meunier, marchand', fromage: 'fermier, aubergiste, marchand',
 };
 for (const f of FISH) SOURCES[f] = 'pêche (canne à pêche) · pêcheur';

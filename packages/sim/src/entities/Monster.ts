@@ -17,6 +17,8 @@ export interface MonsterDef {
   prey?: boolean;
   /** s'envole en fuyant */
   flyer?: boolean;
+  /** vole en permanence (chauve-souris) ; tombe à sa mort */
+  wings?: boolean;
 }
 
 export const MONSTERS: Record<string, MonsterDef> = {
@@ -33,6 +35,9 @@ export const MONSTERS: Record<string, MonsterDef> = {
   cerf: { name: 'Cerf', hp: 34, damage: 4, armor: 0, walk: 1.5, run: 8.5, reach: 1.6, attackCd: 1.6, perception: 36, aggro: 0, nocturnal: false, flee: 1, xp: 14, loot: 'cerf', prey: true },
   sanglier: { name: 'Sanglier', hp: 48, damage: 9, armor: 1, walk: 1.3, run: 6.2, reach: 1.5, attackCd: 1.3, perception: 20, aggro: 0.3, nocturnal: false, flee: 0.15, xp: 26, loot: 'sanglier' },
   perdrix: { name: 'Perdrix', hp: 6, damage: 0, armor: 0, walk: 0.8, run: 7, reach: 0.5, attackCd: 2, perception: 16, aggro: 0, nocturnal: false, flee: 1, xp: 5, loot: 'perdrix', prey: true, flyer: true },
+  // grottes (étape 55)
+  'chauve-souris': { name: 'Chauve-souris géante', hp: 14, damage: 4, armor: 0, walk: 2.2, run: 6.6, reach: 1.5, attackCd: 0.9, perception: 18, aggro: 0.9, nocturnal: false, flee: 0.3, xp: 12, loot: 'chauve-souris', hover: 1.1, wings: true },
+  'ours des cavernes': { name: 'Ours des cavernes', hp: 120, damage: 15, armor: 3, walk: 1.4, run: 5.4, reach: 2.1, attackCd: 1.6, perception: 22, aggro: 0.85, nocturnal: false, flee: 0.1, xp: 90, loot: 'ours' },
   'gardien des tombes': { name: 'Gardien des tombes', hp: 140, damage: 15, armor: 5, walk: 1.3, run: 3.6, reach: 2.2, attackCd: 1.5, perception: 22, aggro: 1, nocturnal: false, flee: 0, xp: 150, loot: 'boss', undead: true },
 };
 
@@ -132,7 +137,7 @@ export interface FoeDef {
   canYield: boolean;
 }
 
-const BEASTS = new Set(['loup', 'sanglier', 'araignée', 'cerf', 'perdrix']);
+const BEASTS = new Set(['loup', 'sanglier', 'araignée', 'cerf', 'perdrix', 'chauve-souris', 'ours des cavernes']);
 
 /** Incarne une créature unique (hors zone d'autorité : l'appelant la pose et lui donne son id). */
 export function makeUnique(id: string, f: FoeDef, x: number, z: number, territory: number): Entity {

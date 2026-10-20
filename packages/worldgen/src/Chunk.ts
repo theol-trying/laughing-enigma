@@ -24,8 +24,11 @@ export interface ChunkExtras {
 
 const V = CHUNK_RES + 1;
 
-/** Arbre ou rocher que l'on peut abattre / miner, buisson à cueillir ; id stable : « cx:cz:gx:gz » (case de végétation). */
-export interface HarvestNode { id: string; kind: 'arbre' | 'rocher' | 'buisson'; x: number; y: number; z: number; size: number }
+/**
+ * Arbre ou rocher que l'on peut abattre / miner, buisson à cueillir ; id stable : « cx:cz:gx:gz » (case de végétation).
+ * Filon d'une grotte (étape 55) : « gr<réseau>:f<n> », minerai indiqué par `ore`.
+ */
+export interface HarvestNode { id: string; kind: 'arbre' | 'rocher' | 'buisson' | 'filon'; x: number; y: number; z: number; size: number; ore?: 'fer' | 'charbon' | 'or' | 'gemme' }
 
 export class ChunkData {
   readonly x0: number; readonly z0: number;
@@ -36,6 +39,8 @@ export class ChunkData {
   platforms: Platform[] = [];
   props: Prop[] = [];
   nodes: HarvestNode[] = [];
+  /** végétation d'origine (x, z, rayon à plat), abattue ou non : les ajouts (entrées de grottes) l'évitent sans jamais la toucher */
+  veg: number[] = [];
   lights: { x: number; y: number; z: number; radius: number; r: number; g: number; b: number; kind: 'torch' | 'fire' | 'window' | 'candle' }[] = [];
   mesh: MeshData | null = null;
   buildMs = 0;
@@ -119,6 +124,7 @@ export function buildChunk(sampler: TerrainSampler, cx: number, cz: number, extr
     if (steep > 0.9) continue;
     const id = `${cx}:${cz}:${gx}:${gz}`;
     if (r3 < bd.trees * 0.3 * clump) {
+      ch.veg.push(x, z, 2.4);
       if (removed?.(id)) {
         // abattu : il reste une souche (les tirages de l'arbre sont consommés pour ne rien décaler)
         addTree(new MeshBuilder(64), rng, x, y, z, r4 < bd.pine, s.biome);
@@ -130,6 +136,7 @@ export function buildChunk(sampler: TerrainSampler, cx: number, cz: number, extr
         ch.nodes.push({ id, kind: 'arbre', x, y, z, size: 1 });
       }
     } else if (r3 < bd.trees * 0.3 * clump + bd.bushes * 0.12) {
+      ch.veg.push(x, z, 1.4);
       mb.vflags = 1;
       const bc = shade(mixColor(0x3e6a2c, 0x5a7a34, r5), 0.9 + r4 * 0.2);
       mb.blob(x, y + 0.35, z, 0.7 + r4 * 0.6, 0.5 + r5 * 0.4, 0.7 + r5 * 0.5, bc, M.BUSH, 5, 3);
@@ -138,6 +145,7 @@ export function buildChunk(sampler: TerrainSampler, cx: number, cz: number, extr
       ch.nodes.push({ id, kind: 'buisson', x, y, z, size: 0.7 + r4 * 0.6 });
     } else if (r3 > 1 - bd.rocks * 0.06) {
       const sz = 0.5 + r4 * r4 * 2.5;
+      ch.veg.push(x, z, sz * 1.1);
       const rc = s.biome === B.SNOW ? 0x9a9aa0 : shade(0x7a766c, 0.85 + r5 * 0.3);
       if (removed?.(id)) {
         // brisé : quelques gravats au sol

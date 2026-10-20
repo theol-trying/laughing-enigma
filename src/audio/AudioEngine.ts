@@ -234,6 +234,14 @@ export class AudioEngine {
         this.tone(dead ? 300 : 660, dead ? 1.2 : 0.9, 0.14, 'sine', dead ? 0.4 : 1.4, p);
         this.burst(900, 'bandpass', 0.8, 0.06, 0.6, p);
         break;
+      case 'chauve-souris':   // cris aigus et brefs (grottes)
+        for (let i = 0; i < (dead ? 2 : 4); i++) this.tone(dead ? 2400 : 3200 + i * 250, 0.05, 0.1, 'square', 0.5, p, i * 0.07);
+        break;
+      case 'ours des cavernes':
+        if (kind === 'alerte') this.growl(p, 0.7);
+        else this.tone(dead ? 85 : 120, dead ? 1.1 : 0.6, 0.4, 'sawtooth', 0.5, p);
+        this.burst(260, 'lowpass', 0.5, 0.25, 1, p);
+        break;
       case 'troll':
         this.tone(dead ? 70 : 95, dead ? 1.4 : 1.0, 0.45, 'sawtooth', 0.6, p);
         this.burst(300, 'lowpass', 0.9, 0.3, 1, p);

@@ -2,7 +2,7 @@ import { Entity, type RemoteTarget } from './Entity';
 export type { RemoteTarget } from './Entity';
 import { generateNPCs, generateDistrictNPCs, type NPCData } from './NPC';
 import { humanoid, drawModel, horseModel, mercModel, type ModelDef, type HumanLook } from './Models';
-import { buildLairs, buildHerds, makeMonster, dangerAt, dungeonLevel, MONSTERS, type Lair } from './Monster';
+import { buildLairs, buildHerds, makeMonster, makeUnique, dangerAt, dungeonLevel, MONSTERS, type Lair } from './Monster';
 import { NavGrid } from '../ai/Pathfinding';
 import { blockAt, resolveSpot, patrolRoute, type Spot } from '../ai/Schedule';
 import { thinkMonster, moveMonster, turn, type MonsterCtx } from '../ai/MonsterAI';
@@ -19,7 +19,7 @@ import type { Player } from './Player';
 import type { Layout } from '@ascii-fort/worldgen/civilization/Layout';
 import type { InstanceBuffer } from '@ascii-fort/ascii-engine/Renderer';
 import type { CircleCollider, SegCollider, Platform } from '@ascii-fort/worldgen/Chunk';
-import type { DungeonLayout } from '@ascii-fort/worldgen/dungeons/DungeonGenerator';
+import type { UnderLayout } from '@ascii-fort/worldgen/dungeons/Under';
 
 /** Ce dont le gestionnaire a besoin du jeu (évite une dépendance circulaire). */
 export interface EntityHost {
@@ -113,7 +113,11 @@ export class EntityManager {
   private mctx: MonsterCtx;
   /** multijoueur (null en solo) */
   net: EntityNet | null = null;
-  private dungeonId = -1;
+  /** zone d'autorité du souterrain actif : « d<id> » (niveau 1), « d<id>.<n> » (étage n), « gr<id> » (grotte) ; niveau de ses créatures */
+  private dungeonZone = '';
+  private dungeonLvl = 1;
+  /** apparitions du souterrain actif (un gardien d'étage incarné en marionnette garde son nom et son allure) */
+  private dungeonSpawns: UnderLayout['spawns'] = [];
   private dungeonEnts: Entity[] = [];
   /** compagnons du joueur (dans `entities`, hors de toute zone d'autorité) : cheval et mercenaire */
   horse: Entity | null = null;
@@ -500,31 +504,46 @@ export class EntityManager {
     return dist;
   }
 
-  /** Créatures d'un donjon (celles déjà tuées ne reviennent pas). */
-  spawnDungeon(L: DungeonLayout): void {
-    this.dungeonId = L.id; this.dungeonEnts = [];
+  /**
+   * Créatures d'un souterrain (celles déjà tuées ne reviennent pas). Sans options : plan d'origine d'un donjon (clés « dj<id>:m<i> »,
+   * zone « d<id> », niveau du donjon) exactement comme avant l'étape 55 ; étages et grottes passent leur préfixe, leur zone et leur
+   * niveau (« dj<id>.<n> » / « d<id>.<n> », « gr<id> »). Un gardien d'étage (elite) est une créature unique nommée.
+   */
+  spawnDungeon(L: UnderLayout, o?: { prefix: string; zone: string; level: number }): void {
+    const civ = this.host.world.civ, zone = o?.zone ?? 'd' + L.id, prefix = o?.prefix ?? `dj${L.id}`;
+    const dg = o ? undefined : civ.dungeons[L.id];
+    this.dungeonZone = zone; this.dungeonEnts = [];
+    this.dungeonLvl = o ? o.level : dg ? dungeonLevel(civ, dg) : 1;
+    this.dungeonSpawns = L.spawns;
     L.spawns.forEach((s, i) => {
-      const key = `dj${L.id}:m${i}`;
+      const key = `${prefix}:m${i}`;
       if (this.killed.has(key)) return;
-      const dg = this.host.world.civ.dungeons[L.id];
-      const level = (dg ? dungeonLevel(this.host.world.civ, dg) : 1) + (s.boss ? 1 : 0);
-      const e = makeMonster(key, s.type, s.x, s.z, s.x, s.z, s.boss ? 10 : 14, { unique: key, leader: s.boss, perception: s.boss ? 20 : 16, level });
-      e.y = 0; e.zoneKey = 'd' + L.id;
+      const e = this.underMob(key, s);
+      e.y = 0; e.zoneKey = zone;
       this.entities.push(e); this.dungeonEnts.push(e);
     });
-    this.net?.claim('d' + L.id);
+    this.net?.claim(zone);
   }
+  /** Créature d'un souterrain : ordinaire, ou gardien d'étage (créature unique nommée). */
+  private underMob(key: string, s: UnderLayout['spawns'][number]): Entity {
+    const level = this.dungeonLvl + (s.boss && !s.elite ? 1 : 0) + (s.bonus ?? 0), el = s.elite;
+    return el
+      ? makeUnique(key, { key, name: el.name, title: el.title, fem: el.fem, base: s.type, look: { scale: el.scale, tint: el.tint, cape: el.cape, crown: el.crown, eyes: el.eyes }, level, hpMul: 1.7, dmgMul: 1.2, armor: 2, xpMul: 2.5, canYield: false }, s.x, s.z, s.territory ?? 12)
+      : makeMonster(key, s.type, s.x, s.z, s.x, s.z, s.territory ?? (s.boss ? 10 : 14), { unique: key, leader: s.boss, perception: s.boss ? 20 : 16, level });
+  }
+  /** Zone d'autorité du souterrain actif (vide à la surface). */
+  get underZone(): string { return this.dungeonZone; }
   clearDungeon(): void {
-    this.remove(this.entities.filter((e) => e.id.startsWith('dj')));
-    if (this.dungeonId >= 0) this.net?.release('d' + this.dungeonId);
-    this.dungeonId = -1; this.dungeonEnts = [];
+    this.remove(this.entities.filter((e) => e.id.startsWith('dj') || e.id.startsWith('gr')));
+    if (this.dungeonZone) this.net?.release(this.dungeonZone);
+    this.dungeonZone = ''; this.dungeonEnts = [];
   }
 
   private onKilled(id: string) {
     const e = this.entities.find((x) => x.id === id);
     if (!e?.mon) return;
     if (e.mon.unique) this.killed.add(e.mon.unique);
-    if (e.id.startsWith('dj')) this.killed.add(e.id);
+    if (e.id.startsWith('dj') || e.id.startsWith('gr')) this.killed.add(e.id);
     const l = this.lairs.find((x) => x.key === e.mon!.lair);
     if (!l) return;
     const ents = this.activeLairs.get(l.key) ?? [];
@@ -818,7 +837,7 @@ export class EntityManager {
         e.deadT += dt;
         e.pose.dead = Math.min(1, e.pose.dead + dt * 2.5);
         e.pose.swing = 0;
-        if (e.mon && MONSTERS[e.mon.def]?.flyer) e.pose.hover = Math.max(0, e.pose.hover - dt * 6); // l'oiseau abattu tombe
+        if (e.mon && (MONSTERS[e.mon.def]?.flyer || MONSTERS[e.mon.def]?.wings)) e.pose.hover = Math.max(0, e.pose.hover - dt * 6); // l'oiseau (la chauve-souris) abattu tombe
         continue;
       }
       if (e.status) {
@@ -863,7 +882,7 @@ export class EntityManager {
   activeZoneKeys(): string[] {
     const out = [...this.zones.keys()].map((s) => 's' + s);
     for (const k of this.activeLairs.keys()) out.push(k);
-    if (this.dungeonId >= 0) out.push('d' + this.dungeonId);
+    if (this.dungeonZone) out.push(this.dungeonZone);
     for (const k of this.convoys.keys()) out.push(k);
     for (const k of this.eventZones.keys()) out.push(k);
     return out;
@@ -874,7 +893,7 @@ export class EntityManager {
     if (z.startsWith('e')) return this.eventZones.get(z) ?? null;
     if (z.startsWith('s')) return this.zones.get(Number(z.slice(1)))?.ents ?? null;
     if (z.startsWith('lair:')) return this.activeLairs.get(z) ?? null;
-    if (z.startsWith('d')) return Number(z.slice(1)) === this.dungeonId ? this.dungeonEnts : null;
+    if (z.startsWith('d') || z.startsWith('gr')) return z === this.dungeonZone ? this.dungeonEnts : null;
     return null;
   }
 
@@ -930,8 +949,11 @@ export class EntityManager {
       return e;
     }
     const l = this.lairs.find((q) => q.key === z);
-    const civ = this.host.world.civ, dg = z.startsWith('d') ? civ.dungeons[Number(z.slice(1))] : null;
-    const lvl = MONSTERS[type]?.prey ? 1 : l ? dangerAt(civ, l.x, l.z) + (type === l.leader ? 1 : 0) : dg ? dungeonLevel(civ, dg) : 1;
+    const civ = this.host.world.civ, under = z === this.dungeonZone;
+    // gardien d'un étage : même allure et même nom que chez le joueur qui le simule
+    const si = under ? /:m(\d+)$/.exec(id) : null, sp = si ? this.dungeonSpawns[Number(si[1])] : undefined;
+    if (sp?.elite && sp.type === type) { const e = this.underMob(id, sp); e.zoneKey = z; return e; }
+    const lvl = MONSTERS[type]?.prey ? 1 : l ? dangerAt(civ, l.x, l.z) + (type === l.leader ? 1 : 0) : under ? this.dungeonLvl : 1;
     const e = makeMonster(id, type, x, zz, l?.x ?? x, l?.z ?? zz, l?.territory ?? 14, l ? { lair: l.key, poiId: l.poiId, campId: l.sid, leader: type === l.leader, unique: type === l.leader ? `${l.key}:chef` : '', level: lvl } : { unique: id, level: lvl });
     e.zoneKey = z;
     return e;

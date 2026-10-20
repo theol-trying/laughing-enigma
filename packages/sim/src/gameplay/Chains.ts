@@ -77,6 +77,8 @@ const REACH = 3600;
 const GENDER: Record<string, 'm' | 'f' | 'p'> = {
   Forteresse: 'f', Cachots: 'p', Cimetière: 'm', Antre: 'm', Mines: 'p', Galeries: 'p', Champ: 'm', Statue: 'f', Pont: 'm', Camp: 'm',
   Tanière: 'f', Grotte: 'f', Nid: 'm', Crypte: 'f', Tour: 'f', Sanctuaire: 'm', Cercle: 'm', Ruines: 'p', Repaire: 'm',
+  // grottes (étape 55)
+  Gouffre: 'm', Caverne: 'f', Cavernes: 'p', Grottes: 'p',
 };
 /**
  * Nom de lieu avec son article et sa préposition : lieu('Grotte Noire', 'à') → « à la Grotte Noire », lieu('Camp des…', 'de') → « du Camp

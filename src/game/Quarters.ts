@@ -264,6 +264,8 @@ export class Quarters {
       lines.push(`Ici, on ne parle que de ça : ${a.text}`);
       const b = here.find((r) => r !== a);
       if (b && here.length > 2) lines.push(`Et on raconte aussi que… ${b.text}`);
+      // une grotte dont on parle ici apparaît sur la carte (étape 55)
+      for (const r of b && here.length > 2 ? [a, b] : [a]) if (r.tag.startsWith('grotte:')) g.state.discovered.add(r.tag);
     }
     // un voyageur arrivé d'une ville voisine par la route
     const roads = civ.roads.filter((r) => r.a === n.sid || r.b === n.sid);

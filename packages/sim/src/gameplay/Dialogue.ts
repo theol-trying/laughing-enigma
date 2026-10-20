@@ -261,6 +261,8 @@ export class DialogueSystem {
     if (!known.length) return [this.pick(n, 4, ['Rien de neuf sous le soleil.', 'Pas grand-chose, à part les ragots habituels.'])];
     const r = known[hash2i(n.age, this.h.time.day, known.length) % known.length];
     told.add(String(r.id));
+    // une rumeur de grotte (étape 55) la signale sur la carte (étiquette « grotte:<réseau>:e<rang> »)
+    if (r.tag.startsWith('grotte:')) this.h.state.discovered.add(r.tag);
     return [this.pick(n, 5, ['Tu n\'as pas entendu ?', 'Il paraît que…', 'On raconte que…']), r.text];
   }
 

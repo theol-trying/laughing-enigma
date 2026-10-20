@@ -43,6 +43,10 @@ const HELP = [
   'guerre [declarer|paix] | malade [guerir]   état de la guerre, en déclarer une, signer la paix ; attraper ou soigner la fièvre',
   'quartiers [lieu]                        bâtiments et PNJ ajoutés par les quartiers du lieu le plus proche (ou nommé)',
   'taverne [lieu] | marche [lieu]          se téléporter devant la taverne la plus proche, ou au marché le plus proche',
+  'descendre | monter                      étage suivant / précédent du donjon où l’on est (monter au niveau 1 : surface)',
+  'etages [id] | etages aller [id] [n]     étages du donjon actuel (ou le plus proche, ou n° id) ; y entrer, au niveau n',
+  'grottes [n] | grotte [id [entrée]]      grottes les plus proches ; aller devant l’entrée la plus proche, ou entrer dans le réseau id',
+  'grotte sortir [issue] | grotte reveler  ressortir par une issue ; mettre toutes les entrées sur la carte',
 ];
 
 export class DevConsole implements Screen {
@@ -180,6 +184,11 @@ export class DevConsole implements Screen {
       }
       case 'evenements': case 'événements': case 'evenement': case 'événement': case 'finir': case 'proprietaire': case 'propriétaire': case 'guerre': case 'malade': {
         const res = g.happenings.dev(c, args);
+        for (const l of res) this.print(l.text, l.err ? C.red : C.text);
+        break;
+      }
+      case 'descendre': case 'monter': case 'etages': case 'étages': case 'etage': case 'étage': case 'grottes': case 'grotte': {
+        const res = g.under.dev(c, args);
         for (const l of res) this.print(l.text, l.err ? C.red : C.text);
         break;
       }

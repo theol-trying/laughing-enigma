@@ -82,6 +82,8 @@ export class ChunkManager<T = unknown> {
       const l = this.chunks.get(this.key(cx, cz));
       if (l) for (const n of l.data.nodes) if (Math.hypot(n.x - x, n.z - z) <= r) out.push(n);
     }
+    // filons des grottes (superpositions) : un filon épuisé est retiré par son id
+    for (const o of this.overlays) for (const n of o.nodes) if (Math.hypot(n.x - x, n.z - z) <= r && !this.removed.has(n.id)) out.push(n);
     return out;
   }
 
@@ -126,7 +128,11 @@ export class ChunkManager<T = unknown> {
       const l = this.chunks.get(this.key(cx, cz));
       if (l) { circles.push(...l.data.circles); segs.push(...l.data.segs); }
     }
-    for (const o of this.overlays) { circles.push(...o.circles); segs.push(...o.segs); }
+    // superpositions (souterrain) : seulement ce qui touche le rectangle (les murs d'une grotte se comptent par centaines)
+    for (const o of this.overlays) {
+      for (const c of o.circles) if (c.x + c.r >= x0 && c.x - c.r <= x1 && c.z + c.r >= z0 && c.z - c.r <= z1) circles.push(c);
+      for (const s of o.segs) if (Math.max(s.ax, s.bx) + s.r >= x0 && Math.min(s.ax, s.bx) - s.r <= x1 && Math.max(s.az, s.bz) + s.r >= z0 && Math.min(s.az, s.bz) - s.r <= z1) segs.push(s);
+    }
     return { circles, segs };
   }
 

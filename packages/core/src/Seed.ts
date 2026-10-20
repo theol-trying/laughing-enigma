@@ -13,7 +13,9 @@ export type StreamName =
   // événements vivants (étape 54 : raids, fêtes, épidémies, guerres) : flux propre, lu au moment de l'exécution
   | 'événements'
   // quartiers des villes (étape 55 : maisons, ateliers, tavernes, étals, habitants) : flux propre, ajouts en fin de liste
-  | 'quartiers';
+  | 'quartiers'
+  // étages des donjons et réseaux de grottes (étape 55, passe 2) : flux propres, le niveau 1 des donjons ne bouge pas
+  | 'étages' | 'grottes';
 
 /** Normalise une saisie de seed : majuscules, séparateurs « - », caractères sûrs. */
 export function normalizeSeed(input: string): string {

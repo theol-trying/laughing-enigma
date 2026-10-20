@@ -210,6 +210,8 @@ export class JournalScreen implements Screen {
     if (evs.length) { head('Événements'); for (const l of evs) for (const t of TextGrid.wrap(l.text, W)) out.push({ text: t, color: l.color, indent: 4 }); blank(); }
     const routes = game.convoys.journalLines();
     if (routes.length) { head('Routes'); for (const l of routes) for (const t of TextGrid.wrap(l.text, W)) out.push({ text: t, color: l.color, indent: 4 }); blank(); }
+    const deep = game.under.journalLines();
+    if (deep.length) { head('Souterrains'); for (const l of deep) for (const t of TextGrid.wrap(l.text, W)) out.push({ text: t, color: l.color, indent: 4 }); blank(); }
     const goods = game.poss.journalLines();
     if (goods.length) { head('Biens et compagnons'); for (const l of goods) out.push({ text: l.text.slice(0, w - 8), color: l.color, indent: 4 }); blank(); }
     const fin = qs.filter((q) => q.status === 'terminée' && q.kind !== 'prime');
@@ -268,11 +270,11 @@ export class MapScreen implements Screen {
   /** territoires colorés selon le propriétaire courant des places (F : afficher / masquer) */
   private borders = true;
   private cx: number; private cz: number;
-  constructor(private game: Game) { this.cx = game.player.x; this.cz = game.player.z; }
+  constructor(private game: Game) { const at = game.dungeon ? game.dungeon.ret : game.player; this.cx = at.x; this.cz = at.z; }
 
   draw(ctx: UICtx): void {
     const g = ctx.grid, game = this.game, m = game.world.macro, civ = game.world.civ, st = game.state;
-    const { x, y, w, h } = frame(g, `Carte — ${m.worldName}`, 200, 80);
+    const { x, y, w, h } = frame(g, game.dungeon ? `Carte — ${m.worldName} · sous terre : ${game.under.label()}` : `Carte — ${m.worldName}`, 200, 80);
     const mw = w - 2, mh = h - 3;
     // échelle : une case couvre sx × 2sx mètres (les caractères sont deux fois plus hauts que larges)
     const sx = (MACRO * 32) / (mw * this.zoom) * 0.75, sz = sx * 2;
@@ -332,14 +334,20 @@ export class MapScreen implements Screen {
     for (const m of evs) label(m.x, m.z, m.glyph, m.color, this.zoom >= 2 ? m.name : undefined, true);
     const bosses = game.exploits.markers();
     for (const m of bosses) label(m.x, m.z, m.glyph, m.color, this.zoom >= 2 ? m.name : undefined, true);
+    // entrées de grottes connues (étape 55)
+    const caves = game.under.markers();
+    for (const m of caves) label(m.x, m.z, m.glyph, m.color, this.zoom >= 3 ? m.name : undefined, true);
     // cibles des quêtes en cours (la quête suivie clignote en blanc)
     const tracked = game.quests.trackedQuest();
     for (const q of game.quests.quests) if (q.status === 'active' && q.target && Math.floor(performance.now() / 400) % 2) label(q.target.x, q.target.z, '!', q === tracked ? C.white : C.yellow);
     const arrows = ['▲', '►', '▼', '◄'];
-    label(game.player.x, game.player.z, Math.floor(performance.now() / 300) % 2 ? '@' : arrows[((Math.round(game.player.heading / (Math.PI / 2)) % 4) + 4) % 4], C.white);
+    // sous terre, les coordonnées sont hors de la carte : on montre l'entrée par laquelle on ressortira
+    const at = game.dungeon ? game.dungeon.ret : game.player;
+    label(at.x, at.z, Math.floor(performance.now() / 300) % 2 ? '@' : game.dungeon ? '▼' : arrows[((Math.round(game.player.heading / (Math.PI / 2)) % 4) + 4) % 4], C.white);
     // légende : coupée par morceaux entiers (jamais au milieu d'un mot) quand la fenêtre est étroite
     const legend: [string, string][] = [[`+/- zoom (×${this.zoom})`, ''], ['flèches : déplacer', ' · '], ['Espace : recentrer', ' · '], ['M/Échap : fermer', ' · '], ['◙ capitale', ' · '], ['■ ville', ' '], ['⌂ village', ' '], ['╬ château', ' '], ['Ω souterrain', ' '], ['x bandits', ' '], ['! quête', ' ']];
     if (bosses.length) legend.push(['‡ boss', ' ']);
+    if (caves.length) legend.push(['∩ grotte', ' ']);
     if (roads.some((m) => m.glyph === '♦')) legend.push(['♦ convoi', ' ']);
     if (roads.some((m) => m.glyph === '×')) legend.push(['× épave', ' ']);
     if (game.poss.markers().length) legend.push(['♥ maison', ' '], ['h cheval', ' '], ['☻ mercenaire', ' ']);
@@ -371,7 +379,7 @@ export class MapScreen implements Screen {
     const step = 400 / this.zoom;
     if (i.isDown('ArrowLeft')) this.cx -= step * 0.05; if (i.isDown('ArrowRight')) this.cx += step * 0.05;
     if (i.isDown('ArrowUp')) this.cz -= step * 0.1; if (i.isDown('ArrowDown')) this.cz += step * 0.1;
-    if (i.pressed('Space')) { this.cx = this.game.player.x; this.cz = this.game.player.z; }
+    if (i.pressed('Space')) { const at = this.game.dungeon ? this.game.dungeon.ret : this.game.player; this.cx = at.x; this.cz = at.z; }
   }
 }
 

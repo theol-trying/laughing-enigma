@@ -24,7 +24,7 @@ export interface MonsterCtx {
   hurtRemote(id: string, amount: number, src: Entity, element?: 'poison' | 'feu' | 'givre'): void;
 }
 
-const HOSTILE_TO_VILLAGERS = new Set(['loup', 'bandit', 'chef bandit', 'gobelin', 'chef gobelin', 'squelette', 'spectre', 'troll', 'araignée', 'roi-squelette', 'gardien des tombes']);
+const HOSTILE_TO_VILLAGERS = new Set(['loup', 'bandit', 'chef bandit', 'gobelin', 'chef gobelin', 'squelette', 'spectre', 'troll', 'araignée', 'roi-squelette', 'gardien des tombes', 'chauve-souris', 'ours des cavernes']);
 
 function targetPos(id: string, ctx: MonsterCtx): { x: number; z: number; y: number; alive: boolean; ent: Entity | null } | null {
   if (id === 'player') { const p = ctx.player; return { x: p.x, z: p.z, y: p.y, alive: !p.dead, ent: null }; }

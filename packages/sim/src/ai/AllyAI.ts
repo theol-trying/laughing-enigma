@@ -62,7 +62,7 @@ function updateHorse(e: Entity, dt: number, c: AllyCtx): void {
     return;
   }
   // à pied : gelé hors du monde du joueur ou à plus de 200 m (ni simulé, ni ciblable)
-  a.dormant = worldOf(e.x) !== worldOf(p.x) || Math.hypot(e.x - p.x, e.z - p.z) > MOUNT.farFreeze;
+  a.dormant = worldOf(e.x, e.z) !== worldOf(p.x, p.z) || Math.hypot(e.x - p.x, e.z - p.z) > MOUNT.farFreeze;
   if (a.dormant) return;
   tickHorse(a, g, dt, 'arret');
   const limp = e.hp < e.maxHp * MOUNT.limpHp ? MOUNT.limpMul : 1;
@@ -138,7 +138,7 @@ function updateMerc(e: Entity, dt: number, c: AllyCtx): void {
   e.pose.dead = Math.max(0, e.pose.dead - dt * 4);
   // hors du monde du joueur (donjon) ou trop loin : il rejoint le joueur s'il le suit ; en « attendre » il reste gelé
   // (sauf s'il est resté dans un souterrain : alors il rejoint)
-  const wm = worldOf(e.x), wp = worldOf(p.x), far = Math.hypot(e.x - p.x, e.z - p.z);
+  const wm = worldOf(e.x, e.z), wp = worldOf(p.x, p.z), far = Math.hypot(e.x - p.x, e.z - p.z);
   if (a.mode === 'suivre') {
     if (wm !== wp || far > MERC.teleportDist) { placeBehind(e, p, c); return; }
     a.dormant = false;

@@ -5,6 +5,7 @@ import type { EstateSave } from '@ascii-fort/sim/gameplay/Estate';
 import type { ExploitsSave } from './Exploits';
 import type { ConvoySave } from '@ascii-fort/sim/gameplay/Caravans';
 import type { EventSave } from '@ascii-fort/sim/gameplay/Calendar';
+import type { UnderSave } from './Underground';
 
 export interface SaveData {
   /** arbres abattus, rochers brisés */
@@ -17,6 +18,8 @@ export interface SaveData {
   convois?: ConvoySave;
   /** événements vivants : issues des raids, épidémies et batailles, participations, maladie, rangs, camp, remèdes (absent : état par défaut) */
   evenements?: EventSave;
+  /** étage inférieur d'un donjon ou grotte (étape 55) ; absent : surface ou niveau 1 (champ `player.dungeon`, format d'origine) */
+  under?: UnderSave;
   format: 1;
   game: string; generator: string; seed: string; savedAt: number; label: string;
   time: number;

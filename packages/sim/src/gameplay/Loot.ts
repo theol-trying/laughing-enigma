@@ -22,6 +22,9 @@ const TABLES: Record<string, Entry[]> = {
   spectre: [['essence spectrale', 0.85, 1, 1]],
   araignée: [['soie d’araignée', 0.85, 1, 2], ['glande à venin', 0.45, 1, 1]],
   troll: [['or', 1, 60, 120], ['cœur de troll', 1, 1, 1], ['gemme', 0.5, 1, 1]],
+  // créatures des grottes (étape 55)
+  'chauve-souris': [['aile de chauve-souris', 0.75, 1, 2]],
+  ours: [['peau d’ours', 0.9, 1, 1], ['griffe d’ours', 0.6, 1, 2], ['viande crue', 1, 2, 4]],
   boss: [['or', 1, 80, 150], ['grande potion de soin', 1, 1, 1], ['gemme', 0.6, 1, 2]],
   // contenants
   maison: [['or', 0.6, 2, 15], ['pain', 0.5, 1, 2], ['pomme', 0.4, 1, 3], ['étoffe', 0.2, 1, 1], ['antidote', 0.1, 1, 1]],
@@ -34,6 +37,8 @@ const TABLES: Record<string, Entry[]> = {
   coffre1: [['or', 1, 10, 30], ['potion de soin', 0.6, 1, 1], ['antidote', 0.3, 1, 1], ['flèche', 0.4, 5, 12]],
   coffre2: [['or', 1, 30, 70], ['grande potion de soin', 0.5, 1, 1], ['casque de fer', 0.3, 1, 1], ['bouclier de fer', 0.2, 1, 1], ['bague en or', 0.4, 1, 1]],
   coffre3: [['or', 1, 70, 140], ['gemme', 0.7, 1, 2]],
+  // salles au trésor et gardiens des étages inférieurs (étape 55)
+  coffre4: [['or', 1, 120, 240], ['gemme', 0.9, 1, 3], ['grande potion de soin', 0.7, 1, 2], ['bague en or', 0.5, 1, 1], ['potion de force', 0.4, 1, 1]],
 };
 const RARES = ['épée ardente', 'hache de givre', 'dague venimeuse', 'arc long'];
 
@@ -62,7 +67,7 @@ export function containerLoot(seed: WorldSeed, key: string, ctx: LootCtx): LootL
   const table = b === 'auberge' ? 'auberge' : b === 'forge' ? 'forge' : b === 'échoppe' ? 'échoppe' : b === 'chapelle' || b === 'temple' ? 'chapelle'
     : b === 'corps de garde' || b === 'caserne' ? 'garde' : b === 'camp' ? 'camp' : b.startsWith('coffre') ? b : 'maison';
   roll(rng, TABLES[table], out, 1 + (ctx.depth ?? 0) * 0.1);
-  if (table === 'coffre3' || (table === 'coffre2' && rng.chance(0.25))) out.push({ id: rng.pick(RARES), qty: 1 });
+  if (table === 'coffre3' || table === 'coffre4' || (table === 'coffre2' && rng.chance(0.25))) out.push({ id: rng.pick(RARES), qty: 1 });
   if (ctx.questItem) out.push({ id: ctx.questItem, qty: 1 });
   return merge(out);
 }

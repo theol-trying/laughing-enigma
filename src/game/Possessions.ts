@@ -415,8 +415,8 @@ export class Possessions {
   markers(): { x: number; z: number; glyph: string; color: number; name?: string }[] {
     const out: { x: number; z: number; glyph: string; color: number; name?: string }[] = [], home = this.home(), h = this.horse, m = this.merc;
     if (home) out.push({ x: home.x, z: home.z, glyph: '♥', color: GREEN, name: 'Ma maison' });
-    if (h?.alive && !h.ally!.mounted && worldOf(h.x) === -1) out.push({ x: h.x, z: h.z, glyph: 'h', color: ORANGE, name: h.name });
-    if (m?.ally && m.ally.mode === 'attendre' && worldOf(m.x) === -1) out.push({ x: m.x, z: m.z, glyph: '☻', color: CYAN, name: m.ally.first });
+    if (h?.alive && !h.ally!.mounted && worldOf(h.x, h.z) === -1) out.push({ x: h.x, z: h.z, glyph: 'h', color: ORANGE, name: h.name });
+    if (m?.ally && m.ally.mode === 'attendre' && worldOf(m.x, m.z) === -1) out.push({ x: m.x, z: m.z, glyph: '☻', color: CYAN, name: m.ally.first });
     return out;
   }
   /** Section « Biens et compagnons » du journal (J). */
@@ -428,7 +428,7 @@ export class Possessions {
     if (home) out.push({ text: `♥ Maison à ${home.place}${under ? ' (vous êtes sous terre)' : ', ' + where(home.x, home.z)} · coffre : ${this.estate.chest.items.size} pile(s), ${this.estate.chest.gold} or`, color: GREEN });
     if (h?.alive && h.ally) {
       const a = h.ally;
-      out.push({ text: `h ${h.name}, ${a.grade} ${COATS[a.look]?.name ?? ''} · PV ${Math.ceil(h.hp)}/${h.maxHp} · ${a.mounted ? 'sous vous' : worldOf(h.x) !== -1 ? 'laissé à l’entrée du souterrain' : under ? 'resté à la surface (vous êtes sous terre)' : where(h.x, h.z)}`, color: ORANGE });
+      out.push({ text: `h ${h.name}, ${a.grade} ${COATS[a.look]?.name ?? ''} · PV ${Math.ceil(h.hp)}/${h.maxHp} · ${a.mounted ? 'sous vous' : worldOf(h.x, h.z) !== -1 ? 'laissé à l’entrée du souterrain' : under ? 'resté à la surface (vous êtes sous terre)' : where(h.x, h.z)}`, color: ORANGE });
     }
     if (m?.ally) out.push({ text: `☻ ${m.name}, ${archName(m.ally.arch, m.ally.sex)} niv. ${m.ally.level} · contrat : ${contractLabel(m.ally.left)} · ${m.ally.ko > 0 ? 'à terre' : m.ally.mode === 'suivre' ? 'vous suit' : 'attend'}`, color: CYAN });
     return out;
@@ -443,7 +443,7 @@ export class Possessions {
     if (e.chest.gold) out.gold = e.chest.gold;
     if (h?.alive && h.ally) out.horse = { grade: h.ally.grade, coat: h.ally.look, name: h.name, hp: Math.round(h.hp), x: r2(h.x), z: r2(h.z), heading: r2(h.heading), stamina: Math.round(h.ally.stamina), mounted: h.ally.mounted };
     if (m?.ally && m.ally.left > 0) {
-      const a: AllyState = m.ally, surface = worldOf(m.x) === -1;
+      const a: AllyState = m.ally, surface = worldOf(m.x, m.z) === -1;
       out.merc = { first: a.first, last: a.last, sex: a.sex, arch: a.arch, look: a.look, hp: Math.round(a.ko > 0 ? Math.max(1, m.maxHp * MERC.reviveFrac) : m.hp), left: Math.round(a.left), mode: surface ? (a.mode === 'attendre' ? 'attendre' : 'suivre') : 'suivre' };
       if (surface && a.mode === 'attendre') { out.merc.x = r2(m.x); out.merc.z = r2(m.z); out.merc.heading = r2(m.heading); }
     }

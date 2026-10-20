@@ -312,6 +312,25 @@ function bird(color: number, wing: number, s: number, letter: string): ModelDef 
   return R.done(letter, 0.38 * s, 0.2 * s, true, 'côté');
 }
 
+/**
+ * Chauve-souris géante (grottes, étape 55) : corps velu, oreilles pointues, grandes ailes membraneuses qui battent sans cesse
+ * (elle vole toujours : `hover`) ; hauteur de collision haute, pour que les flèches l'atteignent là où on la voit.
+ */
+function bat(s: number): ModelDef {
+  const R = new Rig(), fur = 0x2a2420, skin = 0x3a302a;
+  const body = R.bone(0, 0, 0.1 * s, 0, (p, t, r) => { r.dy = sin(t * 9) * 0.06 * s * (1 - p.dead); });
+  R.part(body, SHAPE.SPHERE, 0, 0, 0.02 * s, 0.2 * s, 0.22 * s, 0.32 * s, fur, M.FUR);
+  R.part(body, SHAPE.SPHERE, 0, 0.08 * s, -0.2 * s, 0.16 * s, 0.15 * s, 0.15 * s, fur, M.FUR);
+  for (const side of [-1, 1]) {
+    R.part(body, SHAPE.CONE, side * 0.07 * s, 0.2 * s, -0.2 * s, 0.05 * s, 0.12 * s, 0.04 * s, skin, M.SKIN);
+    R.part(body, SHAPE.SPHERE, side * 0.05 * s, 0.1 * s, -0.33 * s, 0.03 * s, 0.03 * s, 0.03 * s, 0xff5030, M.GLOW);
+    const w = R.bone(body, side * 0.12 * s, 0.04 * s, 0, (p, t, r) => { r.roll = side * (0.2 + sin(t * 18 + side) * 0.75) * (1 - p.dead) + side * p.dead * 0.2; });
+    R.part(w, SHAPE.BOX, side * 0.3 * s, 0, 0.02 * s, 0.6 * s, 0.025 * s, 0.4 * s, skin, M.LEATHER);
+    R.part(w, SHAPE.CYL, side * 0.3 * s, 0.01 * s, -0.17 * s, 0.025 * s, 0.6 * s, 0.025 * s, fur, M.BONE, { roll: PI / 2 });
+  }
+  return R.done('v', 1.6, 0.3 * s, true, 'dos');
+}
+
 function spider(color: number, s: number, eyes = 0xff4030, letter = 'a'): ModelDef {
   const R = new Rig();
   const body = R.bone(0, 0, 0.5 * s, 0, (p, t, r) => { r.dy = abs(sin(p.walk * 1.3)) * 0.02 * s; });
@@ -401,6 +420,11 @@ export function creatureModel(type: string): ModelDef {
       for (const side of [-1, 1]) R.part(head, SHAPE.CONE, side * 0.06, -0.04, -0.27, 0.03, 0.1, 0.03, 0xe8e0c8, M.BONE, { pitch: -0.5 });
     }, 0.8); break;
     case 'perdrix': m = bird(0x8a7458, 0x6a5a48, 1, 'p'); break;
+    case 'chauve-souris': m = bat(1.3); break;
+    case 'ours des cavernes': m = quadruped(0x4a3a2c, 1.3, 'O', M.FUR, 0x3a2c20, 0x1a1410, (R, head) => {
+      // oreilles rondes, gueule large
+      for (const side of [-1, 1]) R.part(head, SHAPE.SPHERE, side * 0.12 * 1.3, 0.14 * 1.3, 0.02, 0.08 * 1.3, 0.08 * 1.3, 0.05 * 1.3, 0x3a2c20, M.FUR);
+    }, 0.8); break;
     default: m = humanoid({ skin: 0xc89870, shirt: 0x6a6a6a, pants: 0x3a3a3a, hair: 0x2a1a10 });
   }
   MODEL_CACHE.set(type, m);
