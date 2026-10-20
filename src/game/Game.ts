@@ -27,6 +27,7 @@ import { LockpickScreen } from '../ui/LockpickScreen';
 import { Possessions } from './Possessions';
 import { Exploits } from './Exploits';
 import { Convoys } from './Convoys';
+import { Happenings } from './Happenings';
 import { CraftingScreen, type Feedback } from '../ui/CraftingScreen';
 import { Particles } from './Particles';
 import { Birds } from './Birds';
@@ -92,6 +93,8 @@ export class Game {
   readonly exploits: Exploits;
   /** caravanes, pèlerins, colporteurs, messagers et patrouilles des routes ; embuscades */
   readonly convoys: Convoys;
+  /** événements vivants : raids, fêtes, épidémies, guerres entre factions (frontières qui bougent) */
+  readonly happenings: Happenings;
   /** ajouts du jeu aux dialogues (lus par DialogueSystem) */
   hooks: DialogueHooks | undefined;
   readonly weatherSys: Weather;
@@ -185,8 +188,12 @@ export class Game {
     this.exploits = new Exploits(this);
     this.convoys = new Convoys(this);
     this.entities.convoyHost = this.convoys;
-    const xh = this.exploits.hooks, vh = this.convoys.hooks;
-    this.hooks = { ...xh, road: vh.road, menu: (e) => [...(vh.menu?.(e) ?? []), ...(xh.menu?.(e) ?? [])] };
+    this.happenings = new Happenings(this);
+    this.entities.eventHost = this.happenings;
+    // la réputation (opinion, prix) suit le propriétaire du lieu : la guerre la change
+    this.rep.factionOf = (n) => (n.road || n.id.startsWith('e') ? n.factionId : this.ownerOf(n.sid));
+    const xh = this.exploits.hooks, vh = this.convoys.hooks, hh = this.happenings.hooks;
+    this.hooks = { ...xh, road: vh.road, talk: hh.talk, menu: (e) => [...(vh.menu?.(e) ?? []), ...(hh.menu?.(e) ?? []), ...(xh.menu?.(e) ?? [])] };
     this.weatherSys = new Weather(this.world.macro);
     this.events.on('entity:damaged', (d) => {
       if (d.sourceId === 'player' || d.sourceId?.startsWith('ally:')) this.audio.hit();
@@ -200,8 +207,9 @@ export class Game {
     this.events.on('camp:cleared', () => this.economy.refreshBlocked());
     this.events.on('entity:killed', (k) => {
       if (k.killerId !== 'player' || k.kind !== 'npc') return;
+      if (this.happenings.isSoldier(k.victimId)) return;   // un soldat tombé à la guerre (le délit est compté au premier coup)
       const w = this.witnesses();
-      this.events.emit('player:crime', { type: 'meurtre', victimId: k.victimId, settlementId: k.settlementId, factionId: k.factionId, witnesses: w.map((x) => x.id) });
+      this.events.emit('player:crime', { type: 'meurtre', victimId: k.victimId, settlementId: k.settlementId, factionId: k.settlementId !== undefined ? this.ownerOf(k.settlementId) : k.factionId, witnesses: w.map((x) => x.id) });
       if (w.length && k.settlementId !== undefined) this.alertGuards(k.settlementId);
     });
     // équipement de départ du voyageur
@@ -227,8 +235,9 @@ export class Game {
   /** Stock du jour d'un marchand (les achats le vident). */
   stockOf(e: Entity): { id: string; qty: number }[] {
     const key = `${e.id}:${this.time.day}`;
+    if (this.happenings.closed(e)) return [];   // boutique fermée pendant une épidémie
     let s = this.stocks.get(key);
-    if (!s) { s = this.convoys.stockFor(e) ?? this.economy.stock(e.npc!, this.time.day); this.stocks.set(key, s); }
+    if (!s) { s = this.convoys.stockFor(e) ?? this.happenings.stockFor(e) ?? this.economy.stock(e.npc!, this.time.day); this.stocks.set(key, s); }
     return s.filter((x) => x.qty > 0);
   }
   openTrade(e: Entity): void { if (this.rep.mood(e.npc!) === 'hostile') return; this.ui?.openTrade(e); }
@@ -249,10 +258,11 @@ export class Game {
   /** Le joueur a frappé quelqu'un : agression (témoins, gardes). */
   onHit(e: Entity): void {
     this.target = e;
+    if (this.happenings.onHit(e)) return;   // soldat d'une bataille : prise de parti, délit envers sa faction
     if (!e.npc || e.hostile) return;
     e.hostile = true; e.thinkT = 0;
     const w = this.witnesses();
-    this.events.emit('player:crime', { type: 'agression', victimId: e.id, settlementId: e.npc.sid, factionId: e.npc.factionId, witnesses: [...new Set([...w.map((x) => x.id), e.id])] });
+    this.events.emit('player:crime', { type: 'agression', victimId: e.id, settlementId: e.npc.sid, factionId: this.rep.factionOf(e.npc), witnesses: [...new Set([...w.map((x) => x.id), e.id])] });
     this.alertGuards(e.npc.sid);
   }
   rain(): number { return this.dungeon ? 0 : this.wx.mix.rain + this.wx.mix.storm * 0.5; }
@@ -385,6 +395,9 @@ export class Game {
     // épave d'un convoi pillé
     const cf = this.convoys.focus();
     if (cf && cf.d < bs) { bs = cf.d; best = cf.f; }
+    // pas de tir du concours d'une fête
+    const hf = this.happenings.focus();
+    if (hf && hf.d < bs) { bs = hf.d; best = hf.f; }
     // vol : on montre s'il y a des témoins
     if (best?.t === 'prop' && /^(coffre|tonneau|caisse)$/.test(best.prop.kind) && this.isOwned(best.prop)) {
       const n = this.theftWitnesses();
@@ -667,7 +680,7 @@ export class Game {
     this.giveLoot(containerLoot(this.seed, pr.key, { building, depth, questItem }), pr.kind === 'coffre' ? 'Coffre' : pr.kind === 'tonneau' ? 'Tonneau' : 'Caisse');
     if (this.isOwned(pr)) {
       const w = this.witnesses(this.theftNoise());
-      this.events.emit('player:crime', { type: 'vol', settlementId: pr.sid, factionId: this.world.civ.settlements[pr.sid]?.factionId, witnesses: w.map((x) => x.id), value: 10 });
+      this.events.emit('player:crime', { type: 'vol', settlementId: pr.sid, factionId: this.ownerOf(pr.sid), witnesses: w.map((x) => x.id), value: 10 });
       if (w.length) this.events.emit('message', { text: `${w[0].label} vous a vu voler !`, color: 0xe05040 });
       else ch.practice('furtivité', 2);
     }
@@ -783,7 +796,7 @@ export class Game {
     e.hostile = true; e.thinkT = 0;
     const w = this.witnesses();
     this.events.emit('message', { text: `${n.first} ${n.last} vous surprend la main dans sa poche !`, color: 0xe05040 });
-    this.events.emit('player:crime', { type: 'vol', settlementId: n.sid, factionId: n.factionId, witnesses: [...new Set([e.id, ...w.map((x) => x.id)])], value: 10 });
+    this.events.emit('player:crime', { type: 'vol', settlementId: n.sid, factionId: this.rep.factionOf(n), witnesses: [...new Set([e.id, ...w.map((x) => x.id)])], value: 10 });
     this.alertGuards(n.sid);
   }
 
@@ -961,8 +974,11 @@ export class Game {
     const p = this.player, ch = this.character;
     let dmg = 0, armor = 0, regen = 0, stam = 0;
     for (const b of this.buffs) { b.t -= dt; dmg += b.dmg ?? 0; armor += b.armor ?? 0; regen += b.regen ?? 0; stam += b.stam ?? 0; }
-    this.buffs = this.buffs.filter((b) => b.t > 0);
-    ch.bonusDmg = dmg; ch.bonusArmor = armor; p.staminaRegen = (1 + stam) * ch.staRegenMult();
+    if (this.buffs.some((b) => b.t <= 0)) this.buffs = this.buffs.filter((b) => b.t > 0);
+    // malade (épidémie) : endurance et soins réduits
+    const sick = this.happenings.sickness();
+    if (sick) regen *= sick.regen;
+    ch.bonusDmg = dmg; ch.bonusArmor = armor; p.staminaRegen = (1 + stam) * ch.staRegenMult() * (sick ? sick.stam : 1);
     p.noiseMul = ch.noiseMul(); p.stealthBonus = ch.talentFx('stealth');
     p.quiet = this.buffs.some((b) => b.id === 'feutré');
     p.invisible = this.buffs.some((b) => b.id === 'invisible');
@@ -1022,6 +1038,7 @@ export class Game {
     this.world.chunks.overlays = [built.data];
     this.applyDoor();
     this.convoys.onWorldChange();   // les convois quittent la simulation (un combat en cours se décide)
+    this.happenings.onWorldChange();   // raids, batailles et foires incarnés aussi
     this.entities.clear();
     this.entities.spawnDungeon(layout);
     this.exploits.onWorldChange();
@@ -1145,6 +1162,7 @@ export class Game {
     this.entities.update(dt);
     this.exploits.tick(dt);
     this.convoys.tick(dt);   // après entities.update : obstacles des chariots pour l'image suivante
+    this.happenings.tick(dt);   // raids, fêtes, épidémies, guerres (étals et cibles : obstacles de l'image suivante)
     this.coop?.update(dt);
     if (!this.wasGround && p.onGround && this.prevVy < -7 && !this.dungeon) this.particles.emit('poussière', p.x, p.y + 0.05, p.z, 10);
     this.wasGround = p.onGround; this.prevVy = p.vy;
@@ -1195,6 +1213,7 @@ export class Game {
     this.combatT -= dt;
     if (this.combatT > 0) return 'combat';
     if (this.dungeon) return 'donjon';
+    if (this.happenings.festive()) return 'fête';
     const here = this.world.civ.settlements.some((s) => !s.abandoned && s.type !== 'camp' && Math.hypot(s.x - p.x, s.z - p.z) < s.radius + 25);
     if (here && this.atmoNight < 0.5) return 'village';
     if (this.atmoNight > 0.55) return 'nuit';
@@ -1317,6 +1336,7 @@ export class Game {
     if (d.use.stamina) p.stamina = Math.min(p.maxStamina, p.stamina + d.use.stamina);
     if (d.use.mana) p.mana = Math.min(p.maxMana, p.mana + d.use.mana);
     if (d.use.cure) p.poison = 0;
+    if (d.use.fever) this.happenings.cure();
     if (d.use.buff) this.addBuff({ ...d.use.buff });
     if (d.use.warm) { const cur = this.buffs.find((b) => b.id === 'réchauffé'); this.addBuff({ id: 'réchauffé', name: 'Réchauffé', t: Math.max(d.use.warm * 60, cur?.t ?? 0) }); }
     if (d.cat === 'nourriture' && d.use.meal !== false) this.feed(d.use.meal ?? { t: 150, regen: 0.3 });
@@ -1387,7 +1407,7 @@ export class Game {
       if (e) n.hp = e.alive ? e.hp : 0;
       npcs.push({ id: n.id, alive: n.alive, hp: n.hp, wealth: n.wealth, memories: n.memories });
     }
-    const est = this.poss.toSave(), ex = this.exploits.toSave(), cv = this.convoys.toSave();
+    const est = this.poss.toSave(), ex = this.exploits.toSave(), cv = this.convoys.toSave(), ev = this.happenings.toSave();
     return {
       format: 1, game: GAME_VERSION, generator: GENERATOR_VERSION, seed: this.seed.text, savedAt: Date.now(), label, time: this.time.minutes,
       player: { x: p.x, y: p.y, z: p.z, heading: p.heading, pitch: p.pitch, hp: p.hp, stamina: p.stamina, mana: p.mana, dungeon: this.dungeon ? this.dungeon.layout.id : -1, ret: this.dungeon ? this.dungeon.ret : null },
@@ -1396,7 +1416,7 @@ export class Game {
       npcs,
       rep: { global: this.rep.global, faction: [...this.rep.faction], local: [...this.rep.local], bounty: [...this.rep.bounty] },
       economy: [...this.economy.supply].map(([k, v]) => [k, { ...v }]),
-      quests: this.quests.quests.filter((q) => q.status !== 'disponible' && q.kind !== 'prime' && q.kind !== 'course').map((q) => ({ id: q.id, status: q.status, stage: q.stage, killed: q.data.killed ?? 0 })),
+      quests: this.quests.quests.filter((q) => q.status !== 'disponible' && q.kind !== 'prime' && q.kind !== 'course' && q.kind !== 'épidémie').map((q) => ({ id: q.id, status: q.status, stage: q.stage, killed: q.data.killed ?? 0 })),
       rumors: this.rumors.list.map((r) => ({ text: r.text, origin: r.origin, day: r.day, reach: [...r.reach], tag: r.tag })),
       lairs: this.entities.lairs.map((l) => ({ key: l.key, alive: l.alive, leaderAlive: l.leaderAlive })),
       killed: [...this.entities.killed], clearedCamps: [...this.entities.clearedCamps],
@@ -1404,6 +1424,7 @@ export class Game {
       ...(est ? { estate: est } : {}),   // maison, coffre, cheval, mercenaire : absents si rien n'est possédé
       ...(ex ? { exploits: ex } : {}),   // primes, récompenses négociées, persuasions du jour : absents si rien n'est en cours
       ...(cv ? { convois: cv } : {}),    // issues d'embuscades observées, courses de messager, remises durables
+      ...(ev ? { evenements: ev } : {}), // issues des raids, épidémies et batailles, participations, maladie, rangs, camp, remèdes
     };
   }
 
@@ -1413,6 +1434,7 @@ export class Game {
     this.poss.reset();   // le Game est réutilisé si la seed est la même : champ absent = rien de possédé
     this.exploits.reset();   // idem : histoires disponibles, aucune prime, aucune persuasion du jour
     this.convoys.reset();    // idem : aucune issue observée, aucune course, aucune remise
+    this.happenings.reset(); // idem : aucun événement dénoué, pas malade, aucun rang
     const ch = this.character, st = this.state, p = this.player;
     this.time.minutes = d.time; this.lastDay = this.time.day;
     Object.assign(ch.stats, d.character.stats); Object.assign(ch.skills, d.character.skills); Object.assign(ch.skillXp, d.character.skillXp);
@@ -1451,6 +1473,7 @@ export class Game {
     try { this.poss.load(d.estate); } catch { this.poss.reset(); }   // en dernier et protégé : Coop.welcome avale les exceptions en laissant un état partiel
     try { this.exploits.load(d.exploits); } catch { this.exploits.reset(); }
     try { this.convoys.load(d.convois); } catch { this.convoys.reset(); }
+    try { this.happenings.load(d.evenements); } catch { this.happenings.reset(); }
     this.talentHint();
   }
 
@@ -1481,7 +1504,7 @@ export class Game {
     if (!dg) for (const l of this.entities.lanterns(atmo.night)) lights.push(l);
     for (const pr of this.fight.projectiles) { const l = projectileLook(pr.kind).light; if (l) lights.push({ x: pr.x, y: pr.y, z: pr.z, radius: 8, r: l[0], g: l[1], b: l[2] }); }
     if (this.coop) lights.push(...this.coop.lights());
-    if (!dg) lights.push(...this.convoys.lights());
+    if (!dg) lights.push(...this.convoys.lights(), ...this.happenings.lights());
     lights.push(...this.particles.lights());
     if (this.buffs.some((b) => b.id === 'lumière')) lights.unshift({ x: p.x, y: p.eyeY + 0.7, z: p.z, radius: 16, r: 1.5, g: 1.35, b: 1.05 });
     const shadowL = this.torchShadows ? near.find(({ l, d }) => d < 22 && (l.kind !== 'torch' || torchOn > 0.3) && l.kind !== 'window')?.l : undefined;
@@ -1496,7 +1519,7 @@ export class Game {
     this.coop?.render(this.instances, c.x, c.z);
     this.particles.render(this.instances, c.x, c.z);
     this.exploits.render(this.instances, c.x, c.z, this.elapsed);   // tableaux des primes, objets de quête
-    if (!dg) { this.renderBanners(c.x, c.z); this.birds.render(this.instances, c.x, c.z); this.renderFishing(); this.convoys.render(this.instances, c.x, c.z); }
+    if (!dg) { this.renderBanners(c.x, c.z); this.birds.render(this.instances, c.x, c.z); this.renderFishing(); this.convoys.render(this.instances, c.x, c.z); this.happenings.render(this.instances, c.x, c.z); }
     if (dg && dg.layout.lockedDoor && !this.state.flags.get(`door:dj${dg.layout.id}`)) {
       const d = dg.layout.lockedDoor;
       this.instances.add(trsYawPitch(this.m4, d.x, 1.6, d.z, d.horizontal ? Math.PI / 2 : 0, 0, 3.4, 3.2, 0.3), 0x5a3a22, M.DOOR, 0, 0, 0.3);

@@ -31,6 +31,8 @@ export interface EntityHost {
   rain(): number;
   night(): number;
   fog(): number;
+  /** faction qui tient une implantation (peut changer avec la guerre) : couleur des tabards ; absent : faction d'origine */
+  ownerOf?(sid: number): number;
 }
 
 /**
@@ -53,6 +55,18 @@ export interface ConvoyHost {
   npc(id: string): NPCData | undefined;
   puppet(zone: string, id: string, type: string, x: number, z: number): Entity | null;
   step(e: Entity, dt: number): void;
+}
+
+/**
+ * Événements vivants (zones d'autorité « e<id> ») : le jeu y incarne assaillants d'un raid, escouades d'une bataille et
+ * marchands de foire, fournit l'IA des participants (`step`), leurs données de PNJ (ids « e<événement>:<rang> ») et leurs
+ * marionnettes en ligne ; `override` change l'emploi du temps des villageois pendant une fête, un raid ou une épidémie.
+ */
+export interface EventHost {
+  npc(id: string): NPCData | undefined;
+  puppet(zone: string, id: string, type: string, x: number, z: number): Entity | null;
+  step(e: Entity, dt: number): void;
+  override(n: NPCData, L: Layout, minute: number, hour: number): { spot: Spot; act: string } | null;
 }
 
 const NO_OTHERS: RemoteTarget[] = [];
@@ -109,6 +123,9 @@ export class EntityManager {
   /** convois incarnés : zone « v<id> » → membres et bandits de l'embuscade (simulés ici, ou marionnettes) */
   readonly convoys = new Map<string, Entity[]>();
   convoyHost: ConvoyHost | null = null;
+  /** événements incarnés : zone « e<id> » → assaillants, soldats, marchands (simulés ici, ou marionnettes) */
+  readonly eventZones = new Map<string, Entity[]>();
+  eventHost: EventHost | null = null;
 
   constructor(private host: EntityHost) {
     this.lairs = [...buildLairs(host.world.civ, host.world.seed), ...buildHerds(host.world.civ, host.world.seed)];
@@ -164,17 +181,26 @@ export class EntityManager {
   allNpcData(): Map<number, NPCData[]> { return this.npcData; }
   findNpc(id: string): NPCData | undefined {
     if (id.startsWith('v')) return this.convoyHost?.npc(id);   // membre d'un convoi
+    if (id.startsWith('e')) return this.eventHost?.npc(id);    // soldat, marchand de foire
     if (!id.startsWith('n')) return undefined;
     return this.npcsOf(parseInt(id.slice(1), 10)).find((n) => n.id === id);
   }
 
+  /** Faction dont un PNJ porte les couleurs : celle qui tient son implantation aujourd'hui (la guerre la change). */
+  private colorsOf(n: NPCData): number {
+    const fid = this.host.ownerOf && !n.road ? this.host.ownerOf(n.sid) : n.factionId;
+    return this.host.world.civ.factions[fid]?.color ?? 0x6a2a2a;
+  }
+
   private modelFor(n: NPCData): ModelDef {
-    let m = this.models.get(n.id);
+    const garde0 = n.look === 'garde', fc = this.colorsOf(n);
+    // le tabard des gardes et des soldats suit le propriétaire du lieu : la couleur entre dans la clé du modèle
+    const key = garde0 ? `${n.id}|${fc}` : n.id;
+    let m = this.models.get(key);
     if (!m) {
-      const c = n.colors, garde = n.look === 'garde', moine = n.look === 'moine', noble = n.look === 'noble';
+      const c = n.colors, garde = garde0, moine = n.look === 'moine', noble = n.look === 'noble';
       const h = (n.age * 31 + n.first.length * 7 + n.last.length) % 10; // variété visuelle stable
       const pr = n.profession, f = n.sex === 'f', h2 = (n.age * 7 + n.last.length * 3) % 10;
-      const fc = this.host.world.civ.factions[n.factionId]?.color ?? 0x6a2a2a;
       const hats: Record<string, HumanLook['hat']> = { fermier: 'paille', meunier: 'bonnet', pêcheur: 'bonnet', marchand: 'béret', noble: 'béret', guérisseuse: 'coiffe' };
       m = humanoid({
         skin: c.skin, shirt: garde ? 0x8a8a94 : noble ? 0x6a2a6a : c.shirt, pants: c.pants, hair: n.age > 58 ? 0xb8b4ac : c.hair,
@@ -189,9 +215,15 @@ export class EntityManager {
         apron: pr === 'forgeron' ? 0x4a3020 : pr === 'aubergiste' ? 0xd8d0c0 : undefined,
         scale: (f ? 0.9 : 0.95) + ((n.age * 13) % 17) / 100, letter: '@',
       });
-      this.models.set(n.id, m);
+      this.models.set(key, m);
     }
     return m;
+  }
+
+  /** L'implantation a changé de propriétaire : les gardes et soldats incarnés prennent le tabard de leur nouvelle faction. */
+  refreshModels(sid: number): void {
+    // marionnettes comprises (applySnapshot les range dans la même liste)
+    for (const e of this.zones.get(sid)?.ents ?? []) if (e.npc) e.model = this.modelFor(e.npc);
   }
 
   // ---------------------------------------------------------------- activation
@@ -208,7 +240,7 @@ export class EntityManager {
       e.hp = Math.max(1, Math.min(e.maxHp, n.hp));
       e.npc = n; e.sid = sid; e.zoneKey = 's' + sid;
       e.speed = n.profession === 'garde' ? 1.6 : 1.3 + n.traits.sociability * 0.3;
-      const sp = this.spotFor(e, zone, minute, hour);
+      const sp = this.plan(e, zone, minute, hour).spot;
       e.spot = sp;
       const free = grid.nearestFree(sp.x, sp.z, 4);
       e.x = sp.lying || free < 0 ? sp.x : grid.x0 + (free % grid.w) + 0.5;
@@ -234,9 +266,9 @@ export class EntityManager {
     const set = new Set(list);
     for (let i = this.entities.length - 1; i >= 0; i--) if (set.has(this.entities[i])) this.entities.splice(i, 1);
     this.pathQueue = this.pathQueue.filter((e) => !set.has(e));
-    // une entité retirée (cadavre effacé, bandit rendu parti) quitte aussi la liste de son convoi
+    // une entité retirée (cadavre effacé, bandit rendu parti) quitte aussi la liste de son convoi ou de son événement
     for (const e of list) {
-      const l = e.zoneKey ? this.convoys.get(e.zoneKey) : undefined;
+      const l = e.zoneKey ? this.convoys.get(e.zoneKey) ?? this.eventZones.get(e.zoneKey) : undefined;
       if (l && l !== list) { const i = l.indexOf(e); if (i >= 0) l.splice(i, 1); }
     }
   }
@@ -274,6 +306,7 @@ export class EntityManager {
     for (const sid of [...this.zones.keys()]) this.deactivate(sid);
     for (const l of this.lairs) if (this.activeLairs.has(l.key)) this.deactivateLair(l);
     for (const z of [...this.convoys.keys()]) this.removeConvoy(z);
+    for (const z of [...this.eventZones.keys()]) this.removeEventZone(z);
   }
 
   // ---------------------------------------------------------------- entités propres au joueur, redditions
@@ -331,6 +364,31 @@ export class EntityManager {
     this.remove(list);
     this.net?.release(zone);
   }
+  // ---------------------------------------------------------------- événements (zones « e<id> »)
+  /** Incarne un événement (raid, bataille, foire) : ses participants entrent dans la simulation, la zone est réclamée. */
+  addEventZone(zone: string, ents: Entity[]): void {
+    if (this.eventZones.has(zone)) return;
+    this.eventZones.set(zone, []);
+    for (const e of ents) this.addToEventZone(zone, e);
+    this.net?.claim(zone);
+  }
+  /** Ajoute une entité à un événement incarné (assaillant d'une vague, renfort). */
+  addToEventZone(zone: string, e: Entity): void {
+    const list = this.eventZones.get(zone);
+    if (!list || list.includes(e)) return;
+    e.zoneKey = zone;
+    list.push(e);
+    if (!this.entities.includes(e)) this.entities.push(e);
+  }
+  /** Retire un événement de la simulation (le joueur s'éloigne, souterrain, chargement, fin) et libère sa zone. */
+  removeEventZone(zone: string): void {
+    const list = this.eventZones.get(zone);
+    if (!list) return;
+    this.eventZones.delete(zone);
+    this.remove(list);
+    this.net?.release(zone);
+  }
+
   /** Simule-t-on cette zone ici (solo, ou propriétaire en ligne) ? */
   simulates(zone: string): boolean { return !this.net || this.net.owns(zone); }
 
@@ -481,6 +539,12 @@ export class EntityManager {
   }
 
   // ---------------------------------------------------------------- PNJ (comportement)
+  /** Lieu et activité du moment : emploi du temps, sauf événement en cours (fête, raid, épidémie). */
+  private plan(e: Entity, zone: ActiveZone, minute: number, hour: number): { spot: Spot; act: string } {
+    const n = e.npc!, ov = this.eventHost?.override(n, zone.L, minute, hour);
+    return ov ?? { spot: this.spotFor(e, zone, minute, hour), act: blockAt(n, minute).act };
+  }
+
   private spotFor(e: Entity, zone: ActiveZone, minute: number, hour: number): Spot {
     const n = e.npc!;
     const b = blockAt(n, minute);
@@ -561,10 +625,10 @@ export class EntityManager {
     }
     e.foe = null;
     if (e.talkT > 0) { e.action = 'parler'; e.faceTo = Math.atan2(p.x - e.x, -(p.z - e.z)); e.target = null; return; }
-    const sp = this.spotFor(e, zone, minute, hour);
+    const pl = this.plan(e, zone, minute, hour), sp = pl.spot;
     const moved = !e.spot || Math.hypot(sp.x - e.spot.x, sp.z - e.spot.z) > 1.5;
     e.spot = sp;
-    e.action = blockAt(n, minute).act;
+    e.action = pl.act;
     if (moved || (!e.target && Math.hypot(sp.x - e.x, sp.z - e.z) > 1.2)) {
       e.target = { x: sp.x, z: sp.z };
       e.path = null; e.pathI = 0;
@@ -632,6 +696,10 @@ export class EntityManager {
         if (!this.step(e, (dx / d) * step, (dz / d) * step)) { e.path = null; e.target = null; }
         e.heading = turn(e.heading, Math.atan2(dx, -dz), dt * 6);
         e.pose.walk += dt * speed * 4.2;
+      } else if (e.action === 'danser' && Math.hypot(p.x - e.x, p.z - e.z) > 1.2) {
+        // jour de fête : on danse sur place en tournant
+        e.pose.walk += dt * 5.5; e.heading += dt * 1.4;
+        if (e.path && e.pathI >= e.path.length) { e.path = null; e.target = null; }
       } else {
         e.pose.walk *= 0.8;
         if (e.faceTo !== null) e.heading = turn(e.heading, e.faceTo, dt * 4);
@@ -716,6 +784,8 @@ export class EntityManager {
         updateAlly(e, dt, this.actx);
       } else if (e.convoy) {
         this.convoyHost?.step(e, dt);
+      } else if (e.event) {
+        this.eventHost?.step(e, dt);
       } else if (e.npc) {
         const zone = this.zones.get(e.sid);
         if (!zone) continue;
@@ -743,11 +813,13 @@ export class EntityManager {
     for (const k of this.activeLairs.keys()) out.push(k);
     if (this.dungeonId >= 0) out.push('d' + this.dungeonId);
     for (const k of this.convoys.keys()) out.push(k);
+    for (const k of this.eventZones.keys()) out.push(k);
     return out;
   }
 
   private zoneList(z: string): Entity[] | null {
     if (z.startsWith('v')) return this.convoys.get(z) ?? null;
+    if (z.startsWith('e')) return this.eventZones.get(z) ?? null;
     if (z.startsWith('s')) return this.zones.get(Number(z.slice(1)))?.ents ?? null;
     if (z.startsWith('lair:')) return this.activeLairs.get(z) ?? null;
     if (z.startsWith('d')) return Number(z.slice(1)) === this.dungeonId ? this.dungeonEnts : null;
@@ -797,6 +869,7 @@ export class EntityManager {
   /** Entité présente chez le propriétaire mais pas ici (populations divergentes) : on la crée. */
   private spawnPuppet(z: string, id: string, type: string, x: number, zz: number): Entity | null {
     if (z.startsWith('v')) { const e = this.convoyHost?.puppet(z, id, type, x, zz) ?? null; if (e) e.zoneKey = z; return e; }
+    if (z.startsWith('e')) { const e = this.eventHost?.puppet(z, id, type, x, zz) ?? null; if (e) e.zoneKey = z; return e; }
     if (z.startsWith('s')) {
       const n = this.findNpc(id);
       if (!n) return null;

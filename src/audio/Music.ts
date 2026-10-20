@@ -4,7 +4,7 @@
 // tambourin. Chaque ambiance a son mode, son tempo, sa progression d'accords et sa densité ; les
 // accords, arpèges et phrases de flûte sont tirés au fil de l'eau. Changement d'ambiance : fondu.
 
-export type Mood = 'silence' | 'exploration' | 'village' | 'nuit' | 'donjon' | 'combat';
+export type Mood = 'silence' | 'exploration' | 'village' | 'nuit' | 'donjon' | 'combat' | 'fête';
 
 interface Theme {
   tempo: number; root: number; scale: number[]; prog: number[];
@@ -15,7 +15,7 @@ interface Theme {
 }
 
 const DORIAN = [0, 2, 3, 5, 7, 9, 10], MIXO = [0, 2, 4, 5, 7, 9, 10], AEOLIAN = [0, 2, 3, 5, 7, 8, 10];
-const PHRYGIAN = [0, 1, 3, 5, 7, 8, 10], HARMONIC = [0, 2, 3, 5, 7, 8, 11];
+const PHRYGIAN = [0, 1, 3, 5, 7, 8, 10], HARMONIC = [0, 2, 3, 5, 7, 8, 11], IONIAN = [0, 2, 4, 5, 7, 9, 11];
 
 const THEMES: Record<Exclude<Mood, 'silence'>, Theme> = {
   exploration: { tempo: 78, root: 50, scale: DORIAN, prog: [0, 6, 3, 4, 0, 2, 3, 4], lute: 0.65, flute: 0.55, drone: 0.35, drums: 0, play: [16, 24], rest: [6, 12], reverb: 0.35 },
@@ -23,6 +23,8 @@ const THEMES: Record<Exclude<Mood, 'silence'>, Theme> = {
   nuit: { tempo: 60, root: 57, scale: AEOLIAN, prog: [0, 5, 3, 4, 0, 5, 6, 4], lute: 0.3, flute: 0.4, drone: 0.55, drums: 0, play: [12, 20], rest: [8, 14], reverb: 0.5 },
   donjon: { tempo: 52, root: 45, scale: PHRYGIAN, prog: [0, 1, 0, 6, 0, 1, 5, 6], lute: 0.15, flute: 0.2, drone: 0.9, drums: 0.15, play: [16, 24], rest: [4, 8], reverb: 0.7 },
   combat: { tempo: 138, root: 52, scale: HARMONIC, prog: [0, 5, 6, 4, 0, 5, 3, 4], lute: 0.85, flute: 0.3, drone: 0.6, drums: 1, play: [999, 999], rest: [0, 0], reverb: 0.2 },
+  // jour de fête : branle sautillant, flûte enjouée, tambourin et tambour sur chaque temps, presque sans respiration
+  fête: { tempo: 126, root: 57, scale: IONIAN, prog: [0, 3, 4, 0, 5, 3, 4, 0], lute: 1, flute: 0.9, drone: 0.3, drums: 0.8, play: [24, 40], rest: [1, 3], reverb: 0.22 },
 };
 
 const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);

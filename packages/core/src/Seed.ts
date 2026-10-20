@@ -9,7 +9,9 @@ export type StreamName =
   // chaînes de quêtes et primes : flux propres, lus au moment de l'exécution (un nom ajouté ne décale aucun autre flux)
   | 'chaînes' | 'primes'
   // caravanes et voyageurs sur les routes (étape 53) : flux propre, lu au moment de l'exécution
-  | 'convois';
+  | 'convois'
+  // événements vivants (étape 54 : raids, fêtes, épidémies, guerres) : flux propre, lu au moment de l'exécution
+  | 'événements';
 
 /** Normalise une saisie de seed : majuscules, séparateurs « - », caractères sûrs. */
 export function normalizeSeed(input: string): string {

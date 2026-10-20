@@ -43,7 +43,7 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
     if (mv.ko > 0 && cy <= by + 2) { const t = ` ${mv.name} à terre (${Math.ceil(mv.ko)} s) `; g.text(29, cy, t, C.red, C.panel, 0.55); edge = Math.max(edge, 29 + t.length); }
   }
   const worst = ch.worstEquipped();
-  const status = [p.poison > 0 ? 'empoisonné' : '', p.frost > 0 ? 'gelé' : '', p.burn > 0 ? 'brûlé' : '', p.diving ? 'en plongée' : p.swimming ? 'à la nage' : p.depth > 0.3 ? 'dans l\'eau' : '', p.crouch && !p.swimming ? 'accroupi' : '', p.mounted ? (p.sprinting ? 'au galop' : 'à cheval') : '', hv && p.mounted && hv.limp ? 'cheval boiteux' : '', ch.inv.weight() > ch.carryMax() ? 'surchargé' : '',
+  const status = [game.happenings.sick ? 'malade' : '', p.poison > 0 ? 'empoisonné' : '', p.frost > 0 ? 'gelé' : '', p.burn > 0 ? 'brûlé' : '', p.diving ? 'en plongée' : p.swimming ? 'à la nage' : p.depth > 0.3 ? 'dans l\'eau' : '', p.crouch && !p.swimming ? 'accroupi' : '', p.mounted ? (p.sprinting ? 'au galop' : 'à cheval') : '', hv && p.mounted && hv.limp ? 'cheval boiteux' : '', ch.inv.weight() > ch.carryMax() ? 'surchargé' : '',
     worst <= 0 ? 'équipement hors d’usage' : worst < 25 ? 'équipement très usé' : ''].filter(Boolean).join(' · ');
   const tp = ch.talentPoints();
   g.text(1, by - 1, ` Niv ${ch.level} · ${ch.xp}/${ch.xpForNext()} XP · ${ch.inv.gold} or${ch.statPoints ? ' · +' + ch.statPoints + ' pt (P)' : ''}${tp ? ' · +' + tp + ' talent' + (tp > 1 ? 's' : '') + ' (K)' : ''} ${status ? '· ' + status : ''} `, C.gold, C.panel, 0.55);
@@ -161,11 +161,16 @@ export function drawHud(g: TextGrid, game: Game, st: HudState): void {
   if (!st.locked && !p.dead) g.center(mid + 7, ' Cliquez dans le jeu pour reprendre la souris ', C.white, C.panel);
   if (ch.weapon?.weapon?.kind === 'arc' && game.fight.charge > 0) g.bar(Math.floor(cols / 2) - 5, mid + 1, 10, Math.min(1, game.fight.charge / ch.bowDrawTime()), C.gold, C.faint);
 
-  // bonus temporaires
-  if (game.buffs.length) {
+  // bonus temporaires ; maladie (épidémie) : malus visible à côté
+  const sick = game.happenings.sick;
+  if (game.buffs.length || sick) {
     const txt = game.buffs.map((b) => `${b.name} ${Math.floor(b.t / 60)}:${String(Math.floor(b.t % 60)).padStart(2, '0')}`).join(' · ');
-    g.text(1, by - 2, ` ♥ ${txt} `, C.green, C.panel, 0.55);
+    if (txt) g.text(1, by - 2, ` ♥ ${txt} `, C.green, C.panel, 0.55);
+    if (sick) { const s = ` × Malade (${sick.nom}) : endurance et soins réduits `; g.text(txt ? Math.min(cols - s.length - 1, txt.length + 6) : 1, by - 2, s, C.orange, C.panel, 0.55); }
   }
+  // concours de tir en cours (fête)
+  const cl = game.happenings.hudLine();
+  if (cl) g.center(mid - 5, ` ${cl.text} `, cl.color, C.panel);
   // butin récupéré
   const feed = game.lootFeed.filter((l) => now - l.t < 6000);
   feed.forEach((l, i) => g.text(cols - l.text.length - 3, Math.floor(rows * 0.3) + i, ` ${l.text} `, l.color, C.panel, Math.max(0.2, 0.7 - (now - l.t) / 9000)));

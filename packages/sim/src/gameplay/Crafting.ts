@@ -98,6 +98,8 @@ export const RECIPES: Recipe[] = [
   R('Potions', 'potion de soin', 1, [['herbe médicinale', 2]], 0, 3, 'Préparer'),
   R('Potions', 'potion de soin', 1, [['herbe médicinale', 1], ['écorce', 1]], 0, 3, 'Préparer', { id: 'potion de soin:écorce', label: 'Potion de soin (à l’écorce)' }),
   R('Potions', 'antidote', 2, [['glande à venin', 1], ['herbe médicinale', 1]], 5, 3, 'Préparer'),
+  // épidémies (étape 54) : le remède que réclament les guérisseuses
+  R('Potions', 'remède contre la fièvre', 1, [['herbe médicinale', 2], ['écorce', 1]], 0, 3, 'Préparer'),
   R('Potions', 'potion d’endurance', 1, [['baies', 2], ['herbe médicinale', 1]], 10, 3, 'Préparer'),
   R('Potions', 'potion de chaleur', 1, [['bois de cerf', 1], ['herbe médicinale', 1]], 15, 3, 'Préparer'),
   R('Potions', 'potion de mana', 1, [['champignon', 2], ['herbe médicinale', 1]], 15, 4, 'Préparer'),
@@ -126,6 +128,7 @@ export const SOURCES: Record<string, string> = {
   champignon: 'buissons (forêt, marais, taïga) · arbres abattus · guérisseuse',
   'glande à venin': 'araignées (marais)', 'bois de cerf': 'cerfs', 'croc de loup': 'loups', 'défense de sanglier': 'sangliers',
   'essence spectrale': 'spectres (cimetières, la nuit)', 'potion de soin': 'établi · guérisseuse, prêtre, marchand',
+  'remède contre la fièvre': 'établi ou âtre de la guérisseuse (2 herbes médicinales + 1 écorce) · herboriste des foires',
   'peau de sanglier': 'sangliers', 'peau de cerf': 'cerfs', 'peau de loup': 'loups',
   'viande crue': 'chasse (cerfs, sangliers, loups) · fermier, chasseur', pain: 'fermier, aubergiste, meunier, marchand', fromage: 'fermier, aubergiste, marchand',
 };

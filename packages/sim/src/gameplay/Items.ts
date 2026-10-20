@@ -25,6 +25,8 @@ export interface ItemDef {
     buff?: { id: string; name: string; t: number; dmg?: number; armor?: number };
     /** se boit (« Vous buvez ») */
     drink?: boolean;
+    /** guérit la fièvre d'une épidémie et protège de la contagion une journée */
+    fever?: boolean;
   };
   good?: Good;           // catégorie économique (prix régionaux)
   /** solidité : usages (coups portés, reçus, parés, tirs) avant d'être hors d'usage ; défaut selon le type (wearOf) */
@@ -92,6 +94,14 @@ const D: ItemDef[] = [
   { id: 'antidote', name: 'Antidote', cat: 'potion', value: 20, weight: 0.2, desc: 'Soigne le poison.', use: { cure: true, hp: 5 }, good: 'herbes' },
   { id: 'potion de force', name: 'Potion de force', cat: 'potion', value: 45, weight: 0.3, desc: 'Dégâts +25 % pendant 3 min.', use: { buff: { id: 'force', name: 'Force', t: 180, dmg: 0.25 } }, good: 'herbes' },
   { id: 'potion de chaleur', name: 'Potion de chaleur', cat: 'potion', value: 30, weight: 0.3, desc: 'Réchauffé 8 min : insensible au gel, dégâts de givre réduits de moitié.', use: { stamina: 20, warm: 8 }, good: 'herbes' },
+  // événements vivants (étape 54) : remède des épidémies, objets particuliers des foires, prix du concours de tir
+  // (sans bien économique : ils n'entrent ni dans les marchandises des caravanes, ni dans les épaves)
+  { id: 'remède contre la fièvre', name: 'Remède contre la fièvre', cat: 'potion', value: 24, weight: 0.2, desc: 'Guérit les fièvres et protège de la contagion pendant une journée. Établi ou âtre de la guérisseuse : 2 herbes médicinales + 1 écorce.', use: { hp: 10, fever: true } },
+  { id: 'pain d’épices', name: 'Pain d’épices', cat: 'nourriture', value: 9, weight: 0.3, desc: 'Miel et épices de la foire : il tient au corps.', use: { hp: 12, stamina: 30, meal: { t: 420, regen: 0.45, stam: 0.3 } } },
+  { id: 'cidre', name: 'Pichet de cidre', cat: 'nourriture', value: 5, weight: 0.5, desc: 'Le cidre doux des jours de fête.', use: { stamina: 45, hp: 3, drink: true } },
+  { id: 'élixir de foire', name: 'Élixir de foire', cat: 'potion', value: 55, weight: 0.3, desc: 'Le bonimenteur jure qu’il donne du cœur au ventre : dégâts +10 %, armure +2 pendant 4 min.', use: { buff: { id: 'élixir', name: 'Élixir', t: 240, dmg: 0.1, armor: 2 } } },
+  { id: 'arc de concours', name: 'Arc de concours', cat: 'arme', value: 190, weight: 1.1, rarity: 'rare', desc: 'Un arc d’if poli, prix des concours de tir des jours de fête : précis et rapide.', weapon: { kind: 'arc', damage: 13, speed: 1.15, reach: 75, stamina: 6 } },
+  { id: 'ruban de vainqueur', name: 'Ruban de vainqueur', cat: 'valeur', value: 15, weight: 0.01, desc: 'Remis au meilleur archer d’une fête de village.' },
   // matériaux
   { id: 'peau de cerf', name: 'Peau de cerf', cat: 'matériau', value: 10, weight: 1.4, desc: 'Une peau souple. Se tanne en cuir à l’établi (avec de l’écorce ou du sel).', good: 'laine' },
   { id: 'bois de cerf', name: 'Bois de cerf', cat: 'matériau', value: 9, weight: 0.8, desc: 'Ramure recherchée des artisans. Potion de chaleur (établi).', good: 'outils' },

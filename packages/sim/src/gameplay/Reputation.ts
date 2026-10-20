@@ -75,10 +75,14 @@ export class Reputation {
     if (n.memories.length > 12) n.memories.shift();
   }
 
+  /** Faction dont relève un PNJ : celle qui tient son implantation (le jeu la branche ; la guerre la change). */
+  factionOf: (n: NPCData) => number = (n) => n.factionId;
+
   /** Opinion d'un PNJ sur le joueur (−100 … 100). */
   opinion(n: NPCData): number {
     let o = (n.traits.kindness - 0.5) * 20 + (this.local.get(n.sid) ?? 0) * 0.5 + this.global * 0.2;
-    if (n.factionId >= 0) o += (this.faction[n.factionId] ?? 0) * 0.3;
+    const fid = this.factionOf(n);
+    if (fid >= 0) o += (this.faction[fid] ?? 0) * 0.3;
     for (const m of n.memories) if (m.subject === 'joueur') o += m.weight * 30;
     return Math.max(-100, Math.min(100, o));
   }

@@ -18,7 +18,9 @@ import { item } from './Items';
 /** Quêtes systémiques, plus les chaînes de quêtes (« chaîne », voir Chains.ts) et les primes acceptées au tableau (« prime »). */
 export type QuestKind = 'bandits' | 'loups' | 'relique' | 'expédition' | 'mine' | 'chaîne' | 'prime'
   /** pli confié par un messager de la route (Convoys.ts) : le remettre au destinataire */
-  | 'course';
+  | 'course'
+  /** remèdes demandés par la guérisseuse pendant une épidémie (Happenings.ts) */
+  | 'épidémie';
 export interface Quest {
   id: string; kind: QuestKind; giver: string; sid: number;
   title: string; summary: string;

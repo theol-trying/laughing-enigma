@@ -35,6 +35,8 @@ export interface DialogueHooks {
   arrest?(e: Entity, bounty: number): DialogueOption[];
   /** répliques d'un voyageur des routes (membre d'un convoi) : « Parle-moi de toi », « Comment vont les affaires ? » */
   road?(e: Entity, topic: 'about' | 'job'): string[] | undefined;
+  /** mêmes sujets pour tout autre PNJ (marchand de foire, soldat, boutique fermée par l'épidémie) ; undefined : répliques habituelles */
+  talk?(e: Entity, topic: 'about' | 'job'): string[] | undefined;
 }
 
 /** Service proposé par l'aubergiste ou le fermier : cheval, mercenaire (engagement ou renouvellement), maison. */
@@ -125,7 +127,7 @@ export class DialogueSystem {
     if (offer) opts.push({ label: 'Tu as l\'air soucieux…', go: () => this.questOffer(e) });
     if (active) opts.push({ label: h.quests.canTurnIn(active) ? `À propos de « ${active.title} »… c'est réglé.` : `À propos de « ${active.title} »…`, go: () => this.questProgress(e) });
     opts.push(...(h.hooks?.menu?.(e) ?? []));
-    const road = (topic: 'about' | 'job') => (n.road ? h.hooks?.road?.(e, topic) : undefined);
+    const road = (topic: 'about' | 'job') => (n.road ? h.hooks?.road?.(e, topic) : undefined) ?? h.hooks?.talk?.(e, topic);
     const talk: DialogueOption[] = [
       { label: 'Parle-moi de toi.', go: () => this.node(e, road('about') ?? this.about(n), back) },
       { label: 'Comment vont les affaires ?', go: () => this.node(e, road('job') ?? this.job(n), back) },
@@ -239,7 +241,7 @@ export class DialogueSystem {
       case 'guérisseuse': return ['Les herbes du marais soignent bien des maux… mais attention aux araignées qui y vivent.', 'Si tu as besoin de potions, j\'en prépare.', 'Herbes, baies et champignons poussent sur les buissons des bois ; mon âtre ou l’établi d’une forge suffisent pour en tirer des potions.'];
       case 'mineur': return ['On ne descend plus dans les galeries basses. Des gobelins y ont fait leur nid.', 'Sans minerai, le village va crever de faim.'];
       case 'noble': {
-        const enemy = civ.factions.find((f) => f.kind === 'royaume' && s.factionId >= 0 && (civ.factions[s.factionId]?.relations[f.id] ?? 0) < -0.3);
+        const fid = h.rep.factionOf(n), enemy = civ.factions.find((f) => f.kind === 'royaume' && fid >= 0 && f.id !== fid && (civ.factions[fid]?.relations[f.id] ?? 0) < -0.3);
         return [enemy ? `Le ${enemy.name} n'a jamais digéré sa défaite. Il faudra un jour en finir.` : 'La paix tient. Pour l\'instant.'];
       }
       case 'voyageur': {

@@ -51,6 +51,26 @@ export interface ConvoyTag {
   threat: Entity | null; fx: number; fz: number;
 }
 
+/**
+ * Participant d'un événement vivant (zone d'autorité « e<id> ») : soldat d'une escouade en guerre, marchand de foire.
+ * Le jeu recalcule sa place (tx/tz) ; l'IA des soldats est dans sim/ai/WarAI.ts.
+ */
+export interface EventTag {
+  /** identifiant de l'événement */
+  id: string;
+  role: 'soldat' | 'marchand';
+  /** camp (faction) d'un soldat ; −1 pour les autres */
+  side: number;
+  /** dégâts portés à chaque coup */
+  dmg: number;
+  /** place à rejoindre (front, étal), cap une fois arrivé */
+  tx: number; tz: number; face: number | null;
+  /** en déroute : fuit vers (fx, fz) */
+  routed: boolean; fx: number; fz: number;
+  /** autre joueur qui l'a frappé (« p:<id> ») : il le prend pour cible (multijoueur) */
+  grudge: string;
+}
+
 /** Autre joueur vu par la simulation (multijoueur) : cible possible des créatures. */
 export interface RemoteTarget { id: string; x: number; y: number; z: number; dead: boolean; crouch: boolean; sprint: boolean; noiseMul?: number; stealthBonus?: number }
 
@@ -99,6 +119,8 @@ export class Entity {
   ally?: AllyState;
   /** membre d'un convoi (avec `npc`) : son IA est celle des convois (zone d'autorité « v<id> ») */
   convoy?: ConvoyTag;
+  /** participant d'un événement (soldat, marchand de foire) : zone d'autorité « e<id> », IA fournie par le jeu */
+  event?: EventTag;
 
   constructor(readonly id: string, readonly kind: 'npc' | 'monster', readonly type: string, public name: string, public model: ModelDef, hp: number) {
     this.radius = model.radius;

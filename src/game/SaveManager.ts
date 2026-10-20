@@ -4,6 +4,7 @@
 import type { EstateSave } from '@ascii-fort/sim/gameplay/Estate';
 import type { ExploitsSave } from './Exploits';
 import type { ConvoySave } from '@ascii-fort/sim/gameplay/Caravans';
+import type { EventSave } from '@ascii-fort/sim/gameplay/Calendar';
 
 export interface SaveData {
   /** arbres abattus, rochers brisés */
@@ -14,6 +15,8 @@ export interface SaveData {
   exploits?: ExploitsSave;
   /** convois des routes : issues d'embuscades observées, membres tués, courses de messager, remises durables (absent : état par défaut) */
   convois?: ConvoySave;
+  /** événements vivants : issues des raids, épidémies et batailles, participations, maladie, rangs, camp, remèdes (absent : état par défaut) */
+  evenements?: EventSave;
   format: 1;
   game: string; generator: string; seed: string; savedAt: number; label: string;
   time: number;

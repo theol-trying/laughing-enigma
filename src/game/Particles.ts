@@ -7,7 +7,7 @@ import type { InstanceBuffer } from '@ascii-fort/ascii-engine/Renderer';
 // éclats de roche, brume, et lucioles la nuit. Chaque particule est une petite forme instanciée
 // dont la matière choisit les glyphes (« * » pour les étincelles, « ° o » pour la fumée…).
 
-export type ParticleKind = 'étincelle' | 'sang' | 'os' | 'brume' | 'poussière' | 'fumée' | 'copeau' | 'éclat' | 'gouttes' | 'plume';
+export type ParticleKind = 'étincelle' | 'sang' | 'os' | 'brume' | 'poussière' | 'fumée' | 'copeau' | 'éclat' | 'gouttes' | 'plume' | 'flamme' | 'suie';
 
 interface Particle { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; max: number; size: number; grow: number; color: number; mat: number; grav: number; drag: number; wind: number }
 interface Firefly { x: number; y: number; z: number; vx: number; vz: number; phase: number; base: number }
@@ -26,6 +26,9 @@ const PRESETS: Record<ParticleKind, Preset> = {
   gouttes: { color: 0xb8d8f0, mat: M.DUST, size: [0.05, 0.08], grow: 0, life: [0.4, 0.7], vy: [1.5, 3], spread: 0.8, grav: 9.8, drag: 0.5, wind: 0 },
   plume: { color: 0xa89070, mat: M.DUST, size: [0.05, 0.08], grow: 0, life: [1.2, 2], vy: [0.5, 1.5], spread: 0.8, grav: 0.6, drag: 1.5, wind: 0.5 },
   éclat: { color: 0x8a867c, mat: M.ROCK, size: [0.06, 0.1], grow: 0, life: [0.6, 1.1], vy: [1.5, 3.5], spread: 1.8, grav: 9.8, drag: 0.5, wind: 0 },
+  // toit en feu (raid) : langues de flamme qui montent vite, fumée noire épaisse
+  flamme: { color: 0xff7a20, mat: M.FIRE, size: [0.22, 0.38], grow: 0, life: [0.35, 0.7], vy: [1.6, 3.2], spread: 0.5, grav: -1.5, drag: 1.2, wind: 0.5 },
+  suie: { color: 0x2a2624, mat: M.SMOKE, size: [0.45, 0.7], grow: 0.35, life: [3, 5], vy: [1.2, 1.8], spread: 0.3, grav: -0.05, drag: 0.3, wind: 0.7 },
 };
 
 export class Particles {

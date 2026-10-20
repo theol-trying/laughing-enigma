@@ -289,6 +289,36 @@ export class AudioEngine {
   /** Feuillage froissé (cueillette). */
   rustle(p: Pos): void { this.burst(3000, 'bandpass', 0.3, 0.12, 0.8, p); }
 
+  // ---------------------------------------------------------------- événements vivants (raids, fêtes, épidémies, guerres)
+  /** Tocsin : cloche frappée (fondamentale grave, partiels inharmoniques qui s'éteignent lentement). */
+  bell(p: Pos, gain = 1): void {
+    for (const [k, g, d] of [[1, 0.14, 2.6], [2.02, 0.08, 1.8], [2.74, 0.06, 1.4], [4.07, 0.04, 0.9]] as [number, number, number][]) this.tone(392 * k, d, g * gain, 'sine', 0, p);
+    this.burst(2600, 'bandpass', 0.05, 0.12 * gain, 2, p);
+  }
+  /** Cri de frayeur d'un villageois (voix glissante). */
+  scream(p: Pos, fem = false): void {
+    const f = fem ? 760 : 520;
+    this.tone(f, 0.55, 0.12, 'sawtooth', 1.35, p);
+    this.tone(f * 1.5, 0.45, 0.05, 'triangle', 1.3, p, 0.03);
+    this.burst(f * 2, 'bandpass', 0.4, 0.05, 3, p);
+  }
+  /** Toux (malade) : deux ou trois quintes de souffle rauque ; sans position : le joueur lui-même. */
+  cough(p?: Pos, fem = false): void {
+    const f = fem ? 900 : 650, n = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < n; i++) { this.burst(f, 'bandpass', 0.11, p ? 0.32 : 0.22, 2.5, p, i * 0.22); this.burst(f * 0.45, 'lowpass', 0.09, p ? 0.2 : 0.14, 1, p, i * 0.22 + 0.01); }
+  }
+  /** Cor de guerre : appel grave et tenu (début d'une bataille, déclaration de guerre). */
+  horn(p?: Pos): void {
+    this.tone(146, 1.6, 0.16, 'sawtooth', 1.02, p); this.tone(220, 1.3, 0.1, 'sawtooth', 1.01, p, 0.35);
+    this.tone(146, 1.4, 0.06, 'triangle', 1, p, 0.35);
+  }
+  /** Vivats de la foule (concours, fête). */
+  cheer(p?: Pos): void { for (let i = 0; i < 6; i++) this.burst(700 + Math.random() * 900, 'bandpass', 0.35 + Math.random() * 0.3, 0.07, 1.5, p, i * 0.06); }
+  /** Flèche plantée dans une cible de paille. */
+  thud(p: Pos): void { this.burst(260, 'lowpass', 0.09, 0.4, 1.5, p); this.tone(120, 0.08, 0.15, 'triangle', 0.7, p); }
+  /** Fanfare (paix, victoire au concours). */
+  fanfare(): void { for (const [f, at] of [[523, 0], [659, 0.14], [784, 0.28], [1047, 0.42]] as [number, number][]) this.tone(f, 0.35, 0.09, 'square', 1, undefined, at); }
+
   /** Projectile tiré par un autre joueur (multijoueur). */
   shot(kind: string, p: Pos): void {
     if (kind === 'feu') { this.burst(900, 'lowpass', 0.5, 0.3, 1, p); this.tone(220, 0.4, 0.12, 'sawtooth', 0.5, p); }

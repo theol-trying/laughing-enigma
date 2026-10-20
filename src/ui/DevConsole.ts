@@ -36,6 +36,11 @@ const HELP = [
   'persuasion [reset]                      chances face au PNJ visé ; reset : oublie les tentatives et marchandages du jour',
   'convois [rayon] | convoi [aller|caravane|pèlerins|colporteur|messager|patrouille]   convois proches ; aller au plus proche ; en faire venir un',
   'embuscade [n] [convoi]                  embuscade de n brigands sur le convoi le plus proche (400 m) ou sur celui indiqué',
+  'evenements [rayon]                      événements d’hier à après-demain (raids, fêtes, épidémies, bataille du jour), guerre',
+  'evenement <raid|fete|epidemie|bataille> [bandit|gobelin|loup|foire|moissons|patron]   déclenche un événement près de vous',
+  'finir [id] [r|s|a|d]                    finit l’événement en cours le plus proche (raid repoussé/réussi, bataille gagnée par a/d)',
+  'proprietaire [lieu] [faction|reset]     change le propriétaire d’une place (tabards, bannières, prix, carte)',
+  'guerre [declarer|paix] | malade [guerir]   état de la guerre, en déclarer une, signer la paix ; attraper ou soigner la fièvre',
 ];
 
 export class DevConsole implements Screen {
@@ -168,6 +173,11 @@ export class DevConsole implements Screen {
       }
       case 'convois': case 'convoi': case 'embuscade': {
         const res = g.convoys.dev(c, args);
+        for (const l of res) this.print(l.text, l.err ? C.red : C.text);
+        break;
+      }
+      case 'evenements': case 'événements': case 'evenement': case 'événement': case 'finir': case 'proprietaire': case 'propriétaire': case 'guerre': case 'malade': {
+        const res = g.happenings.dev(c, args);
         for (const l of res) this.print(l.text, l.err ? C.red : C.text);
         break;
       }

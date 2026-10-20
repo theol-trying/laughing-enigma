@@ -15,6 +15,7 @@ import { TalentPanel } from './TalentPanel';
 import { frNum } from '@ascii-fort/sim/gameplay/Talents';
 import { MAX_BOUNTIES } from '@ascii-fort/sim/gameplay/Bounties';
 import type { Quest } from '@ascii-fort/sim/gameplay/QuestSystem';
+import { shortFaction } from '../game/Happenings';
 
 export function frame(g: TextGrid, title: string, wMax = 110, hMax = 34) {
   const w = Math.min(g.cols - 2, wMax), h = Math.min(g.rows - 2, hMax);
@@ -205,6 +206,8 @@ export class JournalScreen implements Screen {
     head(`Primes (${pr.length}/${MAX_BOUNTIES})${done ? ` · ${done} réclamée${done > 1 ? 's' : ''}` : ''}`);
     if (!pr.length) { dim('Aucune. Le tableau des primes se trouve sur la place des villages et des villes.'); blank(); }
     for (const q of pr) { const st = game.exploits.bountyOf(q)?.st; quest(q, ` · ${q.reward.gold} or${st === 'remplie' ? ' · à réclamer' : st === 'caduque' ? ' · caduque' : ''}`); }
+    const evs = game.happenings.journalLines();
+    if (evs.length) { head('Événements'); for (const l of evs) for (const t of TextGrid.wrap(l.text, W)) out.push({ text: t, color: l.color, indent: 4 }); blank(); }
     const routes = game.convoys.journalLines();
     if (routes.length) { head('Routes'); for (const l of routes) for (const t of TextGrid.wrap(l.text, W)) out.push({ text: t, color: l.color, indent: 4 }); blank(); }
     const goods = game.poss.journalLines();
@@ -253,9 +256,17 @@ const BIOME_GLYPH: Record<number, [string, number]> = {
   [B.TAIGA]: ['♠', 0x2e6a3e], [B.SWAMP]: ['%', 0x6a7a3a], [B.HEATH]: [',', 0x9a8a50], [B.MOUNTAIN]: ['▲', 0x8a867c], [B.SNOW]: ['▲', 0xe8eef4],
 };
 
+/** Mélange de deux couleurs 0xRRGGBB (k : part de b). */
+function mix(a: number, b: number, k: number): number {
+  const ch = (sh: number) => Math.round(((a >> sh) & 255) * (1 - k) + ((b >> sh) & 255) * k);
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+}
+
 export class MapScreen implements Screen {
   modal = true;
   private zoom = 1;
+  /** territoires colorés selon le propriétaire courant des places (F : afficher / masquer) */
+  private borders = true;
   private cx: number; private cz: number;
   constructor(private game: Game) { this.cx = game.player.x; this.cz = game.player.z; }
 
@@ -268,6 +279,9 @@ export class MapScreen implements Screen {
     const ox = this.cx - (mw / 2) * sx, oz = this.cz - (mh / 2) * sz;
     const roadCells = new Set<number>();
     for (const r of civ.roads) for (const c of r.cells) roadCells.add(c);
+    // territoires : fond teinté de la couleur de la faction qui tient la place la plus proche, frontières plus marquées
+    const terr = this.borders ? game.happenings.territory().cells : null;
+    const BG = 0x0a0c0e, tint = civ.factions.map((f) => mix(BG, f.color, 0.2)), edge = civ.factions.map((f) => mix(BG, f.color, 0.42));
     for (let j = 0; j < mh; j++) for (let i = 0; i < mw; i++) {
       const wx = ox + (i + 0.5) * sx, wz = oz + (j + 0.5) * sz;
       if (wx < 0 || wz < 0 || wx >= MACRO * 32 || wz >= MACRO * 32) { g.text(x + 1 + i, y + 1 + j, ' ', C.black, 0x020304); continue; }
@@ -279,7 +293,16 @@ export class MapScreen implements Screen {
       else if (wtr === W_SEA) { ch = '≈'; col = 0x2a5a8a; }
       else if (wtr === W_LAKE) { ch = '~'; col = 0x4a8ac0; }
       else if (roadCells.has(c)) { ch = '·'; col = 0xb89a6a; }
-      g.text(x + 1 + i, y + 1 + j, ch, col, 0x0a0c0e);
+      let bg = BG;
+      if (terr && wtr !== W_SEA) {
+        const o = terr[c];
+        if (o >= 0 && tint[o] !== undefined) {
+          const ci = c % MACRO, cj = (c / MACRO) | 0;
+          const border = (ci + 1 < MACRO && terr[c + 1] !== o) || (ci > 0 && terr[c - 1] !== o) || (cj + 1 < MACRO && terr[c + MACRO] !== o) || (cj > 0 && terr[c - MACRO] !== o);
+          bg = border ? edge[o] : tint[o];
+        }
+      }
+      g.text(x + 1 + i, y + 1 + j, ch, col, bg);
     }
     const toCell = (wx: number, wz: number) => ({ i: Math.floor((wx - ox) / sx), j: Math.floor((wz - oz) / sz) });
     // cases déjà écrites (glyphes et noms) : un nom de marqueur ne s'écrit pas par-dessus un autre (clé = rangée × 4096 + colonne)
@@ -304,6 +327,9 @@ export class MapScreen implements Screen {
     // convois rencontrés ou proches, épaves récentes
     const roads = game.convoys.markers();
     for (const m of roads) label(m.x, m.z, m.glyph, m.color, this.zoom >= 4 ? m.name : undefined, true);
+    // événements connus : raids, fêtes, épidémies, bataille du jour
+    const evs = game.happenings.markers();
+    for (const m of evs) label(m.x, m.z, m.glyph, m.color, this.zoom >= 2 ? m.name : undefined, true);
     const bosses = game.exploits.markers();
     for (const m of bosses) label(m.x, m.z, m.glyph, m.color, this.zoom >= 2 ? m.name : undefined, true);
     // cibles des quêtes en cours (la quête suivie clignote en blanc)
@@ -317,9 +343,23 @@ export class MapScreen implements Screen {
     if (roads.some((m) => m.glyph === '♦')) legend.push(['♦ convoi', ' ']);
     if (roads.some((m) => m.glyph === '×')) legend.push(['× épave', ' ']);
     if (game.poss.markers().length) legend.push(['♥ maison', ' '], ['h cheval', ' '], ['☻ mercenaire', ' ']);
+    for (const [gl, t] of [['☼', 'raid'], ['♫', 'fête'], ['†', 'épidémie'], ['±', 'bataille']]) if (evs.some((m) => m.glyph === gl)) legend.push([`${gl} ${t}`, ' ']);
+    legend.push([`F : territoires (${this.borders ? 'oui' : 'non'})`, ' · ']);
     let help = '';
     for (const [t, sep] of legend) { const next = help ? help + sep + t : t; if (next.length > w - 4) break; help = next; }
     g.text(x + 2, y + h - 2, help, C.dim);
+    // légende des territoires : les factions qui tiennent des places, dans leur couleur (en bas à droite de la carte)
+    if (terr) {
+      const owners: number[] = [];
+      for (const st0 of civ.settlements) { if (st0.abandoned || st0.type === 'camp' || st0.type === 'ruines') continue; const o = game.ownerOf(st0.id); if (o >= 0 && !owners.includes(o)) owners.push(o); }
+      let lx = x + w - 2;
+      for (const o of owners.sort((a, b) => b - a)) {
+        const name = ` ■ ${shortFaction(civ.factions[o].name)} `;
+        if (lx - name.length < x + 2) break;
+        lx -= name.length;
+        g.text(lx, y + h - 3, name, civ.factions[o].color, 0x0a0c0e);
+      }
+    }
   }
 
   input(ctx: UICtx): void {
@@ -327,6 +367,7 @@ export class MapScreen implements Screen {
     if (i.key('Escape') || i.key('m')) { ctx.close(); return; }
     if (i.key('+') || i.key('=') || i.wheel < 0) this.zoom = Math.min(8, this.zoom * 2);
     if (i.key('-') || i.wheel > 0) this.zoom = Math.max(1, this.zoom / 2);
+    if (i.key('f')) this.borders = !this.borders;
     const step = 400 / this.zoom;
     if (i.isDown('ArrowLeft')) this.cx -= step * 0.05; if (i.isDown('ArrowRight')) this.cx += step * 0.05;
     if (i.isDown('ArrowUp')) this.cz -= step * 0.1; if (i.isDown('ArrowDown')) this.cz += step * 0.1;
